@@ -1,0 +1,8 @@
+{
+  "name": "JOKER 80 Quantum Control Panel",
+  "description": "Pannello di controllo e router quantistico integrato per l'automazione industriale joker 80 con 17 algoritmi CUDA-Q",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
