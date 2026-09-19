@@ -26,11 +26,21 @@ export const CircuitVisualizerModal: React.FC<Props> = ({ calculation, onClose, 
           <div className="flex items-center space-x-3">
             <span className={`px-2.5 py-1 text-xs font-semibold rounded-md border flex items-center gap-1.5 ${
               isLocked 
-                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' 
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40' 
                 : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
             }`}>
-              {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-              Calcolo [{calculation.id}]
+              {isLocked ? (
+                <>
+                  <span className="font-extrabold text-amber-200">[+]</span>
+                  <Lock className="w-3.5 h-3.5" />
+                </>
+              ) : (
+                <>
+                  <span className="font-extrabold text-emerald-300">[-]</span>
+                  <Unlock className="w-3.5 h-3.5" />
+                </>
+              )}
+              Calcolo [{calculation.id}] {isLocked ? 'INCROCIATO' : 'LOCALE'}
             </span>
             <h3 className="text-lg font-bold text-slate-100 font-mono tracking-wide">
               {calculation.name}
@@ -67,6 +77,25 @@ export const CircuitVisualizerModal: React.FC<Props> = ({ calculation, onClose, 
               <span className="font-medium text-slate-300 text-xs truncate block">{calculation.hardwareTarget}</span>
             </div>
           </div>
+
+          {/* Cross Category Info in Modal */}
+          {calculation.crossCategoryDetails && (
+            <div className={`p-4 rounded-xl border font-mono text-xs ${
+              calculation.isCrossCategory
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                : 'bg-slate-950/80 border-slate-800 text-slate-400'
+            }`}>
+              <div className="font-bold flex items-center gap-2 mb-1 text-slate-200">
+                <span className={calculation.isCrossCategory ? 'text-amber-400' : 'text-emerald-400'}>
+                  {calculation.isCrossCategory ? '[+] Interconnessione CNOT Inter-Categoria:' : '[-] Elaborazione Autonoma Locale:'}
+                </span>
+                <span>{calculation.crossCategoryDetails.crossedWith}</span>
+              </div>
+              <p className="text-slate-300 leading-relaxed">
+                <strong className="text-slate-100">Dati e Parametri:</strong> {calculation.crossCategoryDetails.parametersOrData}
+              </p>
+            </div>
+          )}
 
           {/* Interactive Circuit Schematic */}
           <div className="space-y-3">

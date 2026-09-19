@@ -16,6 +16,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       camion_attesa: 12,
       minuti_ritardo: 45,
       saturazione_wms: 88.5
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: '2. Magazzino & Stoccaggio',
+      modules: 'MIP ⟷ WMS',
+      parametersOrData: 'Traffico camion/ritardo piazzale (MIP) ⟷ Saturazione volumetrica scaffali (WMS)'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati obbligatoriamente: camion_attesa e saturazione_wms devono essere valutati congiuntamente per rilevare lo stallo cross-reparto.',
+      parametriAccoppiati: ['camion_attesa', 'saturazione_wms'],
+      soglieAnomale: 'IRREGOLARE se camion_attesa > 10 e saturazione_wms > 85.0% contemporaneamente (allerta blocco baie)'
     }
   },
   {
@@ -32,6 +44,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       ritardo_stimato_minuti: 75,
       baie_libere: 1
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: '4. IoT & Controllo Macchine',
+      modules: 'MIP ⟷ SDM / Linee Produzione',
+      parametersOrData: 'Ritardi accumulati camion/baie libere (MIP) ⟷ Rischio fermo linee produttive a valle (SDM)'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati in CNOT: ritardo_stimato_minuti interagisce inversamente con baie_libere.',
+      parametriAccoppiati: ['ritardo_stimato_minuti', 'baie_libere'],
+      soglieAnomale: 'IRREGOLARE se ritardo_stimato_minuti > 60 min con baie_libere ≤ 1 (rischio fermo linea imminente)'
     }
   },
   {
@@ -48,6 +72,17 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       ore_lavoro_disponibili: 8,
       baie_totali: 4
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'MIP isolato',
+      parametersOrData: 'Solo dati interni modulo Inbound (ore turno, baie disponibili)'
+    },
+    parameterRules: {
+      modalita: 'SOLO',
+      regola: 'Parametro singolo o locale: ore_lavoro_disponibili e baie_totali non richiedono accoppiamento esterno.',
+      soglieAnomale: 'IRREGOLARE se ore_lavoro_disponibili < 4 o baie_totali < 1'
     }
   },
   {
@@ -64,6 +99,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       umidita_rilevata: 13.2,
       spessore_micro: 45.2
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'MIP Qualità isolato',
+      parametersOrData: 'Solo parametri fisici interni del lotto (umidità, micro-spessore)'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati fisici: umidita_rilevata e spessore_micro del film plastico vanno analizzati congiuntamente.',
+      parametriAccoppiati: ['umidita_rilevata', 'spessore_micro'],
+      soglieAnomale: 'IRREGOLARE se umidita_rilevata > 18.0% o spessore_micro < 30.0 µm (rischio rottura pellicola su fasciatore)'
     }
   },
   {
@@ -80,6 +127,17 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       id_lotto_materiale: 'BOBINA_BEMA_2026_A',
       codice_fornitore: 'PLAST_REGGIO_01'
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'MIP Sicurezza isolato',
+      parametersOrData: 'Solo ID lotto e codice fornitore per generazione salt NIST'
+    },
+    parameterRules: {
+      modalita: 'SOLO',
+      regola: 'Parametri discreti di tracciabilità: validazione crittografica locale univoca senza vincolo di accoppiamento dinamico.',
+      soglieAnomale: 'IRREGOLARE se stringa codice_fornitore vuota o ID lotto non conforme al formato UTF-8'
     }
   },
   {
@@ -97,6 +155,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       id_pallet: 'PALLET_BEMA_099',
       classe_rotazione: 'HIGH',
       celle_libere_3d: 124
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: '4. IoT & Controllo Macchine',
+      modules: 'WMS ⟷ SDM (Flotta LGV)',
+      parametersOrData: 'Celle 3D libere SmartStore (WMS) ⟷ Posizione cinematica carrelli LGV (SDM)'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati: classe_rotazione (frequenza prelievo) accoppiata a celle_libere_3d nelle campate basse.',
+      parametriAccoppiati: ['classe_rotazione', 'celle_libere_3d'],
+      soglieAnomale: 'IRREGOLARE se classe_rotazione = HIGH e celle_libere_3d < 15 nelle baie di terra (sovraccarico trasloelevatore)'
     }
   },
   {
@@ -113,6 +183,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       vettore_pressione_bar: [12.4, 14.1, 11.9, 15.0],
       micro_inclinazione: 0.4
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'WMS Struttura isolato',
+      parametersOrData: 'Solo sensori fisici montante scaffalatura (pressione bar, inclinazione)'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati strutturali: il vettore pressione interagisce con la micro_inclinazione angolare.',
+      parametriAccoppiati: ['vettore_pressione_bar', 'micro_inclinazione'],
+      soglieAnomale: 'IRREGOLARE se max(vettore_pressione_bar) > 18.0 bar o micro_inclinazione > 1.2 gradi (rischio collasso campata)'
     }
   },
   {
@@ -129,6 +211,17 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       lista_id_pallet: ['PLT_A', 'PLT_B', 'PLT_C'],
       coordinate_partenza: 'X:00/Y:00'
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'WMS Picking isolato',
+      parametersOrData: 'Solo coordinate corsie e lista pallet da prelevare internamente'
+    },
+    parameterRules: {
+      modalita: 'SOLO',
+      regola: 'Parametro combinatorio a lista chiusa: risolto come grafo TSP singolo senza dipendenza da moduli esterni.',
+      soglieAnomale: 'IRREGOLARE se numero nodi lista_id_pallet > 30 per singolo ciclo picker'
     }
   },
   {
@@ -145,6 +238,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       lista_ordini_camion: ['ORD_01', 'ORD_02'],
       coefficiente_traffico: 0.45
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: '4. IoT & Controllo Macchine',
+      modules: 'WMS ⟷ SDM (Routing Centrale)',
+      parametersOrData: 'Ordini prelievo WMS ⟷ Coefficiente di congestione traffico corridoi SDM'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati: volume ordini pallet accoppiato al coefficiente_traffico del corridoio centrale.',
+      parametriAccoppiati: ['lista_ordini_camion', 'coefficiente_traffico'],
+      soglieAnomale: 'IRREGOLARE se coefficiente_traffico > 0.80 e lista_ordini > 5 missioni contemporanee (ingorgo crocevia)'
     }
   },
   {
@@ -161,6 +266,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       volume_disponibile_mc: 80.0,
       lista_pesi_pallet: [800, 750, 900, 600]
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'TPT Carico isolato',
+      parametersOrData: 'Solo volume e pesi pallet interni al singolo pianale camion'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati meccanici: volume_disponibile_mc e bilanciamento asse (lista_pesi_pallet).',
+      parametriAccoppiati: ['volume_disponibile_mc', 'lista_pesi_pallet'],
+      soglieAnomale: 'IRREGOLARE se carico totale > 28000 kg o sbilanciamento tra asse anteriore e posteriore > 25%'
     }
   },
   {
@@ -177,6 +294,17 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       id_contratto_vettore: 'CONT_VETT_2026_XYZ',
       dati_ecmr: 'DESTINAZIONE: GERMANIA - 33 PALLET ACQUA MINERALE'
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'TMS Documentale isolato',
+      parametersOrData: 'Solo contratto e metadati e-CMR per firma digitale Ed25519'
+    },
+    parameterRules: {
+      modalita: 'SOLO',
+      regola: 'Parametro documentale singolo: protocollo di cifratura deterministico post-quantum stand-alone.',
+      soglieAnomale: 'IRREGOLARE se payload dati_ecmr non validato da certificato X.509'
     }
   },
   {
@@ -193,6 +321,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       camion_in_piazzale: 8,
       pallet_pronti_linea: 24
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: '4. IoT & Controllo Macchine',
+      modules: 'YMS ⟷ SDM (Evacuazione Linea)',
+      parametersOrData: 'Camion in piazzale esterno (YMS) ⟷ Pallet pronti a fine linea/LGV (SDM)'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati in teoria dei giochi quantistica: camion_in_piazzale deve essere sincronizzato con pallet_pronti_linea.',
+      parametriAccoppiati: ['camion_in_piazzale', 'pallet_pronti_linea'],
+      soglieAnomale: 'IRREGOLARE se camion_in_piazzale > 12 e pallet_pronti_linea < 10 (discrepanza offerta/domanda con costo sosta)'
     }
   },
   {
@@ -209,6 +349,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       camion_in_attesa: 14,
       codice_saturazione_buffer: 0.75
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: '4. IoT & Controllo Macchine',
+      modules: 'YMS ⟷ SDM / Buffer Fine Linea',
+      parametersOrData: 'Camion in sosta piazzale (YMS) ⟷ Coda di evacuazione e saturazione buffer fabbrica (SDM)'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati di clustering: camion_in_attesa vincolati a codice_saturazione_buffer per formare cluster di pre-baia.',
+      parametriAccoppiati: ['camion_in_attesa', 'codice_saturazione_buffer'],
+      soglieAnomale: 'IRREGOLARE se codice_saturazione_buffer > 0.90 con camion_in_attesa > 10 (rischio blocco cancello piazzale)'
     }
   },
   {
@@ -225,6 +377,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       vettore_accelerometro: [0.12, 0.85, 0.94, 0.02],
       giri_minuto: 48.0
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'ECS Macchina Bema isolato',
+      parametersOrData: 'Solo frequenze e RPM accelerometro del braccio rotante'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati rotazionali: la serie temporale vettore_accelerometro dipende dai giri_minuto (RPM).',
+      parametriAccoppiati: ['vettore_accelerometro', 'giri_minuto'],
+      soglieAnomale: 'IRREGOLARE se giri_minuto > 55 RPM con ampiezza armonica accelerometro > 1.2 g (usura cuscinetto braccio)'
     }
   },
   {
@@ -242,6 +406,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       tensione_newton: 148.5,
       velocita_svolgimento: 12.4,
       spessore_film_micron: 23
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'ECS Fasciatore isolato',
+      parametersOrData: 'Solo parametri sensore rulli (tensione Newton, velocità m/s, micron)'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Parametri accoppiati di processo: tensione_newton e velocita_svolgimento sono inversamente legati allo spessore_film_micron.',
+      parametriAccoppiati: ['tensione_newton', 'velocita_svolgimento'],
+      soglieAnomale: 'IRREGOLARE se tensione_newton > 180 N con spessore < 20 µm o velocita_svolgimento > 18 m/s (rottura film imminente)'
     }
   },
   {
@@ -262,6 +438,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
         AGV_03: 'X:02/Y:22'
       },
       mappa_ingorghi_nodi: ['NODO_03_BLOCCATO']
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: 'Tutte le Aree di Stabilimento (Cross-Sistema)',
+      modules: 'SDM (Flotta LGV) ⟷ Mappa Globale Impianto',
+      parametersOrData: 'Coordinate spaziali flotta LGV ⟷ Topologia nodi/ingorghi di tutte le aree di fabbrica'
+    },
+    parameterRules: {
+      modalita: 'MULTI_ENTANGLED',
+      regola: 'Parametri multi-entangled: coordinate di tutti gli LGV accoppiate in grafo continuo con i nodi bloccati.',
+      parametriAccoppiati: ['coordinate_agv_attivi', 'mappa_ingorghi_nodi'],
+      soglieAnomale: 'IRREGOLARE se oltre 3 nodi centrali bloccati contemporaneamente con > 25 veicoli in circolazione (deadlock di fabbrica)'
     }
   },
   {
@@ -281,6 +469,18 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
         AGV_04: { SoC: 78, Temp: 42.5 },
         AGV_11: { SoC: 92, Temp: 31.0 }
       }
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: '2. Magazzino & Stoccaggio',
+      modules: 'SDM (Veicoli) ⟷ WMS (Missioni) ⟷ ECS (Batterie)',
+      parametersOrData: 'Code urgenza missioni (WMS) ⟷ Telemetria termica e SoC celle batterie veicoli (ECS)'
+    },
+    parameterRules: {
+      modalita: 'MULTI_ENTANGLED',
+      regola: 'Parametri multi-accoppiati: urgenza missione WMS accoppiata allo stato termico (Temp °C) e carica (SoC %) batterie LGV.',
+      parametriAccoppiati: ['elenco_missioni_urgenti', 'telemetria_batterie_agv'],
+      soglieAnomale: 'IRREGOLARE se temperatura batteria LGV > 50 °C o SoC < 20% assegnato a missione lunga distanza (degrado cella litio)'
     }
   }
 ];

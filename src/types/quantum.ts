@@ -20,6 +20,18 @@ export interface QuantumCalculationMeta {
   description: string;
   inputDescription: string;
   defaultInputs: Record<string, any>;
+  isCrossCategory?: boolean;
+  crossCategoryDetails?: {
+    crossedWith: string;
+    modules: string;
+    parametersOrData: string;
+  };
+  parameterRules?: {
+    modalita: 'SOLO' | 'COPPIA' | 'MULTI_ENTANGLED';
+    regola: string;
+    parametriAccoppiati?: string[];
+    soglieAnomale?: string;
+  };
 }
 
 export interface QuantumExecutionResult {
@@ -49,4 +61,22 @@ export interface FactoryTenant {
   sito: string;
   endpoint: string;
   logoColor: string;
+  plcIp?: string;
+  qpuTarget?: string;
+  wmsApiKey?: string;
+  createdAt?: string;
+}
+
+export type UserRole = 'Amministratore' | 'Operatore di Linea';
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  nomeCompleto: string;
+  ruolo: UserRole;
+  password?: string;
+  lineaAssegnata?: string;
+  tenantId?: string;
+  attivo: boolean;
+  createdAt: string;
 }

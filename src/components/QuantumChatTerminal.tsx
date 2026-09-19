@@ -18,11 +18,14 @@ import {
 import { ChatMessage, QuantumCalculationMeta } from '../types/quantum';
 import { QuantumRouterService } from '../services/quantumRouter';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
+import { GuidedChatAssistant } from './GuidedChatAssistant';
 
 interface Props {
   onOpenCircuit: (calc: QuantumCalculationMeta, state?: string) => void;
   allowPlcWrite: boolean;
   activeTenantEndpoint: string;
+  userRole?: 'Operatore di Linea' | 'Amministratore';
+  activeTenantName?: string;
 }
 
 const PRESET_SCENARIOS = [
@@ -63,7 +66,9 @@ const PRESET_SCENARIOS = [
 export const QuantumChatTerminal: React.FC<Props> = ({ 
   onOpenCircuit, 
   allowPlcWrite,
-  activeTenantEndpoint 
+  activeTenantEndpoint,
+  userRole = 'Operatore di Linea',
+  activeTenantName
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -171,9 +176,17 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-          <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-          <span>Endpoint: <code className="text-cyan-300">{activeTenantEndpoint}</code></span>
+        <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
+          {activeTenantName && (
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+              <span className="text-slate-500">Stabilimento:</span>
+              <span className="text-cyan-300 font-bold">{activeTenantName}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+            <span className="hidden sm:inline">Endpoint:</span> <code className="text-cyan-300">{activeTenantEndpoint}</code>
+          </div>
         </div>
       </div>
 
@@ -198,6 +211,13 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
 
       {/* Messages Feed */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 font-sans">
+        {/* Interactive Guided Assistant & Parameter Form */}
+        <GuidedChatAssistant
+          onSelectCalculationAndInputs={(query) => handleSend(query)}
+          onOpenCircuit={onOpenCircuit}
+          userRole={userRole}
+        />
+
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
           const calcMeta = msg.calcolo_id ? QUANTUM_CALCULATIONS.find(c => c.id === msg.calcolo_id) : null;

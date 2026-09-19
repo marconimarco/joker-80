@@ -117,15 +117,25 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
             >
               {/* Header */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <span className={`px-2.5 py-1 text-xs font-mono font-bold rounded-md border flex items-center gap-1.5 ${
                       isLocked
-                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/10'
                         : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                     }`}>
-                      {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                      Calcolo [{calc.id}]
+                      {isLocked ? (
+                        <>
+                          <span className="font-extrabold text-amber-200">[+]</span>
+                          <Lock className="w-3.5 h-3.5" />
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-extrabold text-emerald-300">[-]</span>
+                          <Unlock className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                      Calcolo [{calc.id}] {isLocked ? 'INCROCIATO' : 'LOCALE'}
                     </span>
                     <span className="px-2 py-0.5 text-xs font-mono rounded bg-slate-800 text-cyan-400 border border-slate-700">
                       {calc.technicalModule}
@@ -136,6 +146,17 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
                     {calc.subFunction}
                   </span>
                 </div>
+
+                {calc.isCrossCategory && calc.crossCategoryDetails && (
+                  <div className="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs font-mono flex items-center justify-between gap-2 text-amber-300">
+                    <span className="font-semibold text-[11px]">
+                      [+] Incrociato con: {calc.crossCategoryDetails.crossedWith}
+                    </span>
+                    <span className="text-[10px] text-amber-400/80 px-1.5 py-0.5 rounded bg-amber-500/20">
+                      {calc.crossCategoryDetails.modules}
+                    </span>
+                  </div>
+                )}
 
                 <div>
                   <h3 className="text-base font-bold text-slate-100 font-mono">
