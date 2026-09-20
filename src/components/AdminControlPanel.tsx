@@ -56,14 +56,16 @@ export const AdminControlPanel: React.FC<Props> = ({
   const [users, setUsers] = useState<UserAccount[]>(() => AuthStorage.getUsers());
 
   // Discovery / Minimal Input Form State
-  const [selectedExistingTenantId, setSelectedExistingTenantId] = useState<string | null>(null);
-  const [plantNome, setPlantNome] = useState('');
-  const [plantSito, setPlantSito] = useState('');
-  const [plantEndpoint, setPlantEndpoint] = useState('');
-  const [plantProtocol, setPlantProtocol] = useState<IndustrialProtocol>('REST_HTTPS');
-  const [plantPlcIp, setPlantPlcIp] = useState('');
-  const [plantColor, setPlantColor] = useState('#3b82f6');
-  const [plantApiKey, setPlantApiKey] = useState('');
+  const [selectedExistingTenantId, setSelectedExistingTenantId] = useState<string | null>(() => activeTenant.id || null);
+  const [selectedTemplatePreset, setSelectedTemplatePreset] = useState<PlantTemplatePreset | null>(null);
+  const [showAllPlants, setShowAllPlants] = useState<boolean>(false);
+  const [plantNome, setPlantNome] = useState(() => activeTenant.nome || '');
+  const [plantSito, setPlantSito] = useState(() => activeTenant.sito || '');
+  const [plantEndpoint, setPlantEndpoint] = useState(() => activeTenant.endpoint || '');
+  const [plantProtocol, setPlantProtocol] = useState<IndustrialProtocol>(() => activeTenant.protocol || 'REST_HTTPS');
+  const [plantPlcIp, setPlantPlcIp] = useState(() => activeTenant.plcIp || '');
+  const [plantColor, setPlantColor] = useState(() => activeTenant.logoColor || '#3b82f6');
+  const [plantApiKey, setPlantApiKey] = useState(() => `E80_SEC_${(activeTenant.id || 'GW').toUpperCase()}_TOKEN_2026`);
 
   // Execution states
   const [isDiscovering, setIsDiscovering] = useState(false);
@@ -84,6 +86,8 @@ export const AdminControlPanel: React.FC<Props> = ({
   // Handle Selecting an Existing Saved Plant to load into Form & Test/Reconnect
   const handleSelectExistingTenant = (tenant: FactoryTenant) => {
     setSelectedExistingTenantId(tenant.id);
+    setSelectedTemplatePreset(null);
+    setShowAllPlants(false);
     setPlantNome(tenant.nome);
     setPlantSito(tenant.sito);
     setPlantEndpoint(tenant.endpoint);
@@ -97,6 +101,8 @@ export const AdminControlPanel: React.FC<Props> = ({
   // Reset form to enter a completely new plant
   const handleClearForm = () => {
     setSelectedExistingTenantId(null);
+    setSelectedTemplatePreset(null);
+    setShowAllPlants(false);
     setPlantNome('');
     setPlantSito('');
     setPlantEndpoint('');
@@ -110,6 +116,8 @@ export const AdminControlPanel: React.FC<Props> = ({
   // Handle Quick Template Selection
   const handleSelectTemplate = (template: PlantTemplatePreset) => {
     setSelectedExistingTenantId(null);
+    setSelectedTemplatePreset(template);
+    setShowAllPlants(false);
     setPlantNome(template.nome);
     setPlantSito(template.sito);
     setPlantEndpoint(template.endpoint);
@@ -176,6 +184,8 @@ export const AdminControlPanel: React.FC<Props> = ({
 
       setDiscoveryResult(result);
       setSelectedExistingTenantId(result.tenant.id);
+      setSelectedTemplatePreset(null);
+      setShowAllPlants(false);
     } catch (err: any) {
       alert(`Errore durante il collegamento: ${err.message}`);
     } finally {
@@ -343,22 +353,22 @@ export const AdminControlPanel: React.FC<Props> = ({
       {activeTab === 'discovery' && (
         <div className="space-y-6">
           {/* Preset & Existing Plants Test Selector */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
               <div>
                 <span className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-400" />
                   Banco di Prova & Connessione Rapida SM.I.LE80
                 </span>
                 <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-                  Clicca su uno stabilimento esistente per caricarne i dati e testare la riconnessione / nuovi macchinari, oppure prova un nuovo modello.
+                  Clicca su uno stabilimento esistente per caricarne i dati e testare la riconnessione, oppure prova un nuovo modello.
                 </p>
               </div>
 
-              {selectedExistingTenantId && (
+              {(selectedExistingTenantId || selectedTemplatePreset) && (
                 <button
                   onClick={handleClearForm}
-                  className="px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-mono flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-mono flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Nuovo Stabilimento (Pulisci Modulo)</span>
@@ -367,61 +377,43 @@ export const AdminControlPanel: React.FC<Props> = ({
             </div>
 
             {/* SEZIONE 1: STABILIMENTI GIÀ SALVATI E ATTIVI */}
-            <div className="space-y-2">
-              <div className="text-[11px] font-mono font-semibold text-slate-400 flex items-center gap-1.5">
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-mono font-semibold text-slate-400 flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5 text-cyan-400" />
-                <span>1. Stabilimenti Già Presenti & Salvati ({tenants.length}) - Clicca per caricare nel modulo:</span>
+                <span>1. Stabilimenti Già Presenti & Salvati ({tenants.length}):</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                 {tenants.map(t => {
-                  const isSelected = selectedExistingTenantId === t.id;
-                  const isActive = activeTenant.id === t.id;
-                  const topo = t.plantTopology;
-
+                  const isSelected = selectedExistingTenantId === t.id && !selectedTemplatePreset;
                   return (
                     <button
                       key={t.id}
                       onClick={() => handleSelectExistingTenant(t)}
-                      className={`p-3 rounded-xl text-left transition-all group cursor-pointer border relative ${
+                      className={`p-2 rounded-lg text-left transition-all group cursor-pointer border ${
                         isSelected
-                          ? 'bg-cyan-950/60 border-cyan-400 shadow-md shadow-cyan-500/10 ring-1 ring-cyan-500/50'
-                          : 'bg-slate-950/80 border-slate-800 hover:border-cyan-500/40 hover:bg-slate-950'
+                          ? 'bg-cyan-950/70 border-cyan-400 ring-1 ring-cyan-500/50 shadow-sm'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-cyan-500/40 hover:bg-slate-950'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className={`text-xs font-bold font-mono truncate pr-2 ${
-                          isSelected ? 'text-cyan-300' : 'text-white group-hover:text-cyan-300'
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className={`text-[11px] font-bold font-mono truncate ${
+                          isSelected ? 'text-cyan-300' : 'text-slate-100 group-hover:text-cyan-300'
                         }`}>
                           {t.nome}
                         </span>
                         <span 
-                          className="w-2.5 h-2.5 rounded-full shrink-0" 
+                          className="w-2 h-2 rounded-full shrink-0" 
                           style={{ backgroundColor: t.logoColor || '#06b6d4' }}
                         />
                       </div>
 
-                      <div className="text-[11px] font-mono text-slate-400 mt-1 truncate">
+                      <div className="text-[10px] font-mono text-slate-400 truncate mt-0.5">
                         {t.sito}
                       </div>
 
-                      <div className="text-[10px] font-mono text-slate-500 mt-1 truncate">
-                        GW: {t.endpoint}
-                      </div>
-
-                      <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono">
-                        <span className="text-slate-400">
-                          {topo ? `${topo.macchinari.length} Macch. • ${topo.flottaAgv.length} LGV` : 'Simulazione'}
-                        </span>
-                        {isSelected ? (
-                          <span className="text-cyan-400 font-bold flex items-center gap-1">
-                            <CheckCircle2 className="w-2.5 h-2.5" /> Nel Modulo
-                          </span>
-                        ) : isActive ? (
-                          <span className="text-emerald-400 font-bold">Attivo</span>
-                        ) : (
-                          <span className="text-slate-500 group-hover:text-slate-300">Carica</span>
-                        )}
+                      <div className="text-[9px] font-mono text-slate-500 mt-0.5 truncate">
+                        {t.id === activeTenant.id ? 'Attualmente in uso • Connesso' : 'Stabilimento salvato • Clicca per caricare'}
                       </div>
                     </button>
                   );
@@ -430,36 +422,47 @@ export const AdminControlPanel: React.FC<Props> = ({
             </div>
 
             {/* SEZIONE 2: MODELLI / TEMPLATE SM.I.LE80 DA COLLEGARE */}
-            <div className="space-y-2 pt-1 border-t border-slate-800/60">
-              <div className="text-[11px] font-mono font-semibold text-slate-400 flex items-center gap-1.5">
+            <div className="space-y-1.5 pt-1.5 border-t border-slate-800/60">
+              <div className="text-[10px] font-mono font-semibold text-slate-400 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>2. Template 1-Click: Precompila Dati di Nuovi Stabilimenti Modello:</span>
+                <span>2. Template Nuovi Modelli SM.I.LE80:</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                {PLANT_TEMPLATES.map(tmpl => (
-                  <button
-                    key={tmpl.id}
-                    onClick={() => handleSelectTemplate(tmpl)}
-                    className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-purple-500/50 hover:bg-slate-950 text-left transition-all group cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold font-mono text-white group-hover:text-purple-300">
-                        {tmpl.brand}
-                      </span>
-                      <span 
-                        className="w-2.5 h-2.5 rounded-full" 
-                        style={{ backgroundColor: tmpl.color }}
-                      />
-                    </div>
-                    <div className="text-[11px] font-mono text-slate-400 mt-1 truncate">
-                      {tmpl.sito}
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-500 mt-1 line-clamp-2">
-                      {tmpl.descrizione}
-                    </div>
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                {PLANT_TEMPLATES.map(tmpl => {
+                  const isSelected = selectedTemplatePreset?.id === tmpl.id;
+                  return (
+                    <button
+                      key={tmpl.id}
+                      onClick={() => handleSelectTemplate(tmpl)}
+                      className={`p-2 rounded-lg text-left transition-all group cursor-pointer border ${
+                        isSelected
+                          ? 'bg-purple-950/70 border-purple-400 ring-1 ring-purple-500/50 shadow-sm'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-purple-500/40 hover:bg-slate-950'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className={`text-[11px] font-bold font-mono truncate ${
+                          isSelected ? 'text-purple-300' : 'text-slate-100 group-hover:text-purple-300'
+                        }`}>
+                          {tmpl.brand}
+                        </span>
+                        <span 
+                          className="w-2 h-2 rounded-full shrink-0" 
+                          style={{ backgroundColor: tmpl.color }}
+                        />
+                      </div>
+
+                      <div className="text-[10px] font-mono text-slate-400 truncate mt-0.5">
+                        {tmpl.sito}
+                      </div>
+
+                      <div className="text-[9px] font-mono text-slate-500 mt-0.5 truncate">
+                        {tmpl.descrizione}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -652,6 +655,28 @@ export const AdminControlPanel: React.FC<Props> = ({
             {/* Right: Live Discovery Result & Connected Plants */}
             <div className="lg:col-span-6 space-y-4">
               
+              {/* If Discovering / Connecting: Live Step Progress Card */}
+              {isDiscovering && (
+                <div className="p-4 rounded-2xl bg-cyan-950/40 border border-cyan-500/40 shadow-xl space-y-3 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-bold font-mono text-cyan-200">
+                        {selectedExistingTenantId 
+                          ? 'Riconnessione & Scansione Nuovi Macchinari in Corso...' 
+                          : 'Connessione e Auto-Discovery SM.I.LE80 in Corso...'}
+                      </h4>
+                      <p className="text-[11px] font-mono text-slate-300 mt-0.5">
+                        {discoveryStep || 'Verifica handshake di rete e scansione macchinari...'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 h-1.5 rounded-full animate-pulse w-3/4" />
+                  </div>
+                </div>
+              )}
+
               {/* If Discovery/Reconnection Completed: Beautiful Summary Card */}
               {discoveryResult && (
                 <div className="p-5 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
@@ -759,129 +784,295 @@ export const AdminControlPanel: React.FC<Props> = ({
                 </div>
               )}
 
-              {/* Connected Plants List */}
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+              {/* Stabilimento Connesso Card (Single Plant View by default) */}
+              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                   <div>
                     <h3 className="text-sm font-bold font-mono text-white flex items-center gap-2">
                       <Building2 className="w-4 h-4 text-cyan-400" />
-                      Stabilimenti Connessi ({tenants.length})
+                      {showAllPlants ? `Stabilimenti Connessi (${tenants.length})` : 'Stabilimento Connesso'}
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5 font-mono">
-                      Seleziona uno stabilimento per renderlo attivo in tutta l'applicazione o per caricarlo nel modulo di test.
+                      {showAllPlants 
+                        ? 'Elenco completo degli stabilimenti registrati nel sistema.' 
+                        : 'Visualizzazione dello stabilimento selezionato nel Banco di Prova SM.I.LE80.'}
                     </p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAllPlants(!showAllPlants)}
+                    className="text-[10px] font-mono text-slate-400 hover:text-cyan-300 underline transition-colors cursor-pointer shrink-0"
+                  >
+                    {showAllPlants ? '← Mostra solo stabilimento selezionato' : `Mostra tutti (${tenants.length})`}
+                  </button>
                 </div>
 
-                <div className="space-y-3">
-                  {tenants.map(t => {
-                    const isActive = t.id === activeTenant.id;
-                    const isLoadedInForm = selectedExistingTenantId === t.id;
-                    const topo = t.plantTopology;
-                    return (
-                      <div
-                        key={t.id}
-                        className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                          isLoadedInForm
-                            ? 'bg-cyan-950/40 border-cyan-400 ring-1 ring-cyan-500/40 shadow-sm'
-                            : isActive
-                            ? 'bg-cyan-500/10 border-cyan-500/40 shadow-sm shadow-cyan-500/10'
-                            : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span 
-                              className="w-3 h-3 rounded-full shrink-0" 
-                              style={{ backgroundColor: t.logoColor || '#06b6d4' }}
-                            />
-                            <span className="font-mono font-bold text-xs text-slate-100">
-                              {t.nome}
-                            </span>
-                            {isActive && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                                ATTIVO
-                              </span>
-                            )}
-                            {isLoadedInForm && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                                NEL MODULO
-                              </span>
-                            )}
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-emerald-400 border border-slate-700 flex items-center gap-1">
-                              <Wifi className="w-2.5 h-2.5" />
-                              {t.connectionStatus || 'CONNESSO'}
-                            </span>
-                          </div>
-
-                          <div className="text-[11px] font-mono text-slate-400">
-                            Sito: <span className="text-slate-300">{t.sito}</span>
-                            {topo && (
-                              <span className="ml-2 text-cyan-400/80">
-                                ({topo.macchinari.length} Macchine, {topo.flottaAgv.length} LGV, QPU {topo.qubitCapacity} Qubits)
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <span>GW: <code className="text-cyan-400">{t.endpoint}</code></span>
-                            {t.protocol && <span>Prot: <span className="text-slate-300">{t.protocol}</span></span>}
-                          </div>
+                {/* VISTA 1: TEMPLATE PRESET SELEZIONATO IN ATTESA DI CONNESSIONE */}
+                {!showAllPlants && selectedTemplatePreset && !selectedExistingTenantId && (
+                  <div className="p-4 rounded-xl border border-purple-500/40 bg-purple-950/20 shadow-sm space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span 
+                            className="w-3 h-3 rounded-full shrink-0" 
+                            style={{ backgroundColor: selectedTemplatePreset.color }}
+                          />
+                          <span className="font-mono font-bold text-xs text-white">
+                            {selectedTemplatePreset.brand}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                            TEMPLATE PRONTO PER CONNESSIONE
+                          </span>
                         </div>
-
-                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
-                          {/* Load into Form & Test Button */}
-                          <button
-                            onClick={() => handleSelectExistingTenant(t)}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-mono border transition-all flex items-center gap-1 cursor-pointer ${
-                              isLoadedInForm
-                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
-                            }`}
-                            title="Carica dati nel modulo per testare riconnessione e nuovi macchinari"
-                          >
-                            <Zap className="w-3 h-3 text-amber-400" />
-                            <span>Carica Dati</span>
-                          </button>
-
-                          {/* Re-sync Telemetry Button */}
-                          <button
-                            onClick={() => handleResync(t)}
-                            disabled={isSyncing === t.id}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
-                            title="Risincronizza telemetria da SM.I.LE80"
-                          >
-                            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing === t.id ? 'animate-spin text-cyan-400' : ''}`} />
-                          </button>
-
-                          {!isActive ? (
-                            <button
-                              onClick={() => onSelectTenant(t)}
-                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-xs font-mono border border-slate-700 transition-colors cursor-pointer"
-                            >
-                              Connetti
-                            </button>
-                          ) : (
-                            <div className="flex items-center gap-1.5 text-xs font-mono text-cyan-300 px-3 py-1.5">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
-                              <span>In Uso</span>
-                            </div>
-                          )}
-
-                          {t.id !== 'local' && (
-                            <button
-                              onClick={() => handleDeleteTenant(t.id, t.nome)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                              title="Rimuovi ambiente"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                        <div className="text-[11px] font-mono text-slate-300">
+                          Sede: <span className="text-white">{selectedTemplatePreset.sito}</span>
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-400">
+                          {selectedTemplatePreset.descrizione}
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-3">
+                          <span>GW Previsto: <code className="text-purple-400">{selectedTemplatePreset.endpoint}</code></span>
+                          <span>Prot: <span className="text-slate-300">{selectedTemplatePreset.protocol}</span></span>
+                          <span>PLC IP: <span className="text-slate-300">{selectedTemplatePreset.plcIp}</span></span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      <button
+                        onClick={handleStartAutoDiscovery}
+                        disabled={isDiscovering}
+                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-mono text-xs font-bold shadow-lg shadow-purple-500/20 flex items-center gap-2 cursor-pointer shrink-0 transition-all disabled:opacity-40"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Connetti & Avvia Discovery</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* VISTA 2: STABILIMENTO SINGOLO SELEZIONATO (O ATTIVO) */}
+                {!showAllPlants && (!selectedTemplatePreset || selectedExistingTenantId) && (() => {
+                  const targetTenant = (selectedExistingTenantId ? tenants.find(t => t.id === selectedExistingTenantId) : null) || tenants.find(t => t.id === activeTenant.id) || tenants[0];
+                  if (!targetTenant) return null;
+
+                  const isActive = targetTenant.id === activeTenant.id;
+                  const isLoadedInForm = selectedExistingTenantId === targetTenant.id;
+                  const topo = targetTenant.plantTopology;
+
+                  return (
+                    <div
+                      className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isLoadedInForm
+                          ? 'bg-cyan-950/40 border-cyan-400 ring-1 ring-cyan-500/40 shadow-sm'
+                          : isActive
+                          ? 'bg-cyan-500/10 border-cyan-500/40 shadow-sm shadow-cyan-500/10'
+                          : 'bg-slate-950/60 border-slate-800'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span 
+                            className="w-3 h-3 rounded-full shrink-0" 
+                            style={{ backgroundColor: targetTenant.logoColor || '#06b6d4' }}
+                          />
+                          <span className="font-mono font-bold text-xs text-slate-100">
+                            {targetTenant.nome}
+                          </span>
+                          {isActive && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                              ATTIVO
+                            </span>
+                          )}
+                          {isLoadedInForm && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                              NEL MODULO
+                            </span>
+                          )}
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-emerald-400 border border-slate-700 flex items-center gap-1">
+                            <Wifi className="w-2.5 h-2.5" />
+                            {targetTenant.connectionStatus || 'CONNESSO'}
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] font-mono text-slate-400">
+                          Sito: <span className="text-slate-300">{targetTenant.sito}</span>
+                          {topo && (
+                            <span className="ml-2 text-cyan-400/80">
+                              ({topo.macchinari.length} Macchine, {topo.flottaAgv.length} LGV, QPU {topo.qubitCapacity} Qubits)
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span>GW: <code className="text-cyan-400">{targetTenant.endpoint}</code></span>
+                          {targetTenant.protocol && <span>Prot: <span className="text-slate-300">{targetTenant.protocol}</span></span>}
+                          {targetTenant.plcIp && <span>PLC: <span className="text-slate-300">{targetTenant.plcIp}</span></span>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+                        {/* Load into Form & Test Button */}
+                        <button
+                          onClick={() => handleSelectExistingTenant(targetTenant)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-mono border transition-all flex items-center gap-1 cursor-pointer ${
+                            isLoadedInForm
+                              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                          }`}
+                          title="Carica dati nel modulo per testare riconnessione e nuovi macchinari"
+                        >
+                          <Zap className="w-3 h-3 text-amber-400" />
+                          <span>{isLoadedInForm ? 'Dati nel Modulo' : 'Carica Dati'}</span>
+                        </button>
+
+                        {/* Re-sync Telemetry Button */}
+                        <button
+                          onClick={() => handleResync(targetTenant)}
+                          disabled={isSyncing === targetTenant.id}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
+                          title="Risincronizza telemetria da SM.I.LE80"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing === targetTenant.id ? 'animate-spin text-cyan-400' : ''}`} />
+                        </button>
+
+                        {!isActive ? (
+                          <button
+                            onClick={() => onSelectTenant(targetTenant)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-xs font-mono border border-slate-700 transition-colors cursor-pointer"
+                          >
+                            Connetti
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-xs font-mono text-cyan-300 px-3 py-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>In Uso</span>
+                          </div>
+                        )}
+
+                        {targetTenant.id !== 'local' && (
+                          <button
+                            onClick={() => handleDeleteTenant(targetTenant.id, targetTenant.nome)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title="Rimuovi ambiente"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* VISTA 3: TUTTI GLI STABILIMENTI (SOLO SE L'UTENTE CLICCA 'MOSTRA TUTTI') */}
+                {showAllPlants && (
+                  <div className="space-y-3">
+                    {tenants.map(t => {
+                      const isActive = t.id === activeTenant.id;
+                      const isLoadedInForm = selectedExistingTenantId === t.id;
+                      const topo = t.plantTopology;
+                      return (
+                        <div
+                          key={t.id}
+                          className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                            isLoadedInForm
+                              ? 'bg-cyan-950/40 border-cyan-400 ring-1 ring-cyan-500/40 shadow-sm'
+                              : isActive
+                              ? 'bg-cyan-500/10 border-cyan-500/40 shadow-sm shadow-cyan-500/10'
+                              : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span 
+                                className="w-3 h-3 rounded-full shrink-0" 
+                                style={{ backgroundColor: t.logoColor || '#06b6d4' }}
+                              />
+                              <span className="font-mono font-bold text-xs text-slate-100">
+                                {t.nome}
+                              </span>
+                              {isActive && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                                  ATTIVO
+                                </span>
+                              )}
+                              {isLoadedInForm && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                                  NEL MODULO
+                                </span>
+                              )}
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-emerald-400 border border-slate-700 flex items-center gap-1">
+                                <Wifi className="w-2.5 h-2.5" />
+                                {t.connectionStatus || 'CONNESSO'}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] font-mono text-slate-400">
+                              Sito: <span className="text-slate-300">{t.sito}</span>
+                              {topo && (
+                                <span className="ml-2 text-cyan-400/80">
+                                  ({topo.macchinari.length} Macchine, {topo.flottaAgv.length} LGV, QPU {topo.qubitCapacity} Qubits)
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <span>GW: <code className="text-cyan-400">{t.endpoint}</code></span>
+                              {t.protocol && <span>Prot: <span className="text-slate-300">{t.protocol}</span></span>}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+                            <button
+                              onClick={() => handleSelectExistingTenant(t)}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-mono border transition-all flex items-center gap-1 cursor-pointer ${
+                                isLoadedInForm
+                                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                              }`}
+                              title="Carica dati nel modulo per testare riconnessione e nuovi macchinari"
+                            >
+                              <Zap className="w-3 h-3 text-amber-400" />
+                              <span>Carica Dati</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleResync(t)}
+                              disabled={isSyncing === t.id}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
+                              title="Risincronizza telemetria da SM.I.LE80"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing === t.id ? 'animate-spin text-cyan-400' : ''}`} />
+                            </button>
+
+                            {!isActive ? (
+                              <button
+                                onClick={() => onSelectTenant(t)}
+                                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-xs font-mono border border-slate-700 transition-colors cursor-pointer"
+                              >
+                                Connetti
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1.5 text-xs font-mono text-cyan-300 px-3 py-1.5">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
+                                <span>In Uso</span>
+                              </div>
+                            )}
+
+                            {t.id !== 'local' && (
+                              <button
+                                onClick={() => handleDeleteTenant(t.id, t.nome)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                title="Rimuovi ambiente"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -43,7 +43,7 @@ export const GuidedChatAssistant: React.FC<Props> = ({
 }) => {
   const [selectedCat, setSelectedCat] = useState<MacroCategory>('1. Inbound & Materie Prime');
   const [activeCalcId, setActiveCalcId] = useState<number>(1);
-  const [isOpen, setIsOpen] = useState<boolean>(true);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
 
   const currentCalc = QUANTUM_CALCULATIONS.find(c => c.id === activeCalcId) || QUANTUM_CALCULATIONS[0];
 
@@ -103,45 +103,45 @@ export const GuidedChatAssistant: React.FC<Props> = ({
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="mb-3 px-3.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-bold flex items-center gap-2 transition-all w-fit cursor-pointer shadow-sm"
+        className="mb-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono font-bold flex items-center gap-1.5 transition-all w-fit cursor-pointer shadow-sm"
       >
         <Compass className="w-3.5 h-3.5 text-cyan-400" />
-        <span>Apri Assistente Guidato Step-by-Step & Parametri</span>
+        <span>Apri Assistente Guidato & Parametri (17 Calcoli)</span>
       </button>
     );
   }
 
   return (
-    <div className="mb-4 rounded-2xl bg-slate-950 border border-cyan-500/30 shadow-2xl p-4 space-y-4 animate-in fade-in duration-200">
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-            <Compass className="w-4 h-4" />
+    <div className="mb-3 rounded-xl bg-slate-950 border border-cyan-500/30 shadow-xl p-3 space-y-3 animate-in fade-in duration-200">
+      <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+        <div className="flex items-center gap-2">
+          <div className="p-1 rounded-md bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+            <Compass className="w-3.5 h-3.5" />
           </div>
           <div>
-            <h4 className="text-xs font-bold font-mono text-white flex items-center gap-2">
-              Assistente Virtuale Intelligente: Guida Interattiva ai 17 Calcoli
-              <span className="px-2 py-0.5 rounded text-[10px] bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+            <h4 className="text-[11px] font-bold font-mono text-white flex items-center gap-1.5">
+              Assistente Virtuale: Guida ai 17 Calcoli
+              <span className="px-1.5 py-0.2 rounded text-[9px] bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                 Ruolo: {userRole}
               </span>
             </h4>
-            <p className="text-[11px] text-slate-400 font-mono">
-              Esplora i calcoli, controlla le regole sui parametri (singoli o in coppia) e le soglie anomale prima di avviare il solutore.
+            <p className="text-[10px] text-slate-400 font-mono">
+              Regole sui parametri (singoli o accoppiati) e soglie di linea.
             </p>
           </div>
         </div>
 
         <button
           onClick={() => setIsOpen(false)}
-          className="p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
+          className="p-1 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
           title="Minimizza assistente"
         >
-          <X className="w-4 h-4" />
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* 4 Macro Categories Selector */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
         {CATEGORY_NAMES.map(cat => (
           <button
             key={cat}
@@ -150,7 +150,7 @@ export const GuidedChatAssistant: React.FC<Props> = ({
               const firstInCat = QUANTUM_CALCULATIONS.find(c => c.category === cat);
               if (firstInCat) handleSelectCalc(firstInCat);
             }}
-            className={`py-1.5 px-2.5 rounded-lg text-[11px] font-mono font-medium transition-all text-left truncate ${
+            className={`py-1 px-2 rounded-md text-[10px] font-mono font-medium transition-all text-left truncate cursor-pointer ${
               selectedCat === cat
                 ? 'bg-cyan-600 text-white font-bold shadow-sm'
                 : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
@@ -162,10 +162,10 @@ export const GuidedChatAssistant: React.FC<Props> = ({
       </div>
 
       {/* Calculations in this Category */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
         
         {/* Left Column: Calculation List */}
-        <div className="md:col-span-5 space-y-1.5 max-h-72 overflow-y-auto pr-1">
+        <div className="md:col-span-5 space-y-1 max-h-52 overflow-y-auto pr-1">
           {QUANTUM_CALCULATIONS.filter(c => c.category === selectedCat).map(c => {
             const isSelected = c.id === activeCalcId;
             return (

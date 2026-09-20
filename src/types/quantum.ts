@@ -53,6 +53,8 @@ export interface ChatMessage {
   azione_immediata?: string;
   livello_allarme?: 'NORMALE' | 'ATTENZIONE' | 'CRITICO';
   execution_time_ms?: number;
+  suggerimenti?: string[];
+  tipoRisposta?: 'CALCOLO_ESEGUITO' | 'RICHIESTA_PARAMETRI' | 'GUIDA_SISTEMA' | 'NON_PERTINENTE';
 }
 
 export interface MachineAsset {

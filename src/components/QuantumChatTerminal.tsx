@@ -13,7 +13,8 @@ import {
   CornerDownLeft,
   Sparkles,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Bell
 } from 'lucide-react';
 import { ChatMessage, QuantumCalculationMeta, FactoryTenant } from '../types/quantum';
 import { QuantumRouterService } from '../services/quantumRouter';
@@ -27,39 +28,41 @@ interface Props {
   userRole?: 'Operatore di Linea' | 'Amministratore';
   activeTenantName?: string;
   activeTenant?: FactoryTenant;
+  anomaliesCount?: number;
+  onNavigateToNotifications?: () => void;
 }
 
 const PRESET_SCENARIOS = [
   {
-    label: "Calcolo [1]: Inbound Congestione",
+    label: "[1] Inbound",
     query: "Ho 12 camion in attesa nel piazzale con 45 minuti di ritardo e saturazione magazzino WMS all'88.5%"
   },
   {
-    label: "Calcolo [2]: Rischio Fermo Linea",
+    label: "[2] Rischio Fermo",
     query: "Ritardo stimato del materiale di 75 minuti con 1 sola baia di scarico libera"
   },
   {
-    label: "Calcolo [4]: Controllo Qualità Lotto",
+    label: "[4] Qualità Lotto",
     query: "Controllo lotto materie prime: umidità rilevata al 13.2% e spessore micro-bobina a 45.2"
   },
   {
-    label: "Calcolo [6]: Bin Packing Pallet 3D",
+    label: "[6] Bin Packing",
     query: "Pallet in ingresso PALLET_BEMA_099 classe HIGH con 124 celle libere nello SmartStore"
   },
   {
-    label: "Calcolo [14]: Vibrazioni Bema QFT",
+    label: "[14] Bema QFT",
     query: "Analisi braccio rotante Bema Silkworm: velocità a 48 giri al minuto con forti micro-vibrazioni"
   },
   {
-    label: "Calcolo [15]: Tensione Film QSVM",
+    label: "[15] Tensione Film",
     query: "Allarme fasciatore Bema: tensione del film estensibile a 148.5 Newton a 12.4 m/s"
   },
   {
-    label: "Calcolo [16]: Traffico Flotta AGV QAOA",
+    label: "[16] Flotta AGV",
     query: "Traffico flotta LGV critico: 3 veicoli attivi con NODO_03_BLOCCATO nei corridoi"
   },
   {
-    label: "Calcolo [17]: Bipartite Matching Batterie",
+    label: "[17] Batterie AGV",
     query: "Assegna missioni urgenti 942 e 943: AGV_04 batteria 78% temp 42.5°C, AGV_11 92% 31°C"
   }
 ];
@@ -70,7 +73,9 @@ export const QuantumChatTerminal: React.FC<Props> = ({
   activeTenantEndpoint,
   userRole = 'Operatore di Linea',
   activeTenantName,
-  activeTenant
+  activeTenant,
+  anomaliesCount = 0,
+  onNavigateToNotifications
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -134,7 +139,9 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
         payload: res.risultato,
         azione_immediata: res.azione_immediata,
         livello_allarme: res.livello_allarme,
-        execution_time_ms: executionTime
+        execution_time_ms: res.tipoRisposta === 'CALCOLO_ESEGUITO' ? executionTime : undefined,
+        suggerimenti: res.suggerimenti,
+        tipoRisposta: res.tipoRisposta
       };
 
       setMessages(prev => [...prev, botMsg]);
@@ -163,65 +170,75 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-130px)] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
       {/* Terminal Top Bar */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-mono font-bold tracking-wider text-slate-300 uppercase">
+      <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-slate-800 bg-slate-950 shrink-0">
+        <div className="flex items-center space-x-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[11px] font-mono font-bold tracking-wider text-slate-300 uppercase">
               Quantum Kernel Router & Solver v2026.2
             </span>
           </div>
-          <span className="hidden sm:inline-block px-2 py-0.5 text-[11px] font-mono rounded bg-slate-800 text-slate-400 border border-slate-700">
-            CUDA-Q 17 Kernels Ready
+          <span className="hidden sm:inline-block px-1.5 py-0.2 text-[10px] font-mono rounded bg-slate-800 text-slate-400 border border-slate-700">
+            CUDA-Q 17 Kernels
           </span>
         </div>
 
-        <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
+        <div className="flex items-center gap-2.5 text-[11px] font-mono text-slate-400">
+          {anomaliesCount > 0 && onNavigateToNotifications && (
+            <button
+              onClick={onNavigateToNotifications}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[10px] font-mono font-bold transition-colors cursor-pointer animate-pulse"
+              title="Visualizza le anomalie fuori linea riscontrate dal download automatico"
+            >
+              <Bell className="w-3 h-3 text-rose-400" />
+              <span>{anomaliesCount} Calcoli Fuori Linea</span>
+            </button>
+          )}
+
           {activeTenant && (
-            <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+            <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-300">
               <span 
-                className="w-2.5 h-2.5 rounded-full" 
+                className="w-2 h-2 rounded-full" 
                 style={{ backgroundColor: activeTenant.logoColor || '#06b6d4' }}
               />
               <span className="text-slate-400">Plant:</span>
               <span className="text-cyan-300 font-bold">{activeTenant.nome}</span>
               {activeTenant.plantTopology && (
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[9px] text-slate-400">
                   [{activeTenant.plantTopology.macchinari.length} Macchine, QPU {activeTenant.plantTopology.qubitCapacity}Q]
                 </span>
               )}
             </div>
           )}
-          <div className="flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+          <div className="flex items-center gap-1">
+            <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
             <span className="hidden sm:inline">Gateway:</span> <code className="text-cyan-300">{activeTenantEndpoint}</code>
           </div>
         </div>
       </div>
 
       {/* Preset Quick Scenario Pills */}
-      <div className="p-3 bg-slate-950/60 border-b border-slate-800/80 overflow-x-auto">
-        <div className="flex items-center gap-2 min-w-max">
-          <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> Scenari Rapidi:
-          </span>
-          {PRESET_SCENARIOS.map((scenario, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleSend(scenario.query)}
-              disabled={isProcessing}
-              className="px-2.5 py-1 text-xs font-mono rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700/60 transition-colors whitespace-nowrap"
-            >
-              {scenario.label}
-            </button>
-          ))}
-        </div>
+      <div className="px-3 py-1.5 bg-slate-950/70 border-b border-slate-800/80 flex flex-wrap items-center gap-1.5 shrink-0 overflow-hidden">
+        <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1 font-semibold mr-1 shrink-0">
+          <Sparkles className="w-3 h-3 text-cyan-400" /> Scenari Rapidi:
+        </span>
+        {PRESET_SCENARIOS.map((scenario, idx) => (
+          <button
+            key={idx}
+            onClick={() => handleSend(scenario.query)}
+            disabled={isProcessing}
+            className="px-2 py-0.5 text-[10px] font-mono rounded-md bg-slate-800/80 hover:bg-cyan-950/60 hover:text-cyan-200 hover:border-cyan-500/40 text-slate-300 border border-slate-700/60 transition-colors cursor-pointer"
+            title={scenario.query}
+          >
+            {scenario.label}
+          </button>
+        ))}
       </div>
 
       {/* Messages Feed */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 font-sans">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-4 font-sans">
         {/* Interactive Guided Assistant & Parameter Form */}
         <GuidedChatAssistant
           onSelectCalculationAndInputs={(query) => handleSend(query)}
@@ -289,6 +306,28 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
                   <div className="whitespace-pre-wrap text-slate-200">
                     {msg.text}
                   </div>
+
+                  {/* Suggestion pills if provided by the quantum router */}
+                  {msg.suggerimenti && msg.suggerimenti.length > 0 && (
+                    <div className="pt-2 border-t border-slate-800/60">
+                      <span className="text-[11px] font-mono text-cyan-400 font-semibold block mb-2">
+                        Suggerimenti di esecuzione (clicca per inviare al sistema):
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {msg.suggerimenti.map((sug, sIdx) => (
+                          <button
+                            key={sIdx}
+                            type="button"
+                            onClick={() => handleSend(sug)}
+                            disabled={isProcessing}
+                            className="px-3 py-1.5 text-xs font-mono rounded-lg bg-cyan-950/50 hover:bg-cyan-900/80 text-cyan-200 hover:text-white border border-cyan-700/60 transition-all text-left shadow-sm hover:border-cyan-500 cursor-pointer flex items-center gap-1.5"
+                          >
+                            <span className="text-cyan-400">➔</span> {sug}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* If Bot returned a structured calculation */}
                   {msg.payload && (
@@ -408,21 +447,21 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-slate-800 bg-slate-950">
+      <div className="p-2.5 sm:px-4 border-t border-slate-800 bg-slate-950 shrink-0">
         <form 
           onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-          className="flex items-center gap-3"
+          className="flex items-center gap-2"
         >
           <div className="relative flex-1">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Inserisci dati di fabbrica (es. '12 camion in attesa, 45 min ritardo, wms 88%') oppure 'Calcolo 14 48 rpm'..."
-              className="w-full pl-4 pr-12 py-3 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-sans"
+              placeholder="Descrivi la situazione o inserisci dati (es. 'orario', 'fasciatore bema', oppure '4 baie e 8 ore', '52 rpm')..."
+              className="w-full pl-3.5 pr-12 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-sans"
               disabled={isProcessing}
             />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-500 hidden sm:inline-block">
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-500 hidden sm:inline-block">
               Invio ↵
             </span>
           </div>
@@ -430,10 +469,10 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
           <button
             type="submit"
             disabled={!input.trim() || isProcessing}
-            className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm flex items-center gap-2 shadow-lg transition-all"
+            className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer shrink-0"
           >
             <span>Risolvi</span>
-            <CornerDownLeft className="w-4 h-4" />
+            <CornerDownLeft className="w-3.5 h-3.5" />
           </button>
         </form>
       </div>
