@@ -15,7 +15,7 @@ import {
   Layers,
   ArrowRight
 } from 'lucide-react';
-import { ChatMessage, QuantumCalculationMeta } from '../types/quantum';
+import { ChatMessage, QuantumCalculationMeta, FactoryTenant } from '../types/quantum';
 import { QuantumRouterService } from '../services/quantumRouter';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
 import { GuidedChatAssistant } from './GuidedChatAssistant';
@@ -26,6 +26,7 @@ interface Props {
   activeTenantEndpoint: string;
   userRole?: 'Operatore di Linea' | 'Amministratore';
   activeTenantName?: string;
+  activeTenant?: FactoryTenant;
 }
 
 const PRESET_SCENARIOS = [
@@ -68,7 +69,8 @@ export const QuantumChatTerminal: React.FC<Props> = ({
   allowPlcWrite,
   activeTenantEndpoint,
   userRole = 'Operatore di Linea',
-  activeTenantName
+  activeTenantName,
+  activeTenant
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -117,7 +119,7 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
     try {
       // Simulate GPU quantum sampling latency (300-600ms)
       await new Promise(r => setTimeout(r, 450));
-      const res = await QuantumRouterService.routeAndSolve(query);
+      const res = await QuantumRouterService.routeAndSolve(query, activeTenant);
       const executionTime = Math.round(performance.now() - startTime);
 
       const botMsg: ChatMessage = {
@@ -177,15 +179,24 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
         </div>
 
         <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
-          {activeTenantName && (
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
-              <span className="text-slate-500">Stabilimento:</span>
-              <span className="text-cyan-300 font-bold">{activeTenantName}</span>
+          {activeTenant && (
+            <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+              <span 
+                className="w-2.5 h-2.5 rounded-full" 
+                style={{ backgroundColor: activeTenant.logoColor || '#06b6d4' }}
+              />
+              <span className="text-slate-400">Plant:</span>
+              <span className="text-cyan-300 font-bold">{activeTenant.nome}</span>
+              {activeTenant.plantTopology && (
+                <span className="text-[10px] text-slate-400">
+                  [{activeTenant.plantTopology.macchinari.length} Macchine, QPU {activeTenant.plantTopology.qubitCapacity}Q]
+                </span>
+              )}
             </div>
           )}
           <div className="flex items-center gap-1.5">
             <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-            <span className="hidden sm:inline">Endpoint:</span> <code className="text-cyan-300">{activeTenantEndpoint}</code>
+            <span className="hidden sm:inline">Gateway:</span> <code className="text-cyan-300">{activeTenantEndpoint}</code>
           </div>
         </div>
       </div>
@@ -216,6 +227,7 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
           onSelectCalculationAndInputs={(query) => handleSend(query)}
           onOpenCircuit={onOpenCircuit}
           userRole={userRole}
+          activeTenant={activeTenant}
         />
 
         {messages.map((msg) => {

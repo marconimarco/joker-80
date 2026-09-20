@@ -106,6 +106,7 @@ export default function App() {
             activeTenantEndpoint={activeTenant.endpoint}
             activeTenantName={activeTenant.nome}
             userRole={currentUser.ruolo}
+            activeTenant={activeTenant}
           />
         )}
 

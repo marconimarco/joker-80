@@ -1,6 +1,6 @@
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
 import { QuantumEngine } from './quantumEngine';
-import { QuantumExecutionResult } from '../types/quantum';
+import { QuantumExecutionResult, FactoryTenant } from '../types/quantum';
 
 export interface RouteResolution {
   calcolo_id: number;
@@ -19,7 +19,7 @@ export class QuantumRouterService {
    * Parse user query or structured payload, detect the calculation ID (1-17),
    * extract input variables, execute the simulated CUDA-Q circuit, and return the structured response.
    */
-  static async routeAndSolve(userMessage: string): Promise<RouteResolution> {
+  static async routeAndSolve(userMessage: string, activeTenant?: FactoryTenant): Promise<RouteResolution> {
     const text = userMessage.toLowerCase().trim();
 
     // 1. Check if user explicitly provided a calculation ID (e.g. "Calcolo 1", "calcolo [14]", "id 6", "#17")
@@ -78,12 +78,15 @@ export class QuantumRouterService {
     const inputs: Record<string, any> = { ...calcMeta.defaultInputs };
 
     // 3. Extract dynamic parameters from numbers or text patterns if present
-    // Extract numbers: e.g. "12 camion", "45 minuti", "88.5%", "75 min", etc.
+    // Or if omitted in user text, dynamically infer from activeTenant.plantTopology if available!
+    const topology = activeTenant?.plantTopology;
+
     if (targetId === 1) {
       const cMatch = text.match(/(\d+)\s*(?:camion|veicoli)/i);
       const rMatch = text.match(/(\d+)\s*(?:minuti|min|m)\s*(?:di)?\s*ritardo/i) || text.match(/ritardo\s*(?:di)?\s*(\d+)/i);
       const wMatch = text.match(/(\d+(?:\.\d+)?)\s*%\s*(?:saturazione|wms|magazzino)?/i) || text.match(/saturazione\s*(?:wms|magazzino)?\s*(?:del|al)?\s*(\d+(?:\.\d+)?)/i);
       if (cMatch) inputs.camion_attesa = parseInt(cMatch[1], 10);
+      else if (topology) inputs.camion_attesa = topology.baie.filter(b => b.stato === 'OCCUPATA').length + 3;
       if (rMatch) inputs.minuti_ritardo = parseInt(rMatch[1], 10);
       if (wMatch) inputs.saturazione_wms = parseFloat(wMatch[1]);
     } else if (targetId === 2) {
@@ -91,11 +94,13 @@ export class QuantumRouterService {
       const bMatch = text.match(/(\d+)\s*bai[ae]/i);
       if (rMatch) inputs.ritardo_stimato_minuti = parseInt(rMatch[1], 10);
       if (bMatch) inputs.baie_libere = parseInt(bMatch[1], 10);
+      else if (topology) inputs.baie_libere = Math.max(1, topology.baie.filter(b => b.stato === 'LIBERA').length);
     } else if (targetId === 3) {
       const oMatch = text.match(/(\d+)\s*ore/i);
       const bMatch = text.match(/(\d+)\s*bai[ae]/i);
       if (oMatch) inputs.ore_lavoro_disponibili = parseInt(oMatch[1], 10);
       if (bMatch) inputs.baie_totali = parseInt(bMatch[1], 10);
+      else if (topology) inputs.baie_totali = topology.baie.length;
     } else if (targetId === 4) {
       const uMatch = text.match(/(\d+(?:\.\d+)?)\s*%\s*(?:umidit[aà])?/i) || text.match(/umidit[aà]\s*(?:del)?\s*(\d+(?:\.\d+)?)/i);
       const sMatch = text.match(/spessore\s*(?:del)?\s*(\d+(?:\.\d+)?)/i) || text.match(/(\d+(?:\.\d+)?)\s*(?:micro|micron)/i);
@@ -136,11 +141,37 @@ export class QuantumRouterService {
     } else if (targetId === 14) {
       const gMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:giri|rpm)/i);
       if (gMatch) inputs.giri_minuto = parseFloat(gMatch[1]);
+      else if (topology) {
+        const bema = topology.macchinari.find(m => m.tipo === 'BEMA_FASCIATORE');
+        if (bema?.telemetria?.rpm) inputs.giri_minuto = bema.telemetria.rpm;
+      }
     } else if (targetId === 15) {
       const tMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:newton|n\b)/i);
       const vMatch = text.match(/velocit[aà]\s*(\d+(?:\.\d+)?)/i);
       if (tMatch) inputs.tensione_newton = parseFloat(tMatch[1]);
+      else if (topology) {
+        const bema = topology.macchinari.find(m => m.tipo === 'BEMA_FASCIATORE');
+        if (bema?.telemetria?.tensione_newton) inputs.tensione_newton = bema.telemetria.tensione_newton;
+      }
       if (vMatch) inputs.velocita_svolgimento = parseFloat(vMatch[1]);
+    } else if (targetId === 16) {
+      // Dynamic AGV Fleet positions if available
+      if (topology && topology.flottaAgv.length > 0) {
+        const posMap: Record<string, string> = {};
+        topology.flottaAgv.slice(0, 4).forEach(agv => {
+          posMap[agv.id] = agv.posizione;
+        });
+        inputs.coordinate_agv_attivi = posMap;
+      }
+    } else if (targetId === 17) {
+      // Dynamic AGV Battery Telemetries if available
+      if (topology && topology.flottaAgv.length > 0) {
+        const batteryMap: Record<string, { SoC: number; Temp: number }> = {};
+        topology.flottaAgv.slice(0, 4).forEach(agv => {
+          batteryMap[agv.id] = { SoC: agv.batteriaSoC, Temp: agv.temperatura };
+        });
+        inputs.telemetria_batterie_agv = batteryMap;
+      }
     }
 
     // 4. Execute the calculation in the Quantum Engine
@@ -208,14 +239,20 @@ export class QuantumRouterService {
       ? '🔒 Entanglement Obbligatorio (applicato Gate CNOT inter-categoria)'
       : '🔓 Entanglement Facoltativo (ottimizzazione locale nello spazio degli stati)';
 
-    const introduzione = `**Identificazione ed Esecuzione Calcolo Quantistico:**
+    const plantDetails = activeTenant ? `
+- **Stabilimento Connesso:** ${activeTenant.nome} (${activeTenant.sito})
+- **Gateway SM.I.LE80:** \`${activeTenant.endpoint}\` [${activeTenant.protocol || 'REST_HTTPS'} - ${activeTenant.connectionStatus || 'CONNESSO'}]
+- **Topologia Impianto:** ${activeTenant.plantTopology?.macchinari.length || 6} Macchine | ${activeTenant.plantTopology?.flottaAgv.length || 6} LGV | ${activeTenant.plantTopology?.baie.length || 5} Baie
+- **Dimensione Hamiltoniano QPU:** ${activeTenant.plantTopology?.qubitCapacity || 28} Qubit logici (${activeTenant.plantTopology?.qpuDimensioning.hamiltonianSize || 'N/A'})` : '';
+
+    const introduzione = `**Identificazione ed Esecuzione Calcolo Quantistico:**${plantDetails}
 - **Sotto-funzione Identificata:** ${calcMeta.subFunction} (${calcMeta.technicalModule})
 - **ID Calcolo:** Calcolo [${calcMeta.id}] - ${calcMeta.name}
 - **Topologia Entanglement:** ${entanglementLabel}
 - **Simulatore Target:** ${calcMeta.hardwareTarget}
-- **Input Acquisiti:** ${Object.entries(inputs).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')}
+- **Input Elaborati:** ${Object.entries(inputs).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')}
 
-Il circuito CUDA-Q è stato simulato eseguendo 1000 iterazioni stocastiche con collasso dello stato intrecciato. Di seguito il payload JSON generato e l'azione industriale immediata predisposta per il modulo SM.I.LE80.`;
+Il circuito CUDA-Q è stato simulato eseguendo 1000 iterazioni stocastiche con collasso dello stato intrecciato in base ai dati telemetrici dello stabilimento. Di seguito il payload JSON generato e l'azione industriale immediata predisposta per il modulo SM.I.LE80.`;
 
     return {
       calcolo_id: targetId,

@@ -1,4 +1,5 @@
 import { UserAccount, FactoryTenant } from '../types/quantum';
+import { TOPOLOGY_BARILLA, TOPOLOGY_NESTLE, TOPOLOGY_SANTANNA } from './plantAutoDiscovery';
 
 export const INITIAL_USERS: UserAccount[] = [
   {
@@ -85,8 +86,11 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     sito: 'Viano, Reggio Emilia (RE)',
     endpoint: 'http://127.0.0.1:8080/api/v1',
     plcIp: '192.168.1.100:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
     qpuTarget: 'Simulatore GPU CUDA-Q (cuStateVec)',
     logoColor: '#06b6d4',
+    plantTopology: TOPOLOGY_BARILLA,
     createdAt: '2026-01-01'
   },
   {
@@ -95,8 +99,11 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     sito: 'Pedrignano, Parma (PR)',
     endpoint: 'https://barilla-pedrignano.smile80.net/cudaq',
     plcIp: '10.24.100.50:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
     qpuTarget: 'QPU Rigetti / GPU Cluster H100',
     logoColor: '#3b82f6',
+    plantTopology: TOPOLOGY_BARILLA,
     createdAt: '2026-01-15'
   },
   {
@@ -105,8 +112,11 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     sito: 'Assago, Milano (MI)',
     endpoint: 'https://nestle-milan.smile80.net/cudaq',
     plcIp: '172.18.20.10:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
     qpuTarget: 'QPU IonQ / Edge QPU Silkworm',
     logoColor: '#ef4444',
+    plantTopology: TOPOLOGY_NESTLE,
     createdAt: '2026-02-01'
   },
   {
@@ -115,8 +125,11 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     sito: 'Vinadio, Cuneo (CN)',
     endpoint: 'https://santanna-vinadio.smile80.net/cudaq',
     plcIp: '192.168.50.80:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
     qpuTarget: 'D-Wave Annealer / Hybrid Solver',
     logoColor: '#10b981',
+    plantTopology: TOPOLOGY_SANTANNA,
     createdAt: '2026-02-10'
   }
 ];
@@ -180,7 +193,25 @@ export const AuthStorage = {
   getTenants: (): FactoryTenant[] => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_TENANTS);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: FactoryTenant[] = JSON.parse(saved);
+        // Ensure all stored tenants have topologies and connectionStatus
+        let modified = false;
+        const enriched = parsed.map(t => {
+          if (!t.plantTopology) {
+            modified = true;
+            if (t.id === 'barilla') return { ...t, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_BARILLA };
+            if (t.id === 'nestle') return { ...t, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_NESTLE };
+            if (t.id === 'santanna') return { ...t, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_SANTANNA };
+            return { ...t, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_BARILLA };
+          }
+          return t;
+        });
+        if (modified) {
+          localStorage.setItem(STORAGE_KEY_TENANTS, JSON.stringify(enriched));
+        }
+        return enriched;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -193,6 +224,13 @@ export const AuthStorage = {
     } catch (e) {
       console.error(e);
     }
+  },
+
+  updateTenant: (tenant: FactoryTenant): FactoryTenant => {
+    const tenants = AuthStorage.getTenants();
+    const updated = tenants.map(t => t.id === tenant.id ? tenant : t);
+    AuthStorage.saveTenants(updated);
+    return tenant;
   },
 
   addTenant: (tenant: Omit<FactoryTenant, 'id' | 'createdAt'>): FactoryTenant => {

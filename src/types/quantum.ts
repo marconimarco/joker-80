@@ -55,6 +55,59 @@ export interface ChatMessage {
   execution_time_ms?: number;
 }
 
+export interface MachineAsset {
+  id: string;
+  nome: string;
+  tipo: 'BEMA_FASCIATORE' | 'PALLETTIZZATORE' | 'TRASLOELEVATORE_SMARTSTORE' | 'BAIA_CARICO' | 'RULLIERA_INBOUND' | 'ISOLA_ROBOT' | 'ALTRO';
+  reparto: string;
+  plcTag: string;
+  stato: 'IN_MARCIA' | 'STANDBY' | 'ALLARME';
+  telemetria?: Record<string, any>;
+}
+
+export interface AgvVehicle {
+  id: string;
+  modello: string;
+  batteriaSoC: number;
+  temperatura: number;
+  posizione: string;
+  stato: 'MISSIONE' | 'IN_CARICA' | 'IDLE';
+}
+
+export interface BayAsset {
+  id: string;
+  nome: string;
+  tipo: 'INBOUND' | 'OUTBOUND';
+  stato: 'LIBERA' | 'OCCUPATA' | 'PRENOTATA';
+  camionAssegnato?: string;
+}
+
+export interface PlantDepartment {
+  id: string;
+  nome: string;
+  moduloTecnico: TechnicalModule;
+  responsabileLinea: string;
+  statoOperativo: 'OTTIMALE' | 'ATTENZIONE' | 'CRITICO';
+  macchineCount: number;
+}
+
+export interface PlantTopology {
+  reparti: PlantDepartment[];
+  macchinari: MachineAsset[];
+  flottaAgv: AgvVehicle[];
+  baie: BayAsset[];
+  qubitCapacity: number;
+  qpuDimensioning: {
+    numQubits: number;
+    hamiltonianSize: string;
+    shotsDefault: number;
+    simulatorBackend: string;
+  };
+  lastSyncTimestamp: string;
+}
+
+export type IndustrialProtocol = 'REST_HTTPS' | 'OPC_UA' | 'MQTT' | 'SIEMENS_S7';
+
 export interface FactoryTenant {
   id: string;
   nome: string;
@@ -65,6 +118,9 @@ export interface FactoryTenant {
   qpuTarget?: string;
   wmsApiKey?: string;
   createdAt?: string;
+  protocol?: IndustrialProtocol;
+  connectionStatus?: 'CONNESSO' | 'IN_ATTESA' | 'OFFLINE';
+  plantTopology?: PlantTopology;
 }
 
 export type UserRole = 'Amministratore' | 'Operatore di Linea';

@@ -16,14 +16,16 @@ import {
   Info,
   Sliders,
   Check,
-  X
+  X,
+  Zap
 } from 'lucide-react';
-import { MacroCategory, QuantumCalculationMeta, UserRole } from '../types/quantum';
+import { MacroCategory, QuantumCalculationMeta, UserRole, FactoryTenant } from '../types/quantum';
 
 interface Props {
   onSelectCalculationAndInputs: (queryText: string) => void;
   onOpenCircuit: (calc: QuantumCalculationMeta) => void;
   userRole?: UserRole;
+  activeTenant?: FactoryTenant;
 }
 
 const CATEGORY_NAMES: MacroCategory[] = [
@@ -36,7 +38,8 @@ const CATEGORY_NAMES: MacroCategory[] = [
 export const GuidedChatAssistant: React.FC<Props> = ({ 
   onSelectCalculationAndInputs,
   onOpenCircuit,
-  userRole = 'Operatore di Linea'
+  userRole = 'Operatore di Linea',
+  activeTenant
 }) => {
   const [selectedCat, setSelectedCat] = useState<MacroCategory>('1. Inbound & Materie Prime');
   const [activeCalcId, setActiveCalcId] = useState<number>(1);
@@ -50,6 +53,40 @@ export const GuidedChatAssistant: React.FC<Props> = ({
   const handleSelectCalc = (calc: QuantumCalculationMeta) => {
     setActiveCalcId(calc.id);
     setDraftInputs({ ...calc.defaultInputs });
+  };
+
+  const handleSyncPlantTelemetry = () => {
+    if (!activeTenant?.plantTopology) return;
+    const topo = activeTenant.plantTopology;
+    const newInputs = { ...currentCalc.defaultInputs };
+
+    if (currentCalc.id === 1) {
+      newInputs.camion_attesa = topo.baie.filter(b => b.stato === 'OCCUPATA').length + 2;
+    } else if (currentCalc.id === 2) {
+      newInputs.baie_libere = Math.max(1, topo.baie.filter(b => b.stato === 'LIBERA').length);
+    } else if (currentCalc.id === 3) {
+      newInputs.baie_totali = topo.baie.length;
+    } else if (currentCalc.id === 14) {
+      const bema = topo.macchinari.find(m => m.tipo === 'BEMA_FASCIATORE');
+      if (bema?.telemetria?.rpm) newInputs.giri_minuto = bema.telemetria.rpm;
+    } else if (currentCalc.id === 15) {
+      const bema = topo.macchinari.find(m => m.tipo === 'BEMA_FASCIATORE');
+      if (bema?.telemetria?.tensione_newton) newInputs.tensione_newton = bema.telemetria.tensione_newton;
+    } else if (currentCalc.id === 16 && topo.flottaAgv.length > 0) {
+      const posMap: Record<string, string> = {};
+      topo.flottaAgv.slice(0, 4).forEach(agv => {
+        posMap[agv.id] = agv.posizione;
+      });
+      newInputs.coordinate_agv_attivi = posMap;
+    } else if (currentCalc.id === 17 && topo.flottaAgv.length > 0) {
+      const batteryMap: Record<string, { SoC: number; Temp: number }> = {};
+      topo.flottaAgv.slice(0, 4).forEach(agv => {
+        batteryMap[agv.id] = { SoC: agv.batteriaSoC, Temp: agv.temperatura };
+      });
+      newInputs.telemetria_batterie_agv = batteryMap;
+    }
+
+    setDraftInputs(newInputs);
   };
 
   const handleApplyToChat = () => {
@@ -237,18 +274,31 @@ export const GuidedChatAssistant: React.FC<Props> = ({
 
           {/* Parameter Inputs */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
                 <Sliders className="w-3 h-3 text-cyan-400" />
-                Modifica Parametri per la Simulazione:
+                Parametri per la Simulazione:
               </span>
-              <button
-                type="button"
-                onClick={handleResetInputs}
-                className="text-[10px] text-slate-400 hover:text-cyan-300 transition-colors"
-              >
-                Ripristina Default
-              </button>
+              <div className="flex items-center gap-2">
+                {activeTenant?.plantTopology && (
+                  <button
+                    type="button"
+                    onClick={handleSyncPlantTelemetry}
+                    className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors flex items-center gap-1 font-bold"
+                    title="Carica i valori rilevati in tempo reale dalle macchine e baie dell'impianto attivo"
+                  >
+                    <Zap className="w-3 h-3" />
+                    Telemetria {activeTenant.nome.split('(')[0].trim()}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleResetInputs}
+                  className="text-[10px] text-slate-400 hover:text-cyan-300 transition-colors"
+                >
+                  Reset
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
