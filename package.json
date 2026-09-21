@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://IL_TUO_USERNAME.github.io/IL_NOME_DEL_REPOSITORY",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
