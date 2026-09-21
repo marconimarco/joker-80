@@ -6,7 +6,9 @@ import https from 'https';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  
+  // Porta dinamica richiesta da Google Cloud (usa la 8080 di default)
+  const PORT = process.env.PORT || 8080;
 
   app.use(express.json());
 
@@ -116,15 +118,16 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    // In produzione esbuild si trova dentro 'dist/', quindi i file statici di React sono nella stessa cartella
+    const distPath = __dirname;
     app.use(express.static(distPath));
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[JOKER 80] Quantum Control Panel running on http://0.0.0.0:${PORT}`);
+  app.listen(PORT, () => {
+    console.log(`[JOKER 80] Quantum Control Panel running on port ${PORT}`);
   });
 }
 

@@ -1,0 +1,6 @@
+runtime: nodejs22
+env: standard
+instance_class: F1
+
+# Questo comando dice a Google di avviare il server usando lo script definito nel package.json
+entrypoint: npm run start
