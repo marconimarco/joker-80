@@ -1,6 +1,6 @@
 {
   "name": "JOKER 80 Quantum Control Panel",
-  "description": "Pannello di controllo e router quantistico integrato per l'automazione industriale joker 80 con 17 algoritmi CUDA-Q",
+  "description": "Pannello di controllo e router quantistico integrato per l'automazione industriale SM.I.LE80 con 21 algoritmi CUDA-Q e conformità NIS2 mTLS",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

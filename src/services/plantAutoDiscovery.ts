@@ -1,5 +1,261 @@
-import { FactoryTenant, PlantTopology, MachineAsset, AgvVehicle, BayAsset, PlantDepartment, UserAccount, IndustrialProtocol } from '../types/quantum';
+import {
+  FactoryTenant,
+  PlantTopology,
+  MachineAsset,
+  AgvVehicle,
+  BayAsset,
+  PlantDepartment,
+  UserAccount,
+  IndustrialProtocol,
+  AgvDeepTelemetry,
+  RobotPalletizingNode,
+  SilkwormWrapperNode,
+  RaptorLabelerNode,
+  SmartStoreWarehouseNode,
+  WoodpeckerPalletCheckNode,
+  PlantTrafficInfrastructureNode
+} from '../types/quantum';
 import { AuthStorage } from './authStorage';
+
+/**
+ * Generatore dei 7 Nodi a livello Deep Data conforme alle specifiche Elettric80 / SM.I.LE80
+ */
+export function buildDeepDataForPlant(prefix: string, baseRpm = 48.5, baseTens = 152.0) {
+  const p = prefix.toUpperCase();
+
+  const isolePallettizzazione: RobotPalletizingNode[] = [
+    {
+      id: `PAL_${p}_ROBOT_01`,
+      nome: `Isola Robotizzata Pallettizzazione ${p} Linea 1`,
+      linea: 'Linea Confezionamento Alta Velocità',
+      processoOutput: {
+        conteggioPezziMinuto: 135,
+        contatorePalletCompletati: 142,
+        tempoCicloStratoMs: 10850,
+        activeRecipeId: `RCP-${p}-EPAL-01`,
+        numeroStratiCorrenti: 5
+      },
+      elettromeccanicaRobot: {
+        correnteJointA: [12.4, 18.2, 14.1, 8.5, 6.2, 4.8],
+        coppiaMotoriNm: [245, 380, 290, 115, 82, 45],
+        tempMotoriduttoriC: 39.2,
+        tempAzionamentiC: 41.5
+      },
+      sensoriPresaAria: {
+        pressionePneumaticaVuotoBar: -0.84,
+        portataAriaAspirataM3h: 5.1,
+        forzaSerraggioPinzeN: 480,
+        flagPresenzaInterfalda: true,
+        spessoreInterfaldaMm: 2.8
+      },
+      statoDiagnostica: {
+        statoPlc: 'RUN',
+        indiceOeeLocalePct: 92.6,
+        storicoMicrofermiCiclo: 0
+      }
+    }
+  ];
+
+  const fasciatoriSilkworm: SilkwormWrapperNode[] = [
+    {
+      id: `SILKWORM_${p}_01`,
+      nome: `Fasciatore Bema Silkworm ${p} Doppio Rullo`,
+      dinamicaAvvolgimento: {
+        velocitaRotazioneRpm: baseRpm,
+        forzaSerraggioCaricoN: baseTens,
+        rapportoPrestiroRealePct: 285.0,
+        velocitaCarrelloBobinaMs: 0.48
+      },
+      consumiDiagnosticaMateriale: {
+        pesoFilmApplicatoGrammi: 280,
+        metriLineariFilmErogati: 195,
+        tensioneFilmSpigoliN: baseTens + 12.0,
+        percentualeFilmResiduoBobinaPct: 74.0
+      },
+      variabiliMacchinaAllarmi: {
+        tempBarraSaldanteC: 138.5,
+        bitRotturaFilm: false,
+        flagFineBobina: false,
+        anomalieMotoriTraino: false
+      }
+    }
+  ];
+
+  const etichettatriciRaptor: RaptorLabelerNode[] = [
+    {
+      id: `RAPTOR_${p}_01`,
+      nome: `Etichettatrice Robotizzata E80 Raptor 01`,
+      stampaTracciabilita: {
+        ssccCode: `080332190000${Math.floor(100000 + Math.random() * 900000)}`,
+        etichettaGs1: `(01)08033219001234(10)LOT-${p}-2026(15)261231`,
+        lotto: `LOT-${p}-2026-X8`,
+        dataScadenza: '2026-12-31',
+        skuProdotto: `SKU-${p}-PREMIUM`,
+        timestampApplicazioneMs: Date.now(),
+        posizioneApplicazione: 'LATO_FRONTE'
+      },
+      controlloQualitaVisione: {
+        gradoQualitaStampaIso: 'CLASSE_A',
+        stringaRitornoValidatoreOttico: `VERIFIED_GS1_${p}_OK`
+      },
+      hardwareConsumabili: {
+        tempTestinaTermicaC: 54.2,
+        pressioneAriaApplicatoreBar: 6.2,
+        metriResiduiRibbon: 460,
+        metriResiduiRotoloEtichette: 520,
+        contatoreEtichetteScartate: 0
+      }
+    }
+  ];
+
+  const magazzinoSmartStore: SmartStoreWarehouseNode = {
+    id: `SMARTSTORE_${p}_HIGHBAY`,
+    nome: `Magazzino Automatico E80 SmartStore ${p}`,
+    strutturaSpazio: {
+      matrice3dOccupazione: {
+        totaleCelle: 4200,
+        occupate: 3580,
+        vuote: 540,
+        prenotateIngresso: 50,
+        prenotateUscita: 30
+      },
+      idCellaSpecifico: {
+        scaffale: 'SCAFFALE_A04',
+        campata: 18,
+        piano: 5,
+        profondita: 2
+      },
+      timestampStoccaggio: new Date(Date.now() - 3600000 * 12).toISOString()
+    },
+    controlloAccettazioneIngresso: {
+      pesoRealeBilanciaKg: 875.4,
+      sensoriSagoma: {
+        altezzaMm: 1820,
+        larghezzaMm: 800,
+        lunghezzaMm: 1200,
+        fuoriAsse: false
+      },
+      controlloFondoPalletIntegritaPattini: true
+    },
+    sistemiMovimentazioneInterna: {
+      posizioneEncoderAssoluto: 18450,
+      livelloSupercondensatoriShuttlePct: 96.0,
+      livelloBatteriaShuttlePct: 92.5,
+      correnteAssorbitaMotoriA: 26.8,
+      tempAmbientaleCorsieC: 19.2
+    }
+  };
+
+  const controlloWoodpecker: WoodpeckerPalletCheckNode = {
+    id: `WOODPECKER_${p}_01`,
+    nome: `Ispezione Meccanica Pallet Vuoti Woodpecker ${p}`,
+    metricheIspezione: {
+      throughputPalletOra: 280,
+      forzaDeformazionePattiniN: 3400,
+      umiditaLegnoPct: 13.2
+    },
+    datiScarto: {
+      esitoIspezione: 'APPROVATO_LINEE',
+      mascheraDifetti: {
+        asseSpaccata: false,
+        chiodoSporgente: false,
+        blocchettoMancante: false,
+        fuoriTolleranzaGeometrica: false
+      },
+      idFornitoreLottoLegno: `SUPPLIER-EPAL-${p}-CERTIFIED`
+    }
+  };
+
+  const infrastrutturaTraffico: PlantTrafficInfrastructureNode = {
+    id: `TRAFFIC_INFRA_${p}`,
+    topologiaRete: {
+      matriceAdiacenzaTratte: [
+        { sorgente: 'NODO_BEMA_01', destinazione: 'SVINCOLO_WMS_01', lunghezzaMm: 24500, pesoTratta: 1.1 },
+        { sorgente: 'SVINCOLO_WMS_01', destinazione: 'BAIA_OUTBOUND_01', lunghezzaMm: 38200, pesoTratta: 1.4 },
+        { sorgente: 'BAIA_INBOUND_01', destinazione: 'ACCETTAZIONE_WOODPECKER', lunghezzaMm: 18000, pesoTratta: 1.0 }
+      ],
+      statoSegmentiCorsia: {
+        'CORSIA_A1': 'LIBERO',
+        'CORSIA_A2': 'OCCUPATO',
+        'CORSIA_BEMA_OUT': 'LIBERO'
+      },
+      lgvInCodaBuffer: {
+        'BUFFER_FINE_LINEA': 1,
+        'BUFFER_INGRESSO_SMARTSTORE': 0
+      }
+    },
+    stazioniRicarica: [
+      {
+        id: `FAST_CHARGE_${p}_01`,
+        statoInverter: 'STANDBY',
+        potenzaErogataKw: 45.0,
+        tempPiastraTerraC: 31.4,
+        tempPiastraBordoVeicoloC: 33.2,
+        tempoResiduoCaricaMin: 0
+      },
+      {
+        id: `FAST_CHARGE_${p}_02`,
+        statoInverter: 'CARICA_IN_CORSO',
+        potenzaErogataKw: 42.8,
+        tempPiastraTerraC: 38.0,
+        tempPiastraBordoVeicoloC: 39.5,
+        tempoResiduoCaricaMin: 14,
+        navettaOccupante: `LGV_${p}_03`
+      }
+    ]
+  };
+
+  return {
+    isolePallettizzazione,
+    fasciatoriSilkworm,
+    etichettatriciRaptor,
+    magazzinoSmartStore,
+    controlloWoodpecker,
+    infrastrutturaTraffico
+  };
+}
+
+/**
+ * Generatore dei parametri Deep Data per singolo AGV
+ */
+export function buildAgvDeepData(agvId: string, soc: number, temp: number): AgvDeepTelemetry {
+  return {
+    cinematiciSpaziali: {
+      coordinateXYZ: { x: 14250, y: 8600, z: 210 },
+      angoliAssetto: { theta: 0.02, phi: -0.01, psi: 1.57 },
+      velocitaLineareMs: soc > 50 ? 1.8 : 0.9,
+      accelerazioneVettorialeMs2: 0.45,
+      raggioCurvaturaMm: 2400,
+      direzioneRuoteSterzantiDeg: 12.5
+    },
+    fisiciStrutturali: {
+      pesoForcheKg: soc > 45 ? 950 : 0,
+      pressioneCircuitoIdraulicoBar: soc > 45 ? 145 : 18,
+      tempMotoreTrazioneC: temp - 2.0,
+      tempMotoreSollevamentoC: temp + 1.5,
+      vibrazioniAssiG: { x: 0.04, y: 0.05, z: 0.08 }
+    },
+    gestioneEnergetica: {
+      statoCaricaSoC: soc,
+      statoSaluteSoH: 94.8,
+      correnteAssorbitaA: soc > 50 ? 38.5 : 8.2,
+      tensioneLineaV: 48.2,
+      energiaRigenerataFrenataWh: 320,
+      tempCelleBatteriaC: temp,
+      tempModuliBmsC: temp + 1.2
+    },
+    sicurezzaMappaLogica: {
+      distanzaOstacoloLaserMm: 4200,
+      bitCampoProtetto: 'LIBERO',
+      idMissione: `MSS-${agvId}-${Date.now().toString().slice(-4)}`,
+      idNodoSorgente: 'NODO_BEMA_01',
+      idNodoDestinazione: 'INGRESSO_SMARTSTORE_B2',
+      idNodoProssimo: 'SVINCOLO_CORSIA_4',
+      rssiWifiDbm: -58,
+      pacchettiPersiPct: 0.02
+    }
+  };
+}
 
 // Pre-built Topologies for the existing baseline tenants
 export const TOPOLOGY_BARILLA: PlantTopology = {
@@ -46,12 +302,12 @@ export const TOPOLOGY_BARILLA: PlantTopology = {
     { id: 'M-BAR-RULL-01', nome: 'Rulliera Inbound Evacuazione Silos Grano', tipo: 'RULLIERA_INBOUND', reparto: 'Reparto 1', plcTag: 'DB10.DBW04_FLUSSO_KG', stato: 'IN_MARCIA', telemetria: { carico_orario_ton: 45.2 } }
   ],
   flottaAgv: [
-    { id: 'LGV_BAR_01', modello: 'E80 CB16 Counterbalanced (Forche Singole)', batteriaSoC: 92, temperatura: 32.5, posizione: 'Nodo N-14 (Svincolo Bema 1)', stato: 'MISSIONE' },
-    { id: 'LGV_BAR_02', modello: 'E80 CB16 Counterbalanced (Forche Singole)', batteriaSoC: 78, temperatura: 35.1, posizione: 'Nodo N-08 (Corsia Magazzino 1)', stato: 'MISSIONE' },
-    { id: 'LGV_BAR_03', modello: 'E80 Reach Truck (Doppia Profondità)', batteriaSoC: 45, temperatura: 39.0, posizione: 'Stazione Ricarica Fast Bat-02', stato: 'IN_CARICA' },
-    { id: 'LGV_BAR_04', modello: 'E80 CB20 Heavy Duty (Doppio Pallet)', batteriaSoC: 84, temperatura: 31.8, posizione: 'Nodo N-22 (Baia Spedizione 3)', stato: 'MISSIONE' },
-    { id: 'LGV_BAR_05', modello: 'E80 CB16 Counterbalanced', batteriaSoC: 95, temperatura: 29.4, posizione: 'Area Parcheggio Buffer P-01', stato: 'IDLE' },
-    { id: 'LGV_BAR_06', modello: 'E80 CB16 Counterbalanced', batteriaSoC: 62, temperatura: 36.2, posizione: 'Nodo N-19 (Scarico Baia Inbound 2)', stato: 'MISSIONE' }
+    { id: 'LGV_BAR_01', modello: 'E80 CB16 Counterbalanced (Forche Singole)', batteriaSoC: 92, temperatura: 32.5, posizione: 'Nodo N-14 (Svincolo Bema 1)', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_BAR_01', 92, 32.5) },
+    { id: 'LGV_BAR_02', modello: 'E80 CB16 Counterbalanced (Forche Singole)', batteriaSoC: 78, temperatura: 35.1, posizione: 'Nodo N-08 (Corsia Magazzino 1)', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_BAR_02', 78, 35.1) },
+    { id: 'LGV_BAR_03', modello: 'E80 Reach Truck (Doppia Profondità)', batteriaSoC: 45, temperatura: 39.0, posizione: 'Stazione Ricarica Fast Bat-02', stato: 'IN_CARICA', deepData: buildAgvDeepData('LGV_BAR_03', 45, 39.0) },
+    { id: 'LGV_BAR_04', modello: 'E80 CB20 Heavy Duty (Doppio Pallet)', batteriaSoC: 84, temperatura: 31.8, posizione: 'Nodo N-22 (Baia Spedizione 3)', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_BAR_04', 84, 31.8) },
+    { id: 'LGV_BAR_05', modello: 'E80 CB16 Counterbalanced', batteriaSoC: 95, temperatura: 29.4, posizione: 'Area Parcheggio Buffer P-01', stato: 'IDLE', deepData: buildAgvDeepData('LGV_BAR_05', 95, 29.4) },
+    { id: 'LGV_BAR_06', modello: 'E80 CB16 Counterbalanced', batteriaSoC: 62, temperatura: 36.2, posizione: 'Nodo N-19 (Scarico Baia Inbound 2)', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_BAR_06', 62, 36.2) }
   ],
   baie: [
     { id: 'BAIA_BAR_01', nome: 'Baia 01 (Inbound Semola)', tipo: 'INBOUND', stato: 'OCCUPATA', camionAssegnato: 'CAMION-IT-942 (Barilla Logistics)' },
@@ -68,7 +324,8 @@ export const TOPOLOGY_BARILLA: PlantTopology = {
     shotsDefault: 1000,
     simulatorBackend: 'NVIDIA CUDA-Q cuStateVec (Cluster H100 SXM5)'
   },
-  lastSyncTimestamp: '2026-03-20T10:14:00Z'
+  lastSyncTimestamp: '2026-03-20T10:14:00Z',
+  deepDataNodes: buildDeepDataForPlant('barilla', 48.5, 152.0)
 };
 
 export const TOPOLOGY_NESTLE: PlantTopology = {
@@ -113,10 +370,10 @@ export const TOPOLOGY_NESTLE: PlantTopology = {
     { id: 'M-NES-PAL-01', nome: 'Pallettizzatore Robotizzato Astucci Nescafé', tipo: 'PALLETTIZZATORE', reparto: 'Reparto 3', plcTag: 'DB112.DBX1.0_READY', stato: 'IN_MARCIA', telemetria: { pacchi_minuto: 135 } }
   ],
   flottaAgv: [
-    { id: 'LGV_NES_01', modello: 'E80 CB12 Compact Agile', batteriaSoC: 88, temperatura: 30.1, posizione: 'Nodo A-04 (Confezionamento)', stato: 'MISSIONE' },
-    { id: 'LGV_NES_02', modello: 'E80 CB12 Compact Agile', batteriaSoC: 91, temperatura: 29.8, posizione: 'Nodo A-11 (Corsia WMS)', stato: 'MISSIONE' },
-    { id: 'LGV_NES_03', modello: 'E80 CB16 Heavy Pallet', batteriaSoC: 38, temperatura: 41.2, posizione: 'Stazione Ricarica Fast B-01', stato: 'IN_CARICA' },
-    { id: 'LGV_NES_04', modello: 'E80 CB16 Heavy Pallet', batteriaSoC: 74, temperatura: 33.0, posizione: 'Nodo B-06 (Baia Outbound 2)', stato: 'MISSIONE' }
+    { id: 'LGV_NES_01', modello: 'E80 CB12 Compact Agile', batteriaSoC: 88, temperatura: 30.1, posizione: 'Nodo A-04 (Confezionamento)', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_NES_01', 88, 30.1) },
+    { id: 'LGV_NES_02', modello: 'E80 CB12 Compact Agile', batteriaSoC: 91, temperatura: 29.8, posizione: 'Nodo A-11 (Corsia WMS)', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_NES_02', 91, 29.8) },
+    { id: 'LGV_NES_03', modello: 'E80 CB16 Heavy Pallet', batteriaSoC: 38, temperatura: 41.2, posizione: 'Stazione Ricarica Fast B-01', stato: 'IN_CARICA', deepData: buildAgvDeepData('LGV_NES_03', 38, 41.2) },
+    { id: 'LGV_NES_04', modello: 'E80 CB16 Heavy Pallet', batteriaSoC: 74, temperatura: 33.0, posizione: 'Nodo B-06 (Baia Outbound 2)', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_NES_04', 74, 33.0) }
   ],
   baie: [
     { id: 'BAIA_NES_01', nome: 'Baia Inbound 01 (Materie Prime)', tipo: 'INBOUND', stato: 'OCCUPATA', camionAssegnato: 'CAMION-CH-710 (Nestlé Supply)' },
@@ -131,7 +388,8 @@ export const TOPOLOGY_NESTLE: PlantTopology = {
     shotsDefault: 1000,
     simulatorBackend: 'NVIDIA CUDA-Q / QPU IonQ Forte'
   },
-  lastSyncTimestamp: '2026-03-20T09:40:00Z'
+  lastSyncTimestamp: '2026-03-20T09:40:00Z',
+  deepDataNodes: buildDeepDataForPlant('nestle', 46.5, 143.0)
 };
 
 export const TOPOLOGY_SANTANNA: PlantTopology = {
@@ -176,11 +434,11 @@ export const TOPOLOGY_SANTANNA: PlantTopology = {
     { id: 'M-STA-PAL-01', nome: 'Fardellatrice + Pallettizzatore Linea Rebella', tipo: 'PALLETTIZZATORE', reparto: 'Reparto 3', plcTag: 'DB60.DBX4.1_OK', stato: 'IN_MARCIA', telemetria: { fardelli_ora: 4200 } }
   ],
   flottaAgv: [
-    { id: 'LGV_STA_01', modello: 'E80 CB20 Double Pallet High Velocity', batteriaSoC: 96, temperatura: 28.5, posizione: 'Tunnel Navette Linea Sorgente', stato: 'MISSIONE' },
-    { id: 'LGV_STA_02', modello: 'E80 CB20 Double Pallet High Velocity', batteriaSoC: 85, temperatura: 31.0, posizione: 'Baia Carico 04', stato: 'MISSIONE' },
-    { id: 'LGV_STA_03', modello: 'E80 CB20 Double Pallet High Velocity', batteriaSoC: 72, temperatura: 33.4, posizione: 'Corsia Buffer 2', stato: 'MISSIONE' },
-    { id: 'LGV_STA_04', modello: 'E80 CB20 Double Pallet High Velocity', batteriaSoC: 40, temperatura: 38.0, posizione: 'Stazione Fast Charge 01', stato: 'IN_CARICA' },
-    { id: 'LGV_STA_05', modello: 'E80 CB16 Forche Singole', batteriaSoC: 89, temperatura: 29.2, posizione: 'Scarico Preforme', stato: 'MISSIONE' }
+    { id: 'LGV_STA_01', modello: 'E80 CB20 Double Pallet High Velocity', batteriaSoC: 96, temperatura: 28.5, posizione: 'Tunnel Navette Linea Sorgente', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_STA_01', 96, 28.5) },
+    { id: 'LGV_STA_02', modello: 'E80 CB20 Double Pallet High Velocity', batteriaSoC: 85, temperatura: 31.0, posizione: 'Baia Carico 04', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_STA_02', 85, 31.0) },
+    { id: 'LGV_STA_03', modello: 'E80 CB20 Double Pallet High Velocity', batteriaSoC: 72, temperatura: 33.4, posizione: 'Corsia Buffer 2', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_STA_03', 72, 33.4) },
+    { id: 'LGV_STA_04', modello: 'E80 CB20 Double Pallet High Velocity', batteriaSoC: 40, temperatura: 38.0, posizione: 'Stazione Fast Charge 01', stato: 'IN_CARICA', deepData: buildAgvDeepData('LGV_STA_04', 40, 38.0) },
+    { id: 'LGV_STA_05', modello: 'E80 CB16 Forche Singole', batteriaSoC: 89, temperatura: 29.2, posizione: 'Scarico Preforme', stato: 'MISSIONE', deepData: buildAgvDeepData('LGV_STA_05', 89, 29.2) }
   ],
   baie: [
     { id: 'BAIA_STA_01', nome: 'Baia Inbound 01 (Preforme & Tappi)', tipo: 'INBOUND', stato: 'LIBERA' },
@@ -196,7 +454,8 @@ export const TOPOLOGY_SANTANNA: PlantTopology = {
     shotsDefault: 1000,
     simulatorBackend: 'D-Wave Advantage 5000+ / Hybrid QAOA'
   },
-  lastSyncTimestamp: '2026-03-20T10:05:00Z'
+  lastSyncTimestamp: '2026-03-20T10:05:00Z',
+  deepDataNodes: buildDeepDataForPlant('santanna', 53.0, 163.5)
 };
 
 // Preset Templates that Admin can choose from to quickly populate the form
@@ -369,13 +628,15 @@ export const PlantAutoDiscoveryService = {
       }
 
       // 3. Update AGVs
-      const updatedAgv = baseTopology.flottaAgv.map(agv => {
+      const updatedAgv: AgvVehicle[] = baseTopology.flottaAgv.map(agv => {
         const delta = agv.stato === 'IN_CARICA' ? 4 : -2;
         const newSoC = Math.min(100, Math.max(18, agv.batteriaSoC + delta));
+        const temp = +(30 + Math.random() * 6).toFixed(1);
         return {
           ...agv,
           batteriaSoC: newSoC,
-          temperatura: +(30 + Math.random() * 6).toFixed(1)
+          temperatura: temp,
+          deepData: buildAgvDeepData(agv.id, newSoC, temp)
         };
       });
 
@@ -387,7 +648,8 @@ export const PlantAutoDiscoveryService = {
           batteriaSoC: 98,
           temperatura: 28.5,
           posizione: 'Nodo N-30 (Uscita Nuovo Fasciatore BEMA 03)',
-          stato: 'MISSIONE'
+          stato: 'MISSIONE',
+          deepData: buildAgvDeepData(`LGV_${prefix.toUpperCase()}_NEW_09`, 98, 28.5)
         };
         updatedAgv.push(newAgv);
         newDiscoveredItems.push(`Rilevato 1 Nuovo Carrello Laser Guided Vehicle: "${newAgv.modello}" (${newAgv.id})`);
@@ -415,7 +677,8 @@ export const PlantAutoDiscoveryService = {
           shotsDefault: 1000,
           simulatorBackend: params.qpuTarget || 'NVIDIA CUDA-Q cuStateVec (Cluster H100 SXM5)'
         },
-        lastSyncTimestamp: new Date().toISOString()
+        lastSyncTimestamp: new Date().toISOString(),
+        deepDataNodes: buildDeepDataForPlant(prefix, 49.0, 153.0)
       };
 
       // 6. Update Tenant in AuthStorage

@@ -59,14 +59,14 @@ export const NotificationsView: React.FC<Props> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-white font-mono flex items-center gap-1.5">
-                  Centro Notifiche & Diagnostica Real-Time 17 Calcoli
+                  Centro Notifiche & Diagnostica Real-Time 21 Calcoli
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                   {activeTenant.nome}
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-sans mt-0.5">
-                Download automatico della telemetria dei nodi industriali ed elaborazione simultanea di tutti i 17 circuiti quantistici.
+                Download automatico della telemetria dei nodi industriali ed elaborazione simultanea di tutti i 21 circuiti quantistici.
               </p>
             </div>
           </div>
@@ -76,7 +76,7 @@ export const NotificationsView: React.FC<Props> = ({
               onClick={onRefreshScan}
               disabled={isScanning}
               className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-semibold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-              title="Rilancia la lettura dei nodi di stabilimento ed esegui i 17 calcoli"
+              title="Rilancia la lettura dei nodi di stabilimento ed esegui i 21 calcoli"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-cyan-400' : ''}`} />
               <span>{isScanning ? 'Scansione in corso...' : 'Aggiorna Telemetria & Ricalcola'}</span>
@@ -90,7 +90,7 @@ export const NotificationsView: React.FC<Props> = ({
             <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-mono text-slate-400 uppercase block">Calcoli Eseguiti</span>
-                <span className="text-sm font-bold text-white font-mono">{summary.calcoliEseguiti} / 17</span>
+                <span className="text-sm font-bold text-white font-mono">{summary.calcoliEseguiti} / 21</span>
               </div>
               <Cpu className="w-4 h-4 text-cyan-400" />
             </div>

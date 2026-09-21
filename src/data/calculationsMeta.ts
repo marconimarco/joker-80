@@ -94,21 +94,23 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'FACOLTATIVO',
     entanglementSymbol: '🔓',
     hardwareTarget: 'QPU Fotonica / Ioni Intrappolati / Simulatori GPU',
-    description: 'Qualità lotti. Sfrutta l\'evoluzione quantistica nello spazio degli stati per eseguire il campionamento delle somiglianze fisiche tra i lotti e intercettare anomalie strutturali.',
-    inputDescription: 'umidita_rilevata, spessore_micro',
+    description: 'Qualità lotti e interfalde. Sfrutta l\'evoluzione quantistica nello spazio degli stati per campionare le somiglianze fisiche tra lotti, spessore interfalda e deformazione pallet, intercettando anomalie strutturali.',
+    inputDescription: 'umidita_rilevata, spessore_micro, forza_deformazione_n, spessore_interfalda_mm',
     defaultInputs: {
       umidita_rilevata: 13.2,
-      spessore_micro: 45.2
+      spessore_micro: 45.2,
+      forza_deformazione_n: 3400,
+      spessore_interfalda_mm: 2.8
     },
     isCrossCategory: false,
     crossCategoryDetails: {
       crossedWith: 'Nessuna (Elaborazione Locale)',
       modules: 'MIP Qualità isolato',
-      parametersOrData: 'Solo parametri fisici interni del lotto (umidità, micro-spessore)'
+      parametersOrData: 'Solo parametri fisici interni del lotto (umidità, micro-spessore, interfalda)'
     },
     parameterRules: {
       modalita: 'COPPIA',
-      regola: 'Parametri accoppiati fisici: umidita_rilevata e spessore_micro del film plastico vanno analizzati congiuntamente.',
+      regola: 'Parametri accoppiati fisici: umidita_rilevata e spessore_micro del film/interfalda vanno analizzati congiuntamente con la deformazione.',
       parametriAccoppiati: ['umidita_rilevata', 'spessore_micro'],
       soglieAnomale: 'IRREGOLARE se umidita_rilevata > 18.0% o spessore_micro < 30.0 µm (rischio rottura pellicola su fasciatore)'
     }
@@ -122,22 +124,24 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'FACOLTATIVO',
     entanglementSymbol: '🔓',
     hardwareTarget: 'Moduli Hardware di Sicurezza (HSM) Post-Quantum / QPU',
-    description: 'Tracciabilità lotti blindata. Generazione di entropia crittografica quantistica pura usata come salt per hashing post-quantum conforme a standard NIST.',
-    inputDescription: 'id_lotto_materiale, codice_fornitore',
+    description: 'Tracciabilità lotti blindata. Generazione di entropia crittografica quantistica pura usata come salt per hashing post-quantum conforme a standard NIST FIPS 203/204 su seriali GS1 ed SSCC.',
+    inputDescription: 'id_lotto_materiale, codice_fornitore, sscc_code, qualita_stampa_iso',
     defaultInputs: {
       id_lotto_materiale: 'BOBINA_BEMA_2026_A',
-      codice_fornitore: 'PLAST_REGGIO_01'
+      codice_fornitore: 'PLAST_REGGIO_01',
+      sscc_code: '080332190000458129',
+      qualita_stampa_iso: 'CLASSE_A'
     },
     isCrossCategory: false,
     crossCategoryDetails: {
       crossedWith: 'Nessuna (Elaborazione Locale)',
       modules: 'MIP Sicurezza isolato',
-      parametersOrData: 'Solo ID lotto e codice fornitore per generazione salt NIST'
+      parametersOrData: 'Solo ID lotto, codice fornitore e validatore ottico SSCC per generazione salt NIST'
     },
     parameterRules: {
       modalita: 'SOLO',
       regola: 'Parametri discreti di tracciabilità: validazione crittografica locale univoca senza vincolo di accoppiamento dinamico.',
-      soglieAnomale: 'IRREGOLARE se stringa codice_fornitore vuota o ID lotto non conforme al formato UTF-8'
+      soglieAnomale: 'IRREGOLARE se stringa codice_fornitore vuota o ID lotto non conforme al formato UTF-8 o qualità stampa < CLASSE_B'
     }
   },
   {
@@ -149,24 +153,26 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'OBBLIGATORIO',
     entanglementSymbol: '🔒',
     hardwareTarget: 'Quantum Annealer / D-Wave / Simulatori GPU',
-    description: 'Slot 3D. Crea uno stato di entanglement per allineare il Gemello Digitale del magazzino: lega le celle libere alla posizione dinamica degli LGV.',
-    inputDescription: 'id_pallet, classe_rotazione, celle_libere_3d',
+    description: 'Slot 3D e Sagoma SmartStore. Crea uno stato di entanglement per allineare il Gemello Digitale del magazzino: lega le celle libere alla cinematica degli LGV, peso bilancia e sensori di sagoma millimetrici.',
+    inputDescription: 'id_pallet, classe_rotazione, celle_libere_3d, peso_bilancia_kg, sagoma_fuori_asse',
     defaultInputs: {
       id_pallet: 'PALLET_BEMA_099',
       classe_rotazione: 'HIGH',
-      celle_libere_3d: 124
+      celle_libere_3d: 124,
+      peso_bilancia_kg: 875.4,
+      sagoma_fuori_asse: false
     },
     isCrossCategory: true,
     crossCategoryDetails: {
       crossedWith: '4. IoT & Controllo Macchine',
-      modules: 'WMS ⟷ SDM (Flotta LGV)',
-      parametersOrData: 'Celle 3D libere SmartStore (WMS) ⟷ Posizione cinematica carrelli LGV (SDM)'
+      modules: 'WMS ⟷ SDM (Flotta LGV) ⟷ SmartStore Inbound',
+      parametersOrData: 'Celle 3D libere SmartStore (WMS) ⟷ Posizione cinematica carrelli LGV (SDM) e peso/sagoma bilancia'
     },
     parameterRules: {
       modalita: 'COPPIA',
-      regola: 'Parametri accoppiati: classe_rotazione (frequenza prelievo) accoppiata a celle_libere_3d nelle campate basse.',
+      regola: 'Parametri accoppiati: classe_rotazione (frequenza prelievo) accoppiata a celle_libere_3d nelle campate basse e tolleranza sagoma.',
       parametriAccoppiati: ['classe_rotazione', 'celle_libere_3d'],
-      soglieAnomale: 'IRREGOLARE se classe_rotazione = HIGH e celle_libere_3d < 15 nelle baie di terra (sovraccarico trasloelevatore)'
+      soglieAnomale: 'IRREGOLARE se classe_rotazione = HIGH e celle_libere_3d < 15 o sagoma_fuori_asse = true (rischio blocco shuttle)'
     }
   },
   {
@@ -178,23 +184,24 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'FACOLTATIVO',
     entanglementSymbol: '🔓',
     hardwareTarget: 'QPU Gate-Based / Simulatori GPU',
-    description: 'Integrità scaffali. Mappa profili di carico e vettori di sollecitazione dei sensori fisici esplorando attrattori energetici per riconoscere pattern di usura/deformazione.',
-    inputDescription: 'vettore_pressione_bar, micro_inclinazione',
+    description: 'Integrità scaffali e shuttle. Mappa profili di carico, assorbimenti shuttle e vettori di sollecitazione dei sensori fisici esplorando attrattori energetici per riconoscere pattern di deformazione.',
+    inputDescription: 'vettore_pressione_bar, micro_inclinazione, carico_pattini_integri',
     defaultInputs: {
       vettore_pressione_bar: [12.4, 14.1, 11.9, 15.0],
-      micro_inclinazione: 0.4
+      micro_inclinazione: 0.4,
+      carico_pattini_integri: true
     },
     isCrossCategory: false,
     crossCategoryDetails: {
       crossedWith: 'Nessuna (Elaborazione Locale)',
       modules: 'WMS Struttura isolato',
-      parametersOrData: 'Solo sensori fisici montante scaffalatura (pressione bar, inclinazione)'
+      parametersOrData: 'Solo sensori fisici montante scaffalatura (pressione bar, inclinazione, integrità fondo pallet)'
     },
     parameterRules: {
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati strutturali: il vettore pressione interagisce con la micro_inclinazione angolare.',
       parametriAccoppiati: ['vettore_pressione_bar', 'micro_inclinazione'],
-      soglieAnomale: 'IRREGOLARE se max(vettore_pressione_bar) > 18.0 bar o micro_inclinazione > 1.2 gradi (rischio collasso campata)'
+      soglieAnomale: 'IRREGOLARE se max(vettore_pressione_bar) > 18.0 bar o micro_inclinazione > 1.2 gradi o carico_pattini_integri = false (rischio collasso campata)'
     }
   },
   {
@@ -372,23 +379,25 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'FACOLTATIVO',
     entanglementSymbol: '🔓',
     hardwareTarget: 'Edge AI Quantistico / Simulatori GPU',
-    description: 'Micro-vibrazioni Bema. Mappa segnali accelerometrici nello spazio delle frequenze ed esegue rotazioni di fase controllate per individuare picchi armonici anomali.',
-    inputDescription: 'vettore_accelerometro, giri_minuto',
+    description: 'Micro-vibrazioni e dinamica Bema Silkworm. Mappa segnali accelerometrici triassiali e rapporto prestiro reale nello spazio delle frequenze per individuare picchi armonici anomali.',
+    inputDescription: 'vettore_accelerometro, giri_minuto, vibrazioni_assi_g, rapporto_prestiro_pct',
     defaultInputs: {
       vettore_accelerometro: [0.12, 0.85, 0.94, 0.02],
-      giri_minuto: 48.0
+      giri_minuto: 48.0,
+      vibrazioni_assi_g: { x: 0.04, y: 0.05, z: 0.08 },
+      rapporto_prestiro_pct: 285.0
     },
     isCrossCategory: false,
     crossCategoryDetails: {
       crossedWith: 'Nessuna (Elaborazione Locale)',
       modules: 'ECS Macchina Bema isolato',
-      parametersOrData: 'Solo frequenze e RPM accelerometro del braccio rotante'
+      parametersOrData: 'Solo frequenze accelerometro, vibrazioni triassiali e RPM del braccio rotante'
     },
     parameterRules: {
       modalita: 'COPPIA',
-      regola: 'Parametri accoppiati rotazionali: la serie temporale vettore_accelerometro dipende dai giri_minuto (RPM).',
+      regola: 'Parametri accoppiati rotazionali: la serie temporale vettore_accelerometro dipende dai giri_minuto (RPM) e vibrazioni triassiali.',
       parametriAccoppiati: ['vettore_accelerometro', 'giri_minuto'],
-      soglieAnomale: 'IRREGOLARE se giri_minuto > 55 RPM con ampiezza armonica accelerometro > 1.2 g (usura cuscinetto braccio)'
+      soglieAnomale: 'IRREGOLARE se giri_minuto > 55 RPM con ampiezza armonica accelerometro > 1.2 g o vibrazioni Z > 0.15 g'
     }
   },
   {
@@ -400,24 +409,26 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'FACOLTATIVO',
     entanglementSymbol: '🔓',
     hardwareTarget: 'Simulatori GPU / QPU Gate-Based',
-    description: 'Tensionamento film Bema. Mappa tensione, forza e velocità nello spazio di Hilbert (Quantum Feature Map) per predire il rischio strappo e regolare i rulli.',
-    inputDescription: 'tensione_newton, velocita_svolgimento, spessore_film_micron',
+    description: 'Tensionamento e saldatura film Bema. Mappa tensione film, forza di serraggio carico N e temperatura barra saldante nello spazio di Hilbert (Quantum Feature Map) per predire il rischio rottura.',
+    inputDescription: 'tensione_newton, velocita_svolgimento, spessore_film_micron, forza_serraggio_carico_n, temp_barra_saldante_c',
     defaultInputs: {
       tensione_newton: 148.5,
       velocita_svolgimento: 12.4,
-      spessore_film_micron: 23
+      spessore_film_micron: 23,
+      forza_serraggio_carico_n: 152.0,
+      temp_barra_saldante_c: 138.5
     },
     isCrossCategory: false,
     crossCategoryDetails: {
       crossedWith: 'Nessuna (Elaborazione Locale)',
       modules: 'ECS Fasciatore isolato',
-      parametersOrData: 'Solo parametri sensore rulli (tensione Newton, velocità m/s, micron)'
+      parametersOrData: 'Solo parametri sensore rulli (tensione Newton, velocità m/s, temperatura saldatura, micron)'
     },
     parameterRules: {
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati di processo: tensione_newton e velocita_svolgimento sono inversamente legati allo spessore_film_micron.',
       parametriAccoppiati: ['tensione_newton', 'velocita_svolgimento'],
-      soglieAnomale: 'IRREGOLARE se tensione_newton > 180 N con spessore < 20 µm o velocita_svolgimento > 18 m/s (rottura film imminente)'
+      soglieAnomale: 'IRREGOLARE se tensione_newton > 180 N con spessore < 20 µm o temp_barra_saldante_c > 155 °C'
     }
   },
   {
@@ -429,27 +440,29 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'OBBLIGATORIO',
     entanglementSymbol: '🔒',
     hardwareTarget: 'Quantum Annealer / D-Wave / Alta Connettività',
-    description: 'Rotte flotta >100 LGV. Lega tramite CNOT le coordinate spaziali dei veicoli allo stato occupazionale dei nodi stradali, risolvendo ingorghi in tempo reale.',
-    inputDescription: 'coordinate_agv_attivi, mappa_ingorghi_nodi',
+    description: 'Rotte flotta >100 LGV e anticollisione laser. Lega tramite CNOT le coordinate 3D dei veicoli, raggio di curvatura e distanza ostacolo laser allo stato occupazionale dei nodi stradali.',
+    inputDescription: 'coordinate_agv_attivi, mappa_ingorghi_nodi, distanza_laser_ostacolo_mm, raggio_curvatura_mm',
     defaultInputs: {
       coordinate_agv_attivi: {
-        AGV_01: 'X:12/Y:04',
-        AGV_02: 'X:15/Y:08',
-        AGV_03: 'X:02/Y:22'
+        AGV_01: 'X:14250/Y:8600/Z:210',
+        AGV_02: 'X:18300/Y:4200/Z:210',
+        AGV_03: 'X:02400/Y:22100/Z:210'
       },
-      mappa_ingorghi_nodi: ['NODO_03_BLOCCATO']
+      mappa_ingorghi_nodi: ['NODO_03_BLOCCATO'],
+      distanza_laser_ostacolo_mm: 4200,
+      raggio_curvatura_mm: 2400
     },
     isCrossCategory: true,
     crossCategoryDetails: {
       crossedWith: 'Tutte le Aree di Stabilimento (Cross-Sistema)',
       modules: 'SDM (Flotta LGV) ⟷ Mappa Globale Impianto',
-      parametersOrData: 'Coordinate spaziali flotta LGV ⟷ Topologia nodi/ingorghi di tutte le aree di fabbrica'
+      parametersOrData: 'Coordinate spaziali flotta LGV ⟷ Topologia nodi/ingorghi e laser di sicurezza'
     },
     parameterRules: {
       modalita: 'MULTI_ENTANGLED',
-      regola: 'Parametri multi-entangled: coordinate di tutti gli LGV accoppiate in grafo continuo con i nodi bloccati.',
+      regola: 'Parametri multi-entangled: coordinate di tutti gli LGV accoppiate in grafo continuo con i nodi bloccati e campi laser protetti.',
       parametriAccoppiati: ['coordinate_agv_attivi', 'mappa_ingorghi_nodi'],
-      soglieAnomale: 'IRREGOLARE se oltre 3 nodi centrali bloccati contemporaneamente con > 25 veicoli in circolazione (deadlock di fabbrica)'
+      soglieAnomale: 'IRREGOLARE se distanza_laser_ostacolo_mm < 1500 mm o oltre 3 nodi centrali bloccati contemporaneamente'
     }
   },
   {
@@ -461,26 +474,146 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'OBBLIGATORIO',
     entanglementSymbol: '🔒',
     hardwareTarget: 'Quantum Annealer / D-Wave / QPU Superconduttori',
-    description: 'Accoppiamento task-veicolo. Intreccia con CNOT le code di urgenza delle missioni WMS con lo stato termico e di carica delle batterie ECS per massimizzare la vita utile.',
+    description: 'Accoppiamento task-veicolo & BMS. Intreccia con CNOT le code di urgenza WMS con stato termico, tensione bus, energia rigenerata in frenata e salute SoH delle batterie LGV.',
     inputDescription: 'elenco_missioni_urgenti, telemetria_batterie_agv',
     defaultInputs: {
       elenco_missioni_urgenti: ['MISSIONE_942', 'MISSIONE_943'],
       telemetria_batterie_agv: {
-        AGV_04: { SoC: 78, Temp: 42.5 },
-        AGV_11: { SoC: 92, Temp: 31.0 }
+        AGV_04: { SoC: 78, Temp: 42.5, SoH: 94.8, Volt: 48.2, Wh_rigenerati: 320 },
+        AGV_11: { SoC: 92, Temp: 31.0, SoH: 98.1, Volt: 49.0, Wh_rigenerati: 410 }
       }
     },
     isCrossCategory: true,
     crossCategoryDetails: {
       crossedWith: '2. Magazzino & Stoccaggio',
       modules: 'SDM (Veicoli) ⟷ WMS (Missioni) ⟷ ECS (Batterie)',
-      parametersOrData: 'Code urgenza missioni (WMS) ⟷ Telemetria termica e SoC celle batterie veicoli (ECS)'
+      parametersOrData: 'Code urgenza missioni (WMS) ⟷ Telemetria termica, SoC, SoH e bus volt delle navette (ECS)'
     },
     parameterRules: {
       modalita: 'MULTI_ENTANGLED',
-      regola: 'Parametri multi-accoppiati: urgenza missione WMS accoppiata allo stato termico (Temp °C) e carica (SoC %) batterie LGV.',
+      regola: 'Parametri multi-accoppiati: urgenza missione WMS accoppiata allo stato termico (Temp °C), salute (SoH %) e carica (SoC %) batterie LGV.',
       parametriAccoppiati: ['elenco_missioni_urgenti', 'telemetria_batterie_agv'],
-      soglieAnomale: 'IRREGOLARE se temperatura batteria LGV > 50 °C o SoC < 20% assegnato a missione lunga distanza (degrado cella litio)'
+      soglieAnomale: 'IRREGOLARE se temperatura batteria LGV > 50 °C o SoC < 20% o SoH < 80% assegnato a missione intensiva'
+    }
+  },
+  {
+    id: 18,
+    name: 'Variational Quantum Eigensolver (VQE) - Robot Joint Kinematics',
+    category: '4. IoT & Controllo Macchine',
+    technicalModule: 'SDM',
+    subFunction: 'Palletizing Robot Dynamics & Vacuum Gripper',
+    entanglement: 'OBBLIGATORIO',
+    entanglementSymbol: '🔒',
+    hardwareTarget: 'QPU Gate-Based / Simulatori GPU / CUDA-Q',
+    description: 'Dinamica 6 assi isola robotizzata. Minimizza l\'hamiltoniana energetica di coppia dei giunti (J1-J6) e correla la pressione di presa vuoto (-0.84 bar) al peso dello strato, prevenendo caduta colli e surriscaldamento riduttori.',
+    inputDescription: 'corrente_joint_a, coppia_motori_nm, pressione_vuoto_bar, tempo_ciclo_strato_ms, forza_pinze_n',
+    defaultInputs: {
+      corrente_joint_a: [12.4, 18.2, 14.1, 8.5, 6.2, 4.8],
+      coppia_motori_nm: [245, 380, 290, 115, 82, 45],
+      pressione_vuoto_bar: -0.84,
+      tempo_ciclo_strato_ms: 10850,
+      forza_pinze_n: 480
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: '1. Inbound & Materie Prime',
+      modules: 'SDM (Robot Pallettizzazione) ⟷ MIP (Interfalde & Scatole)',
+      parametersOrData: 'Coppie motori e vuoto pinze (SDM) ⟷ Spessore interfalda e carico strato (MIP)'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Coppia motori joint accoppiata a pressione vuoto pneumatico per garantire presa salda e minimo riscaldamento riduttori.',
+      parametriAccoppiati: ['coppia_motori_nm', 'pressione_vuoto_bar'],
+      soglieAnomale: 'IRREGOLARE se max(coppia_motori_nm) > 400 Nm o pressione_vuoto_bar > -0.65 bar (rischio distacco strato pallet)'
+    }
+  },
+  {
+    id: 19,
+    name: 'Quantum Knapsack & Microgrid Peak Shaving',
+    category: '4. IoT & Controllo Macchine',
+    technicalModule: 'ECS',
+    subFunction: 'Fast-Charge & Supercap Power Balancer',
+    entanglement: 'OBBLIGATORIO',
+    entanglementSymbol: '🔒',
+    hardwareTarget: 'Quantum Annealer / D-Wave / Simulatori GPU',
+    description: 'Bilanciamento carichi elettrici e ricariche veloci. Risolve il knapsack quantistico per allocare la potenza delle stazioni inductive fast-charge (45 kW cad.) e supercondensatori SmartStore, tagliando i picchi di prelievo e scongiurando il surriscaldamento delle piastre.',
+    inputDescription: 'potenza_erogata_totale_kw, livello_supercondensatori_pct, temp_piastre_c, stazioni_attive',
+    defaultInputs: {
+      potenza_erogata_totale_kw: 87.8,
+      livello_supercondensatori_pct: 94.0,
+      temp_piastre_c: 38.0,
+      stazioni_attive: 2
+    },
+    isCrossCategory: true,
+    crossCategoryDetails: {
+      crossedWith: '2. Magazzino & Stoccaggio',
+      modules: 'ECS (Ricarica Navette) ⟷ WMS (Shuttle SmartStore)',
+      parametersOrData: 'Stazioni fast charge LGV ⟷ Livello supercondensatori shuttle SmartStore'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Potenza erogata kW accoppiata a temperatura piastre a terra per prevenire degrado termico.',
+      parametriAccoppiati: ['potenza_erogata_totale_kw', 'temp_piastre_c'],
+      soglieAnomale: 'IRREGOLARE se potenza_erogata_totale_kw > 120 kW o temp_piastre_c > 45 °C (surriscaldamento induttivo)'
+    }
+  },
+  {
+    id: 20,
+    name: 'Quantum Support Vector Classifier (QSVM Woodpecker)',
+    category: '1. Inbound & Materie Prime',
+    technicalModule: 'MIP',
+    subFunction: 'Woodpecker Pallet Integrity Check',
+    entanglement: 'FACOLTATIVO',
+    entanglementSymbol: '🔓',
+    hardwareTarget: 'QPU Gate-Based / Simulatori GPU',
+    description: 'Ispezione strutturale non-distruttiva pallet vuoti. Proietta le misurazioni meccaniche di flessione pattini (N), umidità legno (%) e maschera ottica difetti in uno spazio di Hilbert quantistico per classificare l\'idoneità all\'ingresso nello SmartStore.',
+    inputDescription: 'forza_deformazione_pattini_n, umidita_legno_pct, throughput_pallet_ora, maschera_difetti',
+    defaultInputs: {
+      forza_deformazione_pattini_n: 3400,
+      umidita_legno_pct: 13.2,
+      throughput_pallet_ora: 280,
+      maschera_difetti: { asseSpaccata: false, chiodoSporgente: false, blocchettoMancante: false, fuoriTolleranzaGeometrica: false }
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'MIP Woodpecker isolato',
+      parametersOrData: 'Forza deformazione pattini, igrometria e maschera difetti pallet'
+    },
+    parameterRules: {
+      modalita: 'COPPIA',
+      regola: 'Forza deformazione pattini N accoppiata a umidità legno % per stimare la portanza elastica.',
+      parametriAccoppiati: ['forza_deformazione_pattini_n', 'umidita_legno_pct'],
+      soglieAnomale: 'IRREGOLARE se forza_deformazione_pattini_n < 2500 N o umidita_legno_pct > 18% o asseSpaccata = true'
+    }
+  },
+  {
+    id: 21,
+    name: 'Post-Quantum Lattice Zero-Knowledge Verifier (ML-DSA)',
+    category: '3. Outbound & Spedizioni',
+    technicalModule: 'TMS',
+    subFunction: 'Raptor GS1/SSCC Traceability & Anti-Counterfeiting',
+    entanglement: 'FACOLTATIVO',
+    entanglementSymbol: '🔓',
+    hardwareTarget: 'Moduli Hardware di Sicurezza (HSM) Post-Quantum / QPU',
+    description: 'Validazione crittografica quantistica zero-knowledge serializzazione GS1. Esegue verifiche basate su reticoli euclidei (standard Crystals-Dilithium / ML-DSA NIST FIPS 204) sul codice SSCC stampato e applicato dal robot Raptor, garantendo anticontraffazione assoluta.',
+    inputDescription: 'sscc_code, etichetta_gs1, grado_qualita_stampa_iso, temp_testina_termica_c',
+    defaultInputs: {
+      sscc_code: '080332190000458129',
+      etichetta_gs1: '(01)08033219001234(10)LOT-2026-X8(15)261231',
+      grado_qualita_stampa_iso: 'CLASSE_A',
+      temp_testina_termica_c: 54.2
+    },
+    isCrossCategory: false,
+    crossCategoryDetails: {
+      crossedWith: 'Nessuna (Elaborazione Locale)',
+      modules: 'TMS Raptor isolato',
+      parametersOrData: 'Verifica ZKP basata su reticoli euclidei per seriali GS1-128 e SSCC'
+    },
+    parameterRules: {
+      modalita: 'SOLO',
+      regola: 'Verifica crittografica post-quantum conforme standard NIST FIPS 204.',
+      soglieAnomale: 'IRREGOLARE se grado_qualita_stampa_iso diverso da CLASSE_A o temp_testina_termica_c > 65 °C'
     }
   }
 ];

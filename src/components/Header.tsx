@@ -62,7 +62,7 @@ export const Header: React.FC<Props> = ({
               </h1>
               <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                17 CUDA-Q ONLINE
+                21 CUDA-Q ONLINE
               </span>
             </div>
             <p className="text-[10px] text-slate-400 font-mono hidden md:block">
@@ -188,10 +188,10 @@ export const Header: React.FC<Props> = ({
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
-            title="Catalogo Fabbrica dei 17 Algoritmi CUDA-Q"
+            title="Catalogo Fabbrica dei 21 Algoritmi CUDA-Q"
           >
             <LayoutGrid className="w-3 h-3 text-cyan-400" />
-            <span>Catalogo (17 Calcoli)</span>
+            <span>Catalogo (21 Calcoli)</span>
           </button>
 
           {/* Notifiche tab directly next to Catalogo */}
@@ -202,7 +202,7 @@ export const Header: React.FC<Props> = ({
                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
-            title="Centro Notifiche & Problematiche Fuori Linea (Auto-Scan 17 Calcoli)"
+            title="Centro Notifiche & Problematiche Fuori Linea (Auto-Scan 21 Calcoli)"
           >
             <Bell className={`w-3 h-3 ${isScanning ? 'animate-spin text-amber-400' : anomaliesCount > 0 ? 'text-amber-400 animate-bounce' : 'text-slate-400'}`} />
             <span>Notifiche</span>

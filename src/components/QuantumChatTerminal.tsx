@@ -64,6 +64,22 @@ const PRESET_SCENARIOS = [
   {
     label: "[17] Batterie AGV",
     query: "Assegna missioni urgenti 942 e 943: AGV_04 batteria 78% temp 42.5°C, AGV_11 92% 31°C"
+  },
+  {
+    label: "[18] Robot VQE",
+    query: "Robot pallettizzatore isola 1: pressione vuoto a -0.62 bar e sovraccarico joint J2 a 410 Nm"
+  },
+  {
+    label: "[19] Microgrid",
+    query: "Picco potenza ricarica flotta a 125 kW con piastra a terra a 46.5°C"
+  },
+  {
+    label: "[20] Woodpecker",
+    query: "Ispezione pallet Woodpecker: forza pattini a 2300 N, umidità 19.2% e chiodo sporgente"
+  },
+  {
+    label: "[21] Raptor ZKP",
+    query: "Verifica anticontraffazione SSCC 080332190000458129 qualità ottica CLASSE_A"
   }
 ];
 
@@ -83,11 +99,11 @@ export const QuantumChatTerminal: React.FC<Props> = ({
       sender: 'quantum-core',
       timestamp: new Date().toLocaleTimeString(),
       text: `Benvenuto nella console front-end del **Nucleo Computazionale Quantistico SM.I.LE80**.
-Tutti i **17 Calcoli Quantistici CUDA-Q** sono pre-caricati e attivi nel core:
-- Categoria 1 (Inbound): [1] QBM 🔒, [2] Monte Carlo 🔒, [3] Integer Prog. 🔓, [4] Walk Clustering 🔓, [5] Post-Quantum Hash 🔓
+Tutti i **21 Calcoli Quantistici CUDA-Q** sono pre-caricati e attivi nel core:
+- Categoria 1 (Inbound): [1] QBM 🔒, [2] Monte Carlo 🔒, [3] Integer Prog. 🔓, [4] Walk Clustering 🔓, [5] Post-Quantum Hash 🔓, [20] Woodpecker QSVM 🔓
 - Categoria 2 (Magazzino): [6] Bin Packing Twin 🔒, [7] Hopfield 🔓, [8] TSP Walk 🔓, [9] QGNN Batching 🔒
-- Categoria 3 (Outbound): [10] VQE Knapsack 🔓, [11] Crypto e-CMR 🔓, [12] Game Theory 🔒, [13] K-Means Yard 🔒
-- Categoria 4 (IoT & Macchine): [14] QFT Bema 🔓, [15] QSVM Film 🔓, [16] QAOA Rotte 🔒, [17] Bipartite Matching 🔒
+- Categoria 3 (Outbound): [10] VQE Knapsack 🔓, [11] Crypto e-CMR 🔓, [12] Game Theory 🔒, [13] K-Means Yard 🔒, [21] Raptor ZKP 🔓
+- Categoria 4 (IoT & Controllo Macchine): [14] QFT Bema 🔓, [15] QSVM Film 🔓, [16] QAOA Rotte 🔒, [17] Bipartite Matching 🔒, [18] Robot VQE 🔒, [19] Microgrid Knapsack 🔒
 
 Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema identificherà la sotto-funzione, simulerà il circuito quantistico con Entanglement Obbligatorio (🔒) o Facoltativo (🔓) e restituirà il payload JSON con l'azione immediata.`
     }
@@ -141,7 +157,10 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
         livello_allarme: res.livello_allarme,
         execution_time_ms: res.tipoRisposta === 'CALCOLO_ESEGUITO' ? executionTime : undefined,
         suggerimenti: res.suggerimenti,
-        tipoRisposta: res.tipoRisposta
+        tipoRisposta: res.tipoRisposta,
+        opzioniScelta: res.opzioniScelta,
+        parametriMemorizzati: res.parametriMemorizzati,
+        parametriTrasferiti: res.parametriTrasferiti
       };
 
       setMessages(prev => [...prev, botMsg]);
@@ -180,8 +199,8 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
               Quantum Kernel Router & Solver v2026.2
             </span>
           </div>
-          <span className="hidden sm:inline-block px-1.5 py-0.2 text-[10px] font-mono rounded bg-slate-800 text-slate-400 border border-slate-700">
-            CUDA-Q 17 Kernels
+          <span className="hidden sm:inline-block px-1.5 py-0.2 text-[10px] font-mono rounded bg-slate-800 text-cyan-400 border border-slate-700 font-semibold">
+            CUDA-Q 21 Kernels
           </span>
         </div>
 
@@ -302,10 +321,68 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
 
                 {/* Message Content */}
                 <div className="space-y-4 text-sm leading-relaxed">
+                  {/* Parameter Transfer Notification */}
+                  {msg.parametriTrasferiti && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-mono">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                      <span>Parametri concordati in chat trasferiti con successo al calcolo quantistico!</span>
+                    </div>
+                  )}
+
                   {/* User query or Bot explanation */}
                   <div className="whitespace-pre-wrap text-slate-200">
                     {msg.text}
                   </div>
+
+                  {/* Interactive Decision Assistance Cards */}
+                  {msg.opzioniScelta && msg.opzioniScelta.length > 0 && (
+                    <div className="pt-3 border-t border-slate-800/80 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <span className="text-xs font-mono font-bold text-amber-400 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          Calcoli Consigliati per Sbloccare l'Operazione:
+                        </span>
+                        {msg.parametriMemorizzati && Object.keys(msg.parametriMemorizzati).length > 0 && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            {Object.keys(msg.parametriMemorizzati).length} dati salvati in memoria
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {msg.opzioniScelta.map((opt, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-cyan-500/50 hover:bg-slate-900 transition-all flex flex-col justify-between gap-2.5 shadow-sm"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-bold font-mono text-cyan-300">
+                                  {opt.titolo}
+                                </span>
+                                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
+                                  #{opt.calcolo_id}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-300 leading-snug">
+                                {opt.descrizione}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleSend(opt.azionePrompt)}
+                              disabled={isProcessing}
+                              className="w-full px-3 py-1.5 text-xs font-mono font-bold rounded-lg bg-cyan-950/80 hover:bg-cyan-800/90 text-cyan-200 hover:text-white border border-cyan-700/60 hover:border-cyan-400 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <span>Esegui con dati chat</span>
+                              <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Suggestion pills if provided by the quantum router */}
                   {msg.suggerimenti && msg.suggerimenti.length > 0 && (

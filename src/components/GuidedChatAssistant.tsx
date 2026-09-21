@@ -84,6 +84,26 @@ export const GuidedChatAssistant: React.FC<Props> = ({
         batteryMap[agv.id] = { SoC: agv.batteriaSoC, Temp: agv.temperatura };
       });
       newInputs.telemetria_batterie_agv = batteryMap;
+    } else if (currentCalc.id === 18 && topo.isolePallettizzazione?.[0]) {
+      const r = topo.isolePallettizzazione[0];
+      if (r.sensoriPresaAria) newInputs.pressione_vuoto_bar = r.sensoriPresaAria.pressionePneumaticaVuotoBar;
+      if (r.elettromeccanicaRobot) newInputs.coppia_motori_nm = r.elettromeccanicaRobot.coppiaMotoriNm;
+      if (r.sensoriPresaAria) newInputs.forza_pinze_n = r.sensoriPresaAria.forzaSerraggioPinzeN;
+    } else if (currentCalc.id === 19 && topo.infrastrutturaTraffico?.stazioniRicarica) {
+      const sum = topo.infrastrutturaTraffico.stazioniRicarica.reduce((acc: number, s: any) => acc + (s.potenzaErogataKw || 0), 0);
+      newInputs.potenza_erogata_totale_kw = sum;
+      if (topo.infrastrutturaTraffico.stazioniRicarica[0]) newInputs.temp_piastre_c = topo.infrastrutturaTraffico.stazioniRicarica[0].tempPiastraTerraC;
+      if (topo.magazziniSmartStore?.[0]?.sistemiMovimentazioneInterna) newInputs.livello_supercondensatori_pct = topo.magazziniSmartStore[0].sistemiMovimentazioneInterna.livelloSupercondensatoriShuttlePct;
+    } else if (currentCalc.id === 20 && topo.ispezioneWoodpecker?.[0]) {
+      const w = topo.ispezioneWoodpecker[0];
+      newInputs.forza_deformazione_pattini_n = w.metricheIspezione.forzaDeformazionePattiniN;
+      newInputs.umidita_legno_pct = w.metricheIspezione.umiditaLegnoPct;
+      newInputs.throughput_pallet_ora = w.metricheIspezione.throughputPalletOra;
+    } else if (currentCalc.id === 21 && topo.etichettatriciRaptor?.[0]) {
+      const rap = topo.etichettatriciRaptor[0];
+      newInputs.sscc_code = rap.stampaTracciabilita.ssccCode;
+      newInputs.grado_qualita_stampa_iso = rap.controlloQualitaVisione.gradoQualitaStampaIso;
+      newInputs.temp_testina_termica_c = rap.hardwareConsumabili.tempTestinaTermicaC;
     }
 
     setDraftInputs(newInputs);
@@ -106,7 +126,7 @@ export const GuidedChatAssistant: React.FC<Props> = ({
         className="mb-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono font-bold flex items-center gap-1.5 transition-all w-fit cursor-pointer shadow-sm"
       >
         <Compass className="w-3.5 h-3.5 text-cyan-400" />
-        <span>Apri Assistente Guidato & Parametri (17 Calcoli)</span>
+        <span>Apri Assistente Guidato & Parametri (21 Calcoli)</span>
       </button>
     );
   }
@@ -120,7 +140,7 @@ export const GuidedChatAssistant: React.FC<Props> = ({
           </div>
           <div>
             <h4 className="text-[11px] font-bold font-mono text-white flex items-center gap-1.5">
-              Assistente Virtuale: Guida ai 17 Calcoli
+              Assistente Virtuale: Guida ai 21 Calcoli
               <span className="px-1.5 py-0.2 rounded text-[9px] bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                 Ruolo: {userRole}
               </span>

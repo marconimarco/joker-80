@@ -647,6 +647,145 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
                     />
                   </div>
                 )}
+
+                {/* Calcolo 18: Robot Pallettizzatore */}
+                {calc.id === 18 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Vuoto Ventose (bar)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        max="0"
+                        value={inputs.pressione_vuoto_bar}
+                        onChange={e => handleInputChange(18, 'pressione_vuoto_bar', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Coppia Motori Joint (Nm)</label>
+                      <input
+                        type="text"
+                        value={JSON.stringify(inputs.coppia_motori_nm)}
+                        onChange={e => {
+                          try {
+                            handleInputChange(18, 'coppia_motori_nm', JSON.parse(e.target.value));
+                          } catch {}
+                        }}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Forza Pinze (N)</label>
+                      <input
+                        type="number"
+                        value={inputs.forza_pinze_n}
+                        onChange={e => handleInputChange(18, 'forza_pinze_n', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Calcolo 19: Microgrid & Fast-Charge */}
+                {calc.id === 19 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Potenza Totale (kW)</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={inputs.potenza_erogata_totale_kw}
+                        onChange={e => handleInputChange(19, 'potenza_erogata_totale_kw', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Temp Piastra Terra (°C)</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={inputs.temp_piastre_c}
+                        onChange={e => handleInputChange(19, 'temp_piastre_c', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Supercap (%)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={inputs.livello_supercondensatori_pct}
+                        onChange={e => handleInputChange(19, 'livello_supercondensatori_pct', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Calcolo 20: Woodpecker Integrità Pallet */}
+                {calc.id === 20 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Forza Pattini (N)</label>
+                      <input
+                        type="number"
+                        step="50"
+                        value={inputs.forza_deformazione_pattini_n}
+                        onChange={e => handleInputChange(20, 'forza_deformazione_pattini_n', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Umidità Legno (%)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={inputs.umidita_legno_pct}
+                        onChange={e => handleInputChange(20, 'umidita_legno_pct', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Throughput (pallet/h)</label>
+                      <input
+                        type="number"
+                        value={inputs.throughput_pallet_ora}
+                        onChange={e => handleInputChange(20, 'throughput_pallet_ora', Number(e.target.value))}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Calcolo 21: Raptor Tracciabilità GS1 SSCC */}
+                {calc.id === 21 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Codice SSCC (18 cifre)</label>
+                      <input
+                        type="text"
+                        value={inputs.sscc_code}
+                        onChange={e => handleInputChange(21, 'sscc_code', e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Qualità Stampa ISO</label>
+                      <select
+                        value={inputs.grado_qualita_stampa_iso}
+                        onChange={e => handleInputChange(21, 'grado_qualita_stampa_iso', e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      >
+                        <option value="CLASSE_A">CLASSE_A (Ottimale)</option>
+                        <option value="CLASSE_B">CLASSE_B (Accettabile)</option>
+                        <option value="CLASSE_C">CLASSE_C (Degradato)</option>
+                        <option value="CLASSE_F">CLASSE_F (Scarto)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action buttons */}

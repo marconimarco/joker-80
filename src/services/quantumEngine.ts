@@ -382,8 +382,15 @@ export const QuantumEngine = {
   },
 
   // [14] Quantum Fourier Transform (QFT) - Bema Diagnostics (🔓)
-  calcolo_14_qft(vettore_accelerometro: number[], giri_minuto: number) {
-    const isAnomalous = giri_minuto > 45.0 || (vettore_accelerometro && Math.max(...vettore_accelerometro) > 0.9);
+  calcolo_14_qft(
+    vettore_accelerometro: number[],
+    giri_minuto: number,
+    vibrazioni_assi_g?: { x: number; y: number; z: number },
+    rapporto_prestiro_pct?: number
+  ) {
+    const maxAccel = vettore_accelerometro && vettore_accelerometro.length ? Math.max(...vettore_accelerometro) : 0;
+    const maxVibZ = vibrazioni_assi_g?.z ?? 0;
+    const isAnomalous = giri_minuto > 55.0 || maxAccel > 1.1 || maxVibZ > 0.12;
     const { most_probable } = sampleQuantumCircuit(4, false, isAnomalous ? 0.75 : 0.25);
     const frequenza_dominante = isAnomalous ? '1001' : most_probable;
 
@@ -391,9 +398,9 @@ export const QuantumEngine = {
     let azione_manutenzione = "NESSUNA AZIONE RICHIESTA - MONITORAGGIO CONTINUO ATTIVO";
     let codice_allarme = 0;
 
-    if (frequenza_dominante === '1001' || giri_minuto > 45.0) {
-      stato_meccanica = "ANOMALIA RILEVATA - PICCO ARMONICO FUORI SPECIFICA MECCANICA";
-      azione_manutenzione = "PIANIFICARE CAMBIO CUSCINETTO AL PROSSIMO CAMBIO TURNO - PREALLERTA MODULO SDM";
+    if (frequenza_dominante === '1001' || isAnomalous) {
+      stato_meccanica = "ANOMALIA RILEVATA - PICCO ARMONICO FUORI SPECIFICA MECCANICA SU ASSE Z";
+      azione_manutenzione = "PIANIFICARE CAMBIO CUSCINETTO BRACCIO ROTANTE AL PROSSIMO CAMBIO TURNO - PREALLERTA SDM";
       codice_allarme = 414;
     }
 
@@ -402,24 +409,31 @@ export const QuantumEngine = {
       sotto_funzione: "Bema Wrapping Controller",
       stato_qubit_frequenza: frequenza_dominante,
       diagnostica_spettrale: stato_meccanica,
+      prestiro_reale_registrato: `${rapporto_prestiro_pct ?? 285}%`,
       direttiva_manutenzione_predittiva: azione_manutenzione,
       codice_allarme_ecs: codice_allarme
     };
   },
 
   // [15] Quantum Support Vector Machine (QSVM) - Film Protection (🔓)
-  calcolo_15_qsvm(tensione_newton: number, velocita_svolgimento: number, spessore_film_micron: number) {
-    const isHighTension = tensione_newton > 145.0 || (velocita_svolgimento > 15.0 && spessore_film_micron < 25);
+  calcolo_15_qsvm(
+    tensione_newton: number,
+    velocita_svolgimento: number,
+    spessore_film_micron: number,
+    forza_serraggio_carico_n?: number,
+    temp_barra_saldante_c?: number
+  ) {
+    const isHighTension = tensione_newton > 180.0 || (velocita_svolgimento > 16.0 && spessore_film_micron < 20) || (temp_barra_saldante_c && temp_barra_saldante_c > 155);
     const { most_probable } = sampleQuantumCircuit(4, false, isHighTension ? 0.75 : 0.25);
     const stato_classificazione = isHighTension ? '1101' : most_probable;
 
-    let diagnostica_film = "TENSIONAMENTO OTTIMALE - COEFFICIENTE DI AVVOLGIMENTO SICURO";
+    let diagnostica_film = "TENSIONAMENTO E SALDATURA OTTIMALI - COEFFICIENTE DI AVVOLGIMENTO SICURO";
     let azione_plc = "MANTENERE PARAMETRI DI FORZA CORRENTI";
     let codice_allarme = 0;
 
-    if (stato_classificazione === '1101' || tensione_newton > 145.0) {
-      diagnostica_film = "RISCHIO CRITICO - PROBABILE STRAPPO DEL FILM ESTENSIBILE";
-      azione_plc = "ALLENTARE TENSIONE RULLI DEL 15% E RALLENTARE GIRI TAVOLA ROTANTE BEMA";
+    if (stato_classificazione === '1101' || isHighTension) {
+      diagnostica_film = "RISCHIO CRITICO - PROBABILE STRAPPO DEL FILM O SURRISCALDAMENTO SALDANTE";
+      azione_plc = "ALLENTARE TENSIONE RULLI DEL 15% E RALLENTARE GIRI TAVOLA ROTANTE BEMA SILKWORM";
       codice_allarme = 100;
     }
 
@@ -428,25 +442,33 @@ export const QuantumEngine = {
       sotto_funzione: "Bema Wrapping Controller",
       stato_qubit_qsvm: stato_classificazione,
       analisi_predittiva_film: diagnostica_film,
+      forza_serraggio_applicata: `${forza_serraggio_carico_n ?? 152} N`,
+      temperatura_saldante: `${temp_barra_saldante_c ?? 138.5} °C`,
       azione_correttiva_plc: azione_plc,
       codice_stato_macchina: codice_allarme
     };
   },
 
   // [16] Dynamic Graph QAOA & QRL - Routing & Traffic Engine (🔒)
-  calcolo_16_qrl_routing(coordinate_agv_attivi: Record<string, string>, mappa_ingorghi_nodi: string[]) {
+  calcolo_16_qrl_routing(
+    coordinate_agv_attivi: Record<string, string>,
+    mappa_ingorghi_nodi: string[],
+    distanza_laser_ostacolo_mm?: number,
+    raggio_curvatura_mm?: number
+  ) {
     const hasBottlenecks = mappa_ingorghi_nodi && mappa_ingorghi_nodi.length > 0;
-    const bias = hasBottlenecks ? 0.7 : 0.25;
+    const laserStop = (distanza_laser_ostacolo_mm ?? 4000) < 1500;
+    const bias = (hasBottlenecks || laserStop) ? 0.75 : 0.25;
     const { most_probable } = sampleQuantumCircuit(4, true, bias);
     const indice_congestione = (most_probable.match(/1/g) || []).length;
 
     let stato_traffico = "OTTIMIZZAZIONE GLOBALE RIUSCITA - ZERO CODE PREVISTE";
-    let azione_flotta = "ASSEGNARE ROTTA PREDILLIGERENZA A: CORTECCIA_NORD e INCROCIO_03";
+    let azione_flotta = "ASSEGNARE ROTTA PREDILETTA A: CORTECCIA_NORD E INCROCIO_03";
     let codice_instradamento = 200;
 
-    if (indice_congestione > 1 || hasBottlenecks) {
-      stato_traffico = "CONGESTIONE RILEVATA IN BAIA 2 - RICALCOLO EFFETTUATO";
-      azione_flotta = "DEVIARE FLUSSO AGV_08 E AGV_12 SU PERCORSO ALTERNATIVO DI SICUREZZA CORRIDOIO_7";
+    if (indice_congestione > 1 || hasBottlenecks || laserStop) {
+      stato_traffico = "CONGESTIONE O OSTACOLO LASER RILEVATO - RICALCOLO TOPOLOGICO QAOA";
+      azione_flotta = "DEVIARE FLUSSO AGV SU PERCORSO ALTERNATIVO DI SICUREZZA CORRIDOIO_7";
       codice_instradamento = 303;
     }
 
@@ -455,29 +477,32 @@ export const QuantumEngine = {
       sotto_funzione: "Routing & Traffic Engine",
       stato_qubit_routing: most_probable,
       stato_fluidita_traffico: stato_traffico,
+      distanza_ostacolo_rilevata: `${distanza_laser_ostacolo_mm ?? 4200} mm`,
       direttiva_navigazione_flotta: azione_flotta,
       codice_instradamento_sdm: codice_instradamento
     };
   },
 
   // [17] Quantum Bipartite Matching - Task Allocation Engine (🔒)
-  calcolo_17_matching(elenco_missioni_urgenti: string[], telemetria_batterie_agv: Record<string, { SoC: number; Temp: number }>) {
+  calcolo_17_matching(
+    elenco_missioni_urgenti: string[],
+    telemetria_batterie_agv: Record<string, { SoC: number; Temp: number; SoH?: number; Volt?: number; Wh_rigenerati?: number }>
+  ) {
     let cellHot = false;
+    let lowHealth = false;
     if (telemetria_batterie_agv) {
       for (const val of Object.values(telemetria_batterie_agv)) {
-        if (val && val.Temp && val.Temp > 40) {
-          cellHot = true;
-          break;
-        }
+        if (val && val.Temp && val.Temp > 45) cellHot = true;
+        if (val && val.SoH && val.SoH < 85) lowHealth = true;
       }
     }
 
-    const { most_probable } = sampleQuantumCircuit(4, true, cellHot ? 0.3 : 0.7);
+    const { most_probable } = sampleQuantumCircuit(4, true, (cellHot || lowHealth) ? 0.3 : 0.7);
     const bilanciamento_energetico = (most_probable.match(/1/g) || []).length;
 
-    let stato_flotta = "RILEVANZA SURRISCALDAMENTO CELLE - STRATEGIA DI PREVENZIONE";
+    let stato_flotta = "RILEVANZA SURRISCALDAMENTO CELLE O DEGRADO SoH - STRATEGIA DI PREVENZIONE";
     let accoppiamento_esecutivo: any[] = [
-      { "MISSIONE_942": "AGV_11 (Batteria 92%)" },
+      { "MISSIONE_942": "AGV_11 (Batteria 92%, SoH 98%)" },
       { "MISSIONE_943": "INVIARE AGV_04 A STAZIONE DI RICARICA RAPIDA FLASH BATTERY" }
     ];
     let codice_priorita = 105;
@@ -498,6 +523,155 @@ export const QuantumEngine = {
       bilanciamento_flotta_status: stato_flotta,
       matrice_assegnazione_task: accoppiamento_esecutivo,
       codice_azione_sdm: codice_priorita
+    };
+  },
+
+  // [18] Variational Quantum Eigensolver (VQE) - Robot Joint Kinematics (🔒)
+  calcolo_18_vqe_robot(
+    corrente_joint_a: number[],
+    coppia_motori_nm: number[],
+    pressione_vuoto_bar: number,
+    tempo_ciclo_strato_ms?: number,
+    forza_pinze_n?: number
+  ) {
+    const maxTorque = coppia_motori_nm && coppia_motori_nm.length ? Math.max(...coppia_motori_nm) : 250;
+    const maxCurrent = corrente_joint_a && corrente_joint_a.length ? Math.max(...corrente_joint_a) : 12;
+    const lossOfVacuum = pressione_vuoto_bar > -0.65; // vacuum should be around -0.84 bar
+    const isCritical = maxTorque > 400 || maxCurrent > 20 || lossOfVacuum;
+
+    const { most_probable } = sampleQuantumCircuit(6, true, isCritical ? 0.78 : 0.22);
+    const criticalBits = (most_probable.match(/1/g) || []).length;
+
+    let stabilita_presa = "PRESA SOTTOVUOTO STABILE (-0.84 BAR) - ZERO RISCHIO CADUTA COLLO";
+    let direttiva_robot = "MANTENERE TRAIETTORIA CINEMATICA OTTIMIZZATA VQE - RIDUTTORI IN RANGE TERMICO";
+    let codice_controllo = 200;
+
+    if (criticalBits >= 4 || isCritical) {
+      stabilita_presa = "ALLARME CRITICO PRESA / SOVRASFORZO RIDUTTORI JOINT J2-J3";
+      direttiva_robot = "RIDURRE ACCELERAZIONE ASSE J2 DEL 20% E ATTIVARE POMPA AUSILIARIA DI VUOTO";
+      codice_controllo = 518;
+    }
+
+    return {
+      calcolo_id: 18,
+      sotto_funzione: "Palletizing Robot Dynamics & Vacuum Gripper",
+      stato_qubit_vqe: most_probable,
+      coppia_massima_rilevata: `${maxTorque} Nm`,
+      pressione_vuoto_misurata: `${pressione_vuoto_bar} bar`,
+      tempo_ciclo_strato: `${(tempo_ciclo_strato_ms ?? 10850) / 1000}s`,
+      forza_serraggio_pinze: `${forza_pinze_n ?? 480} N`,
+      stabilita_presa_vuoto: stabilita_presa,
+      direttiva_cinematica_robot: direttiva_robot,
+      codice_controllo_robot: codice_controllo
+    };
+  },
+
+  // [19] Quantum Knapsack & Microgrid Peak Shaving (🔒)
+  calcolo_19_charging_knapsack(
+    potenza_erogata_totale_kw: number,
+    livello_supercondensatori_pct: number,
+    temp_piastre_c: number,
+    stazioni_attive?: number
+  ) {
+    const isOverload = potenza_erogata_totale_kw > 110.0 || temp_piastre_c > 44.0;
+    const { most_probable } = sampleQuantumCircuit(4, true, isOverload ? 0.75 : 0.25);
+    const bits1 = (most_probable.match(/1/g) || []).length;
+
+    let microrete_status = "MICRORETE INDUSTRIALE BILANCIATA - PICCO PRELIEVO SOTTO SOGLIA CONTRATTUALE";
+    let allocazione_power = "EROGAZIONE INDUCTIVE FAST-CHARGE 100% SU TUTTE LE NAVETTE IN CARICA";
+    let codice_rete = 200;
+
+    if (bits1 >= 3 || isOverload) {
+      microrete_status = "ALLERTA PICCO POTENZA / SURRISCALDAMENTO PIASTRA INDUTTIVA A TERRA";
+      allocazione_power = "RIDURRE POTENZA STAZIONE 2 A 25 kW E PRIORITIZZARE RICARICA SUPERCAPACITORI SMARTSTORE";
+      codice_rete = 519;
+    }
+
+    return {
+      calcolo_id: 19,
+      sotto_funzione: "Fast-Charge & Supercap Power Balancer",
+      stato_qubit_knapsack: most_probable,
+      potenza_totale_registrata: `${potenza_erogata_totale_kw} kW`,
+      supercondensatori_shuttle: `${livello_supercondensatori_pct}%`,
+      temperatura_piastra_terra: `${temp_piastre_c} °C`,
+      stato_microrete_industriale: microrete_status,
+      allocazione_potenza_fast_charge: allocazione_power,
+      codice_gestione_rete: codice_rete
+    };
+  },
+
+  // [20] Quantum Support Vector Classifier (QSVM Woodpecker) (🔓)
+  calcolo_20_woodpecker_qsvm(
+    forza_deformazione_pattini_n: number,
+    umidita_legno_pct: number,
+    throughput_pallet_ora?: number,
+    maschera_difetti?: any
+  ) {
+    const hasPhysicalFlaw = maschera_difetti && (
+      maschera_difetti.asseSpaccata ||
+      maschera_difetti.chiodoSporgente ||
+      maschera_difetti.blocchettoMancante ||
+      maschera_difetti.fuoriTolleranzaGeometrica
+    );
+    const isDefective = forza_deformazione_pattini_n < 2600 || umidita_legno_pct > 17.5 || hasPhysicalFlaw;
+    const { most_probable } = sampleQuantumCircuit(4, false, isDefective ? 0.8 : 0.2);
+    const defectScore = (most_probable.match(/1/g) || []).length;
+
+    let esito_pallet = "PALLET IDONEO PER SMARTSTORE - STRUTTURA ELASTICA CONFORME SPECIFICHE";
+    let direttiva_smistamento = "INDIRIZZARE ALLA BAIA DI INTRODUZIONE SMARTSTORE LIVELLO 1";
+    let codice_esito = 200;
+
+    if (defectScore >= 3 || isDefective) {
+      esito_pallet = "PALLET SCARTATO - DEFLESSIONE PATTINI ANOMALA O DIFETTO MECCANICO";
+      direttiva_smistamento = "ESPULSIONE AUTOMATICA VERSO RULLIERA DI SCARTO PER RIPARAZIONE";
+      codice_esito = 520;
+    }
+
+    return {
+      calcolo_id: 20,
+      sotto_funzione: "Woodpecker Pallet Integrity Check",
+      stato_qubit_classificatore: most_probable,
+      resistenza_pattini_misurata: `${forza_deformazione_pattini_n} N`,
+      umidita_legno_rilevata: `${umidita_legno_pct}%`,
+      throughput_orario: `${throughput_pallet_ora ?? 280} pallet/h`,
+      esito_ispezione_pallet: esito_pallet,
+      direttiva_smistamento_scarto: direttiva_smistamento,
+      codice_esito_woodpecker: codice_esito
+    };
+  },
+
+  // [21] Post-Quantum Lattice Zero-Knowledge Verifier (ML-DSA) (🔓)
+  async calcolo_21_raptor_zkp(
+    sscc_code: string,
+    etichetta_gs1: string,
+    grado_qualita_stampa_iso: string,
+    temp_testina_termica_c?: number
+  ) {
+    const isQualityDegraded = grado_qualita_stampa_iso !== 'CLASSE_A' || (temp_testina_termica_c && temp_testina_termica_c > 65);
+    const rawData = `${sscc_code}:${etichetta_gs1}:${grado_qualita_stampa_iso}`;
+    const latticeSalt = await pseudoSha3(rawData + ':LATTICE_DILITHIUM_FIPS204');
+    const { most_probable } = sampleQuantumCircuit(4, false, isQualityDegraded ? 0.75 : 0.2);
+
+    let verifica_zkp = "PROVA ZERO-KNOWLEDGE APPROVATA - SERIALE GS1 CONFORME NIST FIPS 204";
+    let qualita_status = "QUALITA STAMPA TESTINA RAPTOR OTTIMALE (CLASSE A)";
+    let codice_validazione = 200;
+
+    if (isQualityDegraded) {
+      verifica_zkp = "ATTENZIONE - DEGRADO QUALITA LETTURA ETICHETTA TERMINALE OTTICO";
+      qualita_status = "PULIRE TESTINA TERMICA RAPTOR ED ESEGUIRE RICALIBRAZIONE NASTRO";
+      codice_validazione = 521;
+    }
+
+    return {
+      calcolo_id: 21,
+      sotto_funzione: "Raptor GS1/SSCC Traceability & Anti-Counterfeiting",
+      stato_qubit_reticolo: most_probable,
+      sscc_analizzato: sscc_code,
+      firma_reticolo_dilithium_fips204: `0x${latticeSalt.substring(0, 32)}...`,
+      qualita_stampa_status: qualita_status,
+      verifica_post_quantum_zkp: verifica_zkp,
+      temperatura_testina: `${temp_testina_termica_c ?? 54.2} °C`,
+      codice_validazione_raptor: codice_validazione
     };
   },
 
@@ -574,33 +748,68 @@ export const QuantumEngine = {
       case 14:
         return this.calcolo_14_qft(
           Array.isArray(payload.vettore_accelerometro) ? payload.vettore_accelerometro : [0.12, 0.85, 0.94, 0.02],
-          Number(payload.giri_minuto ?? 48.0)
+          Number(payload.giri_minuto ?? 48.0),
+          payload.vibrazioni_assi_g,
+          payload.rapporto_prestiro_pct
         );
       case 15:
         return this.calcolo_15_qsvm(
           Number(payload.tensione_newton ?? 148.5),
           Number(payload.velocita_svolgimento ?? 12.4),
-          Number(payload.spessore_film_micron ?? 23)
+          Number(payload.spessore_film_micron ?? 23),
+          payload.forza_serraggio_carico_n,
+          payload.temp_barra_saldante_c
         );
       case 16:
         return this.calcolo_16_qrl_routing(
           typeof payload.coordinate_agv_attivi === 'object' ? payload.coordinate_agv_attivi : {
-            AGV_01: 'X:12/Y:04',
-            AGV_02: 'X:15/Y:08',
-            AGV_03: 'X:02/Y:22'
+            AGV_01: 'X:14250/Y:8600/Z:210',
+            AGV_02: 'X:18300/Y:4200/Z:210',
+            AGV_03: 'X:02400/Y:22100/Z:210'
           },
-          Array.isArray(payload.mappa_ingorghi_nodi) ? payload.mappa_ingorghi_nodi : ['NODO_03_BLOCCATO']
+          Array.isArray(payload.mappa_ingorghi_nodi) ? payload.mappa_ingorghi_nodi : ['NODO_03_BLOCCATO'],
+          payload.distanza_laser_ostacolo_mm,
+          payload.raggio_curvatura_mm
         );
       case 17:
         return this.calcolo_17_matching(
           Array.isArray(payload.elenco_missioni_urgenti) ? payload.elenco_missioni_urgenti : ['MISSIONE_942', 'MISSIONE_943'],
           typeof payload.telemetria_batterie_agv === 'object' ? payload.telemetria_batterie_agv : {
-            AGV_04: { SoC: 78, Temp: 42.5 },
-            AGV_11: { SoC: 92, Temp: 31.0 }
+            AGV_04: { SoC: 78, Temp: 42.5, SoH: 94.8, Volt: 48.2, Wh_rigenerati: 320 },
+            AGV_11: { SoC: 92, Temp: 31.0, SoH: 98.1, Volt: 49.0, Wh_rigenerati: 410 }
           }
         );
+      case 18:
+        return this.calcolo_18_vqe_robot(
+          Array.isArray(payload.corrente_joint_a) ? payload.corrente_joint_a : [12.4, 18.2, 14.1, 8.5, 6.2, 4.8],
+          Array.isArray(payload.coppia_motori_nm) ? payload.coppia_motori_nm : [245, 380, 290, 115, 82, 45],
+          Number(payload.pressione_vuoto_bar ?? -0.84),
+          Number(payload.tempo_ciclo_strato_ms ?? 10850),
+          Number(payload.forza_pinze_n ?? 480)
+        );
+      case 19:
+        return this.calcolo_19_charging_knapsack(
+          Number(payload.potenza_erogata_totale_kw ?? 87.8),
+          Number(payload.livello_supercondensatori_pct ?? 94.0),
+          Number(payload.temp_piastre_c ?? 38.0),
+          Number(payload.stazioni_attive ?? 2)
+        );
+      case 20:
+        return this.calcolo_20_woodpecker_qsvm(
+          Number(payload.forza_deformazione_pattini_n ?? 3400),
+          Number(payload.umidita_legno_pct ?? 13.2),
+          Number(payload.throughput_pallet_ora ?? 280),
+          payload.maschera_difetti ?? { asseSpaccata: false, chiodoSporgente: false, blocchettoMancante: false, fuoriTolleranzaGeometrica: false }
+        );
+      case 21:
+        return await this.calcolo_21_raptor_zkp(
+          String(payload.sscc_code ?? '080332190000458129'),
+          String(payload.etichetta_gs1 ?? '(01)08033219001234(10)LOT-2026-X8(15)261231'),
+          String(payload.grado_qualita_stampa_iso ?? 'CLASSE_A'),
+          payload.temp_testina_termica_c
+        );
       default:
-        throw new Error(`Calcolo ID ${id} non riconosciuto. Range valido 1-17.`);
+        throw new Error(`Calcolo ID ${id} non riconosciuto. Range valido 1-21.`);
     }
   }
 };
