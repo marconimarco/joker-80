@@ -547,6 +547,8 @@ export const PlantAutoDiscoveryService = {
    */
   async discoverAndConnectPlant(params: {
     nome: string;
+    azienda?: string;
+    numeroStabilimento?: number | string;
     sito: string;
     endpoint: string;
     protocol: IndustrialProtocol;
@@ -555,6 +557,7 @@ export const PlantAutoDiscoveryService = {
     qpuTarget?: string;
     wmsApiKey?: string;
     existingTenantId?: string;
+    operatoriAssegnati?: string[];
   }): Promise<AutoDiscoveryResult> {
     // 1. Simulate handshake latency with E80 Gateway
     const startTime = Date.now();
@@ -685,13 +688,16 @@ export const PlantAutoDiscoveryService = {
       const updatedTenant: FactoryTenant = {
         ...existingTenant,
         nome: params.nome.trim(),
+        azienda: params.azienda?.trim() || existingTenant.azienda || rawBrand,
+        numeroStabilimento: params.numeroStabilimento !== undefined ? params.numeroStabilimento : (existingTenant.numeroStabilimento || 1),
         sito: params.sito.trim(),
         endpoint: params.endpoint.trim(),
         protocol: params.protocol,
         plcIp: params.plcIp?.trim() || existingTenant.plcIp,
         logoColor: params.logoColor || existingTenant.logoColor,
         connectionStatus: 'CONNESSO',
-        plantTopology: updatedTopology
+        plantTopology: updatedTopology,
+        operatoriAssegnati: params.operatoriAssegnati || existingTenant.operatoriAssegnati || []
       };
 
       AuthStorage.updateTenant(updatedTenant);
@@ -895,6 +901,8 @@ export const PlantAutoDiscoveryService = {
     // 7. Create and persist the new FactoryTenant
     const createdTenant = AuthStorage.addTenant({
       nome: params.nome.trim(),
+      azienda: params.azienda?.trim() || rawBrand,
+      numeroStabilimento: params.numeroStabilimento !== undefined ? params.numeroStabilimento : 1,
       sito: params.sito.trim(),
       endpoint: params.endpoint.trim(),
       protocol: params.protocol,
@@ -902,7 +910,8 @@ export const PlantAutoDiscoveryService = {
       plcIp: params.plcIp?.trim() || `${params.endpoint.replace(/^https?:\/\//, '').split('/')[0]}:502`,
       qpuTarget: params.qpuTarget || 'Simulatore GPU CUDA-Q (cuStateVec)',
       logoColor: params.logoColor || '#3b82f6',
-      plantTopology
+      plantTopology,
+      operatoriAssegnati: params.operatoriAssegnati || []
     });
 
     // 8. AUTOMATICALLY GENERATE OPERATOR ACCOUNTS for this new plant

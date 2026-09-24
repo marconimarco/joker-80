@@ -82,7 +82,9 @@ export const INITIAL_USERS: UserAccount[] = [
 export const INITIAL_TENANTS: FactoryTenant[] = [
   {
     id: 'local',
-    nome: 'Hub Viano - Simulazione Globale',
+    nome: 'Hub Viano - Sede Centrale',
+    azienda: 'Elettric80 / SM.I.LE80',
+    numeroStabilimento: 1,
     sito: 'Viano, Reggio Emilia (RE)',
     endpoint: 'http://127.0.0.1:8080/api/v1',
     plcIp: '192.168.1.100:502',
@@ -91,11 +93,14 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     qpuTarget: 'Simulatore GPU CUDA-Q (cuStateVec)',
     logoColor: '#06b6d4',
     plantTopology: TOPOLOGY_BARILLA,
+    operatoriAssegnati: ['op_barilla'],
     createdAt: '2026-01-01'
   },
   {
     id: 'barilla',
-    nome: 'Barilla (Stabilimento di Pedrignano)',
+    nome: 'Barilla - Stabilimento Pedrignano',
+    azienda: 'Barilla G. e R. Fratelli',
+    numeroStabilimento: 1,
     sito: 'Pedrignano, Parma (PR)',
     endpoint: 'https://barilla-pedrignano.smile80.net/cudaq',
     plcIp: '10.24.100.50:502',
@@ -104,11 +109,14 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     qpuTarget: 'QPU Rigetti / GPU Cluster H100',
     logoColor: '#3b82f6',
     plantTopology: TOPOLOGY_BARILLA,
+    operatoriAssegnati: ['op_barilla'],
     createdAt: '2026-01-15'
   },
   {
     id: 'nestle',
-    nome: 'Nestlé (Stabilimento di Assago)',
+    nome: 'Nestlé - Stabilimento Assago',
+    azienda: 'Nestlé Italiana',
+    numeroStabilimento: 1,
     sito: 'Assago, Milano (MI)',
     endpoint: 'https://nestle-milan.smile80.net/cudaq',
     plcIp: '172.18.20.10:502',
@@ -117,11 +125,14 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     qpuTarget: 'QPU IonQ / Edge QPU Silkworm',
     logoColor: '#ef4444',
     plantTopology: TOPOLOGY_NESTLE,
+    operatoriAssegnati: ['op_nestle'],
     createdAt: '2026-02-01'
   },
   {
     id: 'santanna',
-    nome: 'Acqua Sant\'Anna (Stabilimento di Vinadio)',
+    nome: 'Acqua Sant\'Anna - Stabilimento Vinadio',
+    azienda: 'Acqua Sant\'Anna',
+    numeroStabilimento: 1,
     sito: 'Vinadio, Cuneo (CN)',
     endpoint: 'https://santanna-vinadio.smile80.net/cudaq',
     plcIp: '192.168.50.80:502',
@@ -130,6 +141,7 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     qpuTarget: 'D-Wave Annealer / Hybrid Solver',
     logoColor: '#10b981',
     plantTopology: TOPOLOGY_SANTANNA,
+    operatoriAssegnati: ['op_santanna'],
     createdAt: '2026-02-10'
   }
 ];
@@ -153,6 +165,17 @@ export const AuthStorage = {
             hasChanges = true;
           }
         }
+
+        // Sanitize and ensure 100% unique IDs across all users
+        const seenIds = new Set<string>();
+        for (let i = 0; i < parsed.length; i++) {
+          if (!parsed[i].id || seenIds.has(parsed[i].id)) {
+            parsed[i].id = `usr-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 7)}`;
+            hasChanges = true;
+          }
+          seenIds.add(parsed[i].id);
+        }
+
         if (hasChanges) {
           localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(parsed));
         }
@@ -174,9 +197,10 @@ export const AuthStorage = {
 
   addUser: (user: Omit<UserAccount, 'id' | 'createdAt'>): UserAccount => {
     const users = AuthStorage.getUsers();
+    const uniqueSuffix = Math.random().toString(36).substring(2, 8) + Math.random().toString(36).substring(2, 6);
     const newUser: UserAccount = {
       ...user,
-      id: 'usr-' + Date.now(),
+      id: `usr-${Date.now()}-${uniqueSuffix}`,
       createdAt: new Date().toISOString().split('T')[0]
     };
     const updated = [...users, newUser];

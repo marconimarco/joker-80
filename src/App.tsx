@@ -35,11 +35,11 @@ export default function App() {
   const [selectedCircuitCalc, setSelectedCircuitCalc] = useState<QuantumCalculationMeta | null>(null);
   const [selectedCircuitState, setSelectedCircuitState] = useState<string | undefined>(undefined);
 
-  // Function to execute the auto-upload of plant data and run all 17 quantum calculations
+  // Function to execute the auto-upload of plant data and run all 21 quantum calculations
   const runAutoTelemetryScan = useCallback(async (tenant: FactoryTenant) => {
     setIsScanning(true);
     try {
-      const result = await PlantTelemetryScanner.scanPlantAndRun17Calculations(tenant);
+      const result = await PlantTelemetryScanner.scanPlantAndRun21Calculations(tenant);
       setScanSummary(result);
     } catch (e) {
       console.error('Error scanning plant telemetry', e);
@@ -48,7 +48,7 @@ export default function App() {
     }
   }, []);
 
-  // Trigger automatic download and 17 calculations when user enters or activeTenant changes
+  // Trigger automatic download and 21 calculations when user enters or activeTenant changes
   useEffect(() => {
     if (currentUser && activeTenant) {
       runAutoTelemetryScan(activeTenant);
@@ -197,7 +197,7 @@ export default function App() {
         <div className="flex items-center gap-2.5 truncate">
           <span className="truncate">SM.I.LE80 Quantum Middleware v2026.2</span>
           <span className="text-slate-700">|</span>
-          <span className="text-slate-400 hidden sm:inline">17 Moduli CUDA-Q Sincronizzati</span>
+          <span className="text-slate-400 hidden sm:inline">21 Moduli CUDA-Q Sincronizzati</span>
           <span className="text-slate-700 hidden sm:inline">|</span>
           <span className="text-cyan-400 font-medium truncate">{activeTenant.nome}</span>
         </div>

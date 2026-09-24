@@ -87,7 +87,7 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess }) => {
           </div>
 
           <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-lg">
-            17 CUDA-Q ONLINE
+            21 CUDA-Q ONLINE
           </span>
         </div>
 

@@ -71,16 +71,12 @@ export const NotificationsView: React.FC<Props> = ({
             </div>
           </div>
 
+          {/* Right Status Badge */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={onRefreshScan}
-              disabled={isScanning}
-              className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-semibold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-              title="Rilancia la lettura dei nodi di stabilimento ed esegui i 21 calcoli"
-            >
-              <RotateCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-cyan-400' : ''}`} />
-              <span>{isScanning ? 'Scansione in corso...' : 'Aggiorna Telemetria & Ricalcola'}</span>
-            </button>
+            <div className="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs font-mono text-slate-300 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Sync Nodi Live</span>
+            </div>
           </div>
         </div>
 
@@ -163,7 +159,7 @@ export const NotificationsView: React.FC<Props> = ({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Tutti (17)
+                Tutti (21)
               </button>
             </div>
           </div>
@@ -175,7 +171,7 @@ export const NotificationsView: React.FC<Props> = ({
                 <RotateCw className="w-8 h-8 text-cyan-400 animate-spin" />
                 <div className="text-center font-mono">
                   <p className="text-sm font-semibold text-white">Download telemetria gateway {activeTenant.endpoint}...</p>
-                  <p className="text-xs text-slate-400">Esecuzione dei 17 circuiti quantistici su NVIDIA CUDA-Q...</p>
+                  <p className="text-xs text-slate-400">Esecuzione dei 21 circuiti quantistici su NVIDIA CUDA-Q...</p>
                 </div>
               </div>
             ) : filteredNotifs.length === 0 ? (

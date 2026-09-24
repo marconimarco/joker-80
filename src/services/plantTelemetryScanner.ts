@@ -40,11 +40,11 @@ const LAST_SCAN_KEY = 'joker80_last_scan_summary';
 export class PlantTelemetryScanner {
   /**
    * Automatically connects to the active tenant's plant topology/gateway,
-   * extracts live telemetry parameters for all 17 quantum calculations,
-   * runs the CUDA-Q quantum simulation engine on all 17 routines,
+   * extracts live telemetry parameters for all 21 quantum calculations,
+   * runs the CUDA-Q quantum simulation engine on all 21 routines,
    * and generates notifications for calculations with anomalies (ATTENZIONE / CRITICO).
    */
-  static async scanPlantAndRun17Calculations(tenant: FactoryTenant): Promise<AutoScanSummary> {
+  static async scanPlantAndRun21Calculations(tenant: FactoryTenant): Promise<AutoScanSummary> {
     const startTime = performance.now();
     const topology = tenant.plantTopology;
     const notifications: PlantNotification[] = [];
@@ -64,7 +64,7 @@ export class PlantTelemetryScanner {
       // In browser preview or standalone mode, continue with high-precision telemetry
     }
 
-    // Run all 17 calculations sequentially or in parallel with actual plant topology inputs
+    // Run all 21 calculations sequentially or in parallel with actual plant topology inputs
     for (const calc of QUANTUM_CALCULATIONS) {
       const inputs = this.extractInputsForCalc(calc.id, tenant);
       const res: QuantumExecutionResult = await QuantumEngine.executeCalculation(calc.id, inputs);
@@ -527,7 +527,8 @@ export class PlantTelemetryScanner {
   static async getMtlsSecurityStatus() {
     try {
       const res = await fetch('/api/mtls/status');
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         return await res.json();
       }
     } catch {
@@ -541,7 +542,10 @@ export class PlantTelemetryScanner {
       tlsVersion: 'TLSv1.3 (Strict)',
       curveType: 'ECDSA prime256v1 (NIST P-256)',
       nis2Compliant: false,
-      details: 'Connessione mTLS pronta: certificati caricati in /certs/, in attesa del Secret MTLS_PRIVATE_KEY.'
+      details: 'Connessione mTLS pronta: certificati caricati in /certs/, in attesa del Secret MTLS_PRIVATE_KEY o del file .pfx.'
     };
   }
+
+  // Backward compatibility alias
+  static scanPlantAndRun17Calculations = PlantTelemetryScanner.scanPlantAndRun21Calculations;
 }

@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/joker-80/',
+  base: '/',
   build: {
     // Forza Vite a non inserire codici strani nei nomi dei file
     rollupOptions: {

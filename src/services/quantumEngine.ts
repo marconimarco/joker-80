@@ -1,5 +1,5 @@
 /**
- * Quantum Engine simulating CUDA-Q circuits for all 17 factory automation routines.
+ * Quantum Engine simulating CUDA-Q circuits for all 21 factory automation routines.
  * Faithful to the CUDA-Q kernel topologies and industrial decision logics.
  */
 

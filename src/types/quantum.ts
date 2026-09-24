@@ -360,6 +360,8 @@ export type IndustrialProtocol = 'REST_HTTPS' | 'OPC_UA' | 'MQTT' | 'SIEMENS_S7'
 export interface FactoryTenant {
   id: string;
   nome: string;
+  azienda?: string;
+  numeroStabilimento?: number | string;
   sito: string;
   endpoint: string;
   logoColor: string;
@@ -370,6 +372,7 @@ export interface FactoryTenant {
   protocol?: IndustrialProtocol;
   connectionStatus?: 'CONNESSO' | 'IN_ATTESA' | 'OFFLINE';
   plantTopology?: PlantTopology;
+  operatoriAssegnati?: string[];
 }
 
 export type UserRole = 'Amministratore' | 'Operatore di Linea';

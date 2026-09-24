@@ -83,6 +83,77 @@ const PRESET_SCENARIOS = [
   }
 ];
 
+const FormattedChatMessage: React.FC<{ text: string; isUser: boolean }> = ({ text, isUser }) => {
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let currentBullets: string[] = [];
+
+  const flushBullets = (keyIdx: number) => {
+    if (currentBullets.length > 0) {
+      elements.push(
+        <ul key={`ul-${keyIdx}`} className="space-y-1.5 my-2.5 pl-1">
+          {currentBullets.map((bullet, bIdx) => (
+            <li key={bIdx} className="flex items-start gap-2.5 text-justify [text-align-last:left] text-[13.5px] leading-relaxed text-slate-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-2 shrink-0 shadow-sm shadow-cyan-400/50" />
+              <span className="flex-1">{parseInlineMarkup(bullet)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      currentBullets = [];
+    }
+  };
+
+  const parseInlineMarkup = (rawText: string) => {
+    const parts = rawText.split(/(\*\*.*?\*\*|`.*?`)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return (
+          <strong key={i} className="font-bold text-white tracking-tight">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      if (part.startsWith('`') && part.endsWith('`')) {
+        return (
+          <code key={i} className="px-1.5 py-0.5 rounded bg-slate-900/90 text-amber-300 font-mono text-[11.5px] border border-slate-700/60 font-semibold shadow-xs">
+            {part.slice(1, -1)}
+          </code>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushBullets(idx);
+      elements.push(<div key={`sp-${idx}`} className="h-1.5" />);
+      return;
+    }
+
+    if (trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ')) {
+      currentBullets.push(trimmed.replace(/^[-•*]\s+/, ''));
+    } else {
+      flushBullets(idx);
+      elements.push(
+        <p key={`p-${idx}`} className="text-justify [text-align-last:left] text-[13.5px] leading-relaxed tracking-normal text-slate-200 font-sans selection:bg-cyan-500/30">
+          {parseInlineMarkup(line)}
+        </p>
+      );
+    }
+  });
+
+  flushBullets(lines.length);
+
+  return (
+    <div className={`space-y-1 font-sans ${isUser ? 'text-cyan-50' : 'text-slate-100'} antialiased`}>
+      {elements}
+    </div>
+  );
+};
+
 export const QuantumChatTerminal: React.FC<Props> = ({ 
   onOpenCircuit, 
   allowPlcWrite,
@@ -123,7 +194,7 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
     const query = (textToSend || input).trim();
     if (!query || isProcessing) return;
 
-    const userMsgId = 'usr-' + Date.now();
+    const userMsgId = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const userMsg: ChatMessage = {
       id: userMsgId,
       sender: 'user',
@@ -144,7 +215,7 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
       const executionTime = Math.round(performance.now() - startTime);
 
       const botMsg: ChatMessage = {
-        id: 'qcore-' + Date.now(),
+        id: `qcore-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
         sender: 'quantum-core',
         timestamp: new Date().toLocaleTimeString(),
         text: res.introduzione,
@@ -266,14 +337,14 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
           activeTenant={activeTenant}
         />
 
-        {messages.map((msg) => {
+        {messages.map((msg, mIdx) => {
           const isUser = msg.sender === 'user';
           const calcMeta = msg.calcolo_id ? QUANTUM_CALCULATIONS.find(c => c.id === msg.calcolo_id) : null;
           const jsonString = msg.payload ? JSON.stringify(msg.payload, null, 2) : '';
 
           return (
             <div 
-              key={msg.id} 
+              key={`${msg.id || 'msg'}-${mIdx}`} 
               className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-200`}
             >
               <div className={`max-w-3xl w-full rounded-2xl p-4 sm:p-5 ${
@@ -329,10 +400,8 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
                     </div>
                   )}
 
-                  {/* User query or Bot explanation */}
-                  <div className="whitespace-pre-wrap text-slate-200">
-                    {msg.text}
-                  </div>
+                  {/* User query or Bot explanation with elegant justified typography */}
+                  <FormattedChatMessage text={msg.text || ''} isUser={isUser} />
 
                   {/* Interactive Decision Assistance Cards */}
                   {msg.opzioniScelta && msg.opzioniScelta.length > 0 && (

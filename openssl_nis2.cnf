@@ -1,0 +1,35 @@
+[ req ]
+default_bits        = 256
+default_md          = sha256
+distinguished_name  = req_distinguished_name
+prompt              = no
+
+[ req_distinguished_name ]
+C   = IT
+ST  = ReggioEmilia
+L   = Viano
+O   = Elettric80-SM.I.LE80
+OU  = Cybersecurity-NIS2
+CN  = programma_google
+
+[ v3_ca ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints       = critical, CA:TRUE, pathlen:0
+keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+
+[ v3_client ]
+basicConstraints       = critical, CA:FALSE
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage               = critical, digitalSignature, keyAgreement
+extendedKeyUsage       = clientAuth
+subjectAltName         = @alt_names
+
+[ alt_names ]
+DNS.1 = programma_google
+DNS.2 = *.elettric80.local
+DNS.3 = *.smile80.internal
+DNS.4 = localhost
+IP.1  = 127.0.0.1
+IP.2  = 192.168.1.100

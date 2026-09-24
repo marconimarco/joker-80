@@ -36,7 +36,7 @@ export const SystemSpecs: React.FC<Props> = ({ onOpenCircuit }) => {
             <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Algoritmi Totali</span>
             <Cpu className="w-4 h-4 text-cyan-400" />
           </div>
-          <div className="text-3xl font-bold font-mono text-white">17</div>
+          <div className="text-3xl font-bold font-mono text-white">{QUANTUM_CALCULATIONS.length}</div>
           <p className="text-[11px] text-slate-400 font-mono">
             4 Macro-Categorie Industriali JOKER 80
           </p>
@@ -80,13 +80,13 @@ export const SystemSpecs: React.FC<Props> = ({ onOpenCircuit }) => {
         </div>
       </div>
 
-      {/* Complete Dictionary Matrix of the 17 Calculations */}
+      {/* Complete Dictionary Matrix of the 21 Calculations */}
       <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
           <div>
             <h2 className="text-base font-bold font-mono text-white flex items-center gap-2">
               <Network className="w-4 h-4 text-cyan-400" />
-              Matrice dei 17 Calcoli Attivi nel Cervello Quantistico
+              Matrice dei 21 Calcoli Attivi nel Cervello Quantistico
             </h2>
             <p className="text-xs text-slate-400 mt-1">
               Topologia dei kernel quantistici CUDA-Q, vincoli di entanglement e mappatura dettagliata dei flussi e parametri incrociati tra categorie.
@@ -103,7 +103,7 @@ export const SystemSpecs: React.FC<Props> = ({ onOpenCircuit }) => {
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Tutti (17)
+              Tutti (21)
             </button>
             <button
               onClick={() => setFilterType('crossed')}
@@ -272,7 +272,7 @@ export const SystemSpecs: React.FC<Props> = ({ onOpenCircuit }) => {
             <span>Kernel CUDA-Q</span>
           </div>
           <p className="text-xs text-slate-400 leading-relaxed">
-            17 file Python indipendenti con decoratore <code>@cudaq.kernel</code>, circuiti con gate Hadamard H, blocchi CNOT intrecciati per le decisioni cross-modulo e misurazione stocastica con 1000 iterazioni.
+            21 file Python indipendenti con decoratore <code>@cudaq.kernel</code>, circuiti con gate Hadamard H, blocchi CNOT intrecciati per le decisioni cross-modulo e misurazione stocastica con 1000 iterazioni.
           </p>
         </div>
 
@@ -292,7 +292,7 @@ export const SystemSpecs: React.FC<Props> = ({ onOpenCircuit }) => {
             <span>Front-End JOKER 80</span>
           </div>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Pannello di controllo multi-tenant con interruttore di sicurezza hardware (blocco scrittura PLC), terminale interattivo per la chat e cataloghi dei 17 moduli industriali.
+            Pannello di controllo multi-tenant con interruttore di sicurezza hardware (blocco scrittura PLC), terminale interattivo per la chat e cataloghi dei 21 moduli industriali.
           </p>
         </div>
       </div>
