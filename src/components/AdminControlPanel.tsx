@@ -46,7 +46,8 @@ import {
   Terminal,
   HelpCircle,
   Send,
-  Download
+  Download,
+  Clock
 } from 'lucide-react';
 import { FactoryTenant, UserAccount, IndustrialProtocol } from '../types/quantum';
 import { AuthStorage } from '../services/authStorage';
@@ -54,6 +55,7 @@ import {
   PlantAutoDiscoveryService, 
   AutoDiscoveryResult 
 } from '../services/plantAutoDiscovery';
+import { DaemonFrequencyPanel } from './DaemonFrequencyPanel';
 
 interface Props {
   tenants: FactoryTenant[];
@@ -70,7 +72,7 @@ export const AdminControlPanel: React.FC<Props> = ({
   onSelectTenant,
   currentUser
 }) => {
-  const [activeTab, setActiveTab] = useState<'discovery' | 'topology' | 'operators' | 'mtls'>('discovery');
+  const [activeTab, setActiveTab] = useState<'discovery' | 'topology' | 'operators' | 'mtls' | 'daemon_frequency'>('discovery');
   const [users, setUsers] = useState<UserAccount[]>(() => AuthStorage.getUsers());
 
   // PFX / PKCS#12 Certificate Upload State
@@ -825,13 +827,13 @@ export const AdminControlPanel: React.FC<Props> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-2 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono">
+        <div className="flex items-center gap-2 p-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono overflow-x-auto no-scrollbar touch-pan-x flex-nowrap w-full">
           <button
             onClick={() => setActiveTab('discovery')}
-            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all ${
+            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
               activeTab === 'discovery'
                 ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
             <Zap className="w-3.5 h-3.5" />
@@ -840,10 +842,10 @@ export const AdminControlPanel: React.FC<Props> = ({
 
           <button
             onClick={() => setActiveTab('topology')}
-            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all ${
+            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
               activeTab === 'topology'
                 ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
             <Boxes className="w-3.5 h-3.5" />
@@ -852,22 +854,38 @@ export const AdminControlPanel: React.FC<Props> = ({
 
           <button
             onClick={() => setActiveTab('operators')}
-            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all ${
+            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
               activeTab === 'operators'
                 ? 'bg-cyan-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
             <span>Operatori Generati ({users.filter(u => u.ruolo === 'Operatore di Linea').length})</span>
           </button>
 
+          {/* TAB FREQUENZA TELEMETRIA & DEMONI MULTI-OS */}
+          <button
+            onClick={() => setActiveTab('daemon_frequency')}
+            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
+              activeTab === 'daemon_frequency'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-blue-400" />
+            <span>Frequenza & Demoni (Linux / Mac / Win)</span>
+            <span className="px-1.5 py-0.2 rounded text-[9px] bg-blue-500/20 text-blue-300 border border-blue-500/40">
+              Auto-Sync
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveTab('mtls')}
-            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all ${
+            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
               activeTab === 'mtls'
                 ? 'bg-amber-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
             <Lock className="w-3.5 h-3.5" />
@@ -876,14 +894,14 @@ export const AdminControlPanel: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* QUICK BANNER: STATO mTLS & LINK DI CARICAMENTO .PFX */}
+      {/* QUICK BANNER: STATO mTLS & LINK DI CARICAMENTO .PFX & FREQUENZA */}
       <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-3 font-mono text-xs shadow-md">
         <div className="flex items-center gap-2.5">
           <div className={`p-2 rounded-xl ${mtlsStatus?.configured ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}`}>
             <Shield className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-bold text-white">Canale di Comunicazione mTLS (TLS 1.3 / Direttiva NIS2):</span>
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${mtlsStatus?.configured ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}`}>
                 {mtlsStatus?.configured ? 'ATTIVO & SICURO' : 'IN ATTESA DI BUNDLE .PFX'}
@@ -895,14 +913,25 @@ export const AdminControlPanel: React.FC<Props> = ({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('mtls')}
-          className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-        >
-          <UploadCloud className="w-3.5 h-3.5" />
-          <span>{mtlsStatus?.configured ? 'Gestisci File .PFX' : 'Carica File .PFX dal Desktop'}</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setActiveTab('daemon_frequency')}
+            className="px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Frequenza & Script PC</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('mtls')}
+            className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
+          >
+            <UploadCloud className="w-3.5 h-3.5" />
+            <span>{mtlsStatus?.configured ? 'Gestisci File .PFX' : 'Carica File .PFX dal Desktop'}</span>
+          </button>
+        </div>
       </div>
 
       {/* TAB 1: CONNESSIONE RAPIDA, AUTO-DISCOVERY & SEDI */}
@@ -2885,6 +2914,23 @@ export const AdminControlPanel: React.FC<Props> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB 5: FREQUENZA TELEMETRIA & DEMONI MULTI-PIATTAFORMA (LINUX, MAC, WINDOWS, DOCKER) */}
+      {activeTab === 'daemon_frequency' && (
+        <DaemonFrequencyPanel
+          activeTenant={activeTenant}
+          currentUser={currentUser}
+          telemetryHistory={telemetryHistory}
+          onRefreshTelemetry={() => {
+            fetch('/api/telemetry/latest')
+              .then(r => r.json())
+              .then(d => {
+                if (d?.recentPackets) setTelemetryHistory(d.recentPackets);
+              })
+              .catch(() => {});
+          }}
+        />
       )}
     </div>
   );

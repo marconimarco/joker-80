@@ -36,6 +36,7 @@ export const NotificationsView: React.FC<Props> = ({
 }) => {
   const [filterLevel, setFilterLevel] = useState<'ALL' | 'ANOMALIES' | 'CRITICO' | 'ATTENZIONE'>('ANOMALIES');
   const [selectedNotif, setSelectedNotif] = useState<PlantNotification | null>(null);
+  const [mobileTab, setMobileTab] = useState<'list' | 'detail'>('list');
 
   const notifications = summary?.notifiche || [];
 
@@ -48,7 +49,7 @@ export const NotificationsView: React.FC<Props> = ({
   });
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-3 py-1">
+    <div className="flex-1 min-h-0 flex flex-col gap-2.5 sm:gap-3 py-1 overflow-y-auto md:overflow-hidden">
       {/* Top Banner Status Bar */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-lg shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -120,12 +121,45 @@ export const NotificationsView: React.FC<Props> = ({
         )}
       </div>
 
+      {/* Mobile Tab Switcher (<md screens) */}
+      <div className="md:hidden flex items-center gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono shrink-0">
+        <button
+          type="button"
+          onClick={() => setMobileTab('list')}
+          className={`flex-1 py-2 px-3 rounded-lg font-bold transition-all text-center min-h-[40px] flex items-center justify-center gap-1.5 cursor-pointer ${
+            mobileTab === 'list'
+              ? 'bg-cyan-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <span>Elenco Log</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900 border border-slate-700">
+            {filteredNotifs.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMobileTab('detail')}
+          className={`flex-1 py-2 px-3 rounded-lg font-bold transition-all text-center min-h-[40px] flex items-center justify-center gap-1.5 cursor-pointer ${
+            mobileTab === 'detail'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <span>Dettaglio & Risoluzione</span>
+          {selectedNotif && (
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+          )}
+        </button>
+      </div>
+
       {/* Main Notification Area: Filters + Split List & Detail */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-3">
         {/* Left Column: Notification Feed */}
-        <div className="w-full md:w-7/12 flex flex-col bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+        <div className={`w-full md:w-7/12 flex-col bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden ${mobileTab === 'list' ? 'flex' : 'hidden md:flex'}`}>
           {/* Filter Bar */}
-          <div className="px-3 py-2 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between gap-2">
+          <div className="px-3 py-2 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar touch-pan-x flex-nowrap">
             <div className="flex items-center gap-1.5 text-xs font-mono text-slate-400">
               <Filter className="w-3.5 h-3.5 text-cyan-400" />
               <span>Filtra Log:</span>
@@ -189,7 +223,10 @@ export const NotificationsView: React.FC<Props> = ({
                 return (
                   <div
                     key={notif.id}
-                    onClick={() => setSelectedNotif(notif)}
+                    onClick={() => {
+                      setSelectedNotif(notif);
+                      setMobileTab('detail');
+                    }}
                     className={`p-3 rounded-xl border transition-all cursor-pointer text-left ${
                       isSelected
                         ? 'bg-slate-800/90 border-cyan-400 shadow-md ring-1 ring-cyan-500/30'
@@ -268,7 +305,16 @@ export const NotificationsView: React.FC<Props> = ({
         </div>
 
         {/* Right Column: Detailed Diagnostic & Resolution */}
-        <div className="w-full md:w-5/12 flex flex-col bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden p-3.5">
+        <div className={`w-full md:w-5/12 flex-col bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden p-3.5 ${mobileTab === 'detail' ? 'flex' : 'hidden md:flex'}`}>
+          {/* Back button visible only on mobile */}
+          <button
+            type="button"
+            onClick={() => setMobileTab('list')}
+            className="md:hidden text-cyan-400 text-xs font-mono mb-2.5 flex items-center gap-1.5 hover:underline cursor-pointer bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-800 w-fit"
+          >
+            <span>← Torna all'Elenco Log</span>
+          </button>
+
           {selectedNotif ? (
             <div className="flex-1 flex flex-col justify-between overflow-y-auto space-y-3">
               <div>

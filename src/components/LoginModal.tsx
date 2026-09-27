@@ -64,35 +64,35 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[94dvh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
         
         {/* Top Header Glow */}
         <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-emerald-500" />
 
         {/* Modal Brand Bar */}
-        <div className="p-6 pb-4 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
-              <Cpu className="w-6 h-6 animate-pulse" />
+        <div className="p-4 sm:p-6 pb-3 sm:pb-4 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shrink-0">
+              <Cpu className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
             </div>
             <div>
-              <h2 className="text-lg font-bold font-mono text-white tracking-tight flex items-center gap-2">
-                JOKER 80 <span className="text-cyan-400 font-normal text-xs px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">QUANTUM CORE</span>
+              <h2 className="text-base sm:text-lg font-bold font-mono text-white tracking-tight flex items-center gap-1.5 sm:gap-2">
+                JOKER 80 <span className="text-cyan-400 font-normal text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">QUANTUM</span>
               </h2>
-              <p className="text-xs text-slate-400 font-mono">
-                Autenticazione Sicura al Middleware Industriale
+              <p className="text-[11px] sm:text-xs text-slate-400 font-mono">
+                Autenticazione Middleware Industriale
               </p>
             </div>
           </div>
 
-          <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-lg">
-            21 CUDA-Q ONLINE
+          <span className="text-[10px] sm:text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg shrink-0">
+            21 CUDA-Q
           </span>
         </div>
 
         {/* Form Container */}
-        <div className="p-6 pt-5 space-y-5">
+        <div className="p-4 sm:p-6 pt-3.5 sm:pt-5 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (

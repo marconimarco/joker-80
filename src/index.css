@@ -1,11 +1,21 @@
 @import "tailwindcss";
 
-html, body, #root {
+html, body {
   height: 100%;
   width: 100%;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Subtle thin custom scrollbars for inner containers */
@@ -23,3 +33,18 @@ html, body, #root {
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* Mobile no-scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Mobile safe area utility */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+}
+

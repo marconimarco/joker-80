@@ -16,15 +16,15 @@ export const CircuitVisualizerModal: React.FC<Props> = ({ calculation, onClose, 
   const qubits = Array.from({ length: numQubits }, (_, i) => i);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92dvh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/80">
-          <div className="flex items-center space-x-3">
-            <span className={`px-2.5 py-1 text-xs font-semibold rounded-md border flex items-center gap-1.5 ${
+        <div className="flex items-center justify-between px-3.5 sm:px-6 py-3 sm:py-4 border-b border-slate-800 bg-slate-950/80 gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 flex-wrap">
+            <span className={`px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs font-semibold rounded-md border flex items-center gap-1.5 shrink-0 ${
               isLocked 
                 ? 'bg-amber-500/15 text-amber-300 border-amber-500/40' 
                 : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
@@ -40,22 +40,23 @@ export const CircuitVisualizerModal: React.FC<Props> = ({ calculation, onClose, 
                   <Unlock className="w-3.5 h-3.5" />
                 </>
               )}
-              Calcolo [{calculation.id}] {isLocked ? 'INCROCIATO' : 'LOCALE'}
+              [{calculation.id}] {isLocked ? 'INCROCIATO' : 'LOCALE'}
             </span>
-            <h3 className="text-lg font-bold text-slate-100 font-mono tracking-wide">
+            <h3 className="text-sm sm:text-lg font-bold text-slate-100 font-mono tracking-wide truncate">
               {calculation.name}
             </h3>
           </div>
           <button 
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer shrink-0 min-h-[38px] min-w-[38px] flex items-center justify-center"
+            title="Chiudi visualizzatore"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6 text-sm text-slate-300">
+        <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 text-sm text-slate-300">
           {/* Metadata badges */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">

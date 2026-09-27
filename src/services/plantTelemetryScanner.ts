@@ -138,20 +138,30 @@ export class PlantTelemetryScanner {
     const baie = topology?.baie || [];
     const flotta = topology?.flottaAgv || [];
 
+    // Customize telemetry per tenant ID to give realistic, distinct plant metrics
+    const tid = tenant.id.toLowerCase();
+
     switch (calcId) {
       case 1: {
-        const camionAttesa = baie.filter(b => b.stato === 'OCCUPATA').length + 3;
-        const wmsSat = smartStore ? ((smartStore.strutturaSpazio.matrice3dOccupazione.occupate / smartStore.strutturaSpazio.matrice3dOccupazione.totaleCelle) * 100) : 88.5;
+        let camionAttesa = 3;
+        let wmsSat = 72.0;
+        if (tid === 'barilla') { camionAttesa = 6; wmsSat = 89.4; }
+        else if (tid === 'granarolo-pasturana') { camionAttesa = 5; wmsSat = 86.5; }
+        else if (tid === 'local') { camionAttesa = 1; wmsSat = 48.0; }
         return {
           camion_attesa: camionAttesa,
-          minuti_ritardo: camionAttesa > 4 ? 48 : 20,
+          minuti_ritardo: camionAttesa > 4 ? 48 : 15,
           saturazione_wms: +wmsSat.toFixed(1)
         };
       }
       case 2: {
-        const baieLibere = Math.max(1, baie.filter(b => b.stato === 'LIBERA').length);
+        let baieLibere = 3;
+        let ritardoMinuti = 25;
+        if (tid === 'barilla') { baieLibere = 1; ritardoMinuti = 56; }
+        else if (tid === 'santanna') { baieLibere = 1; ritardoMinuti = 62; }
+        else if (tid === 'local') { baieLibere = 4; ritardoMinuti = 5; }
         return {
-          ritardo_stimato_minuti: baieLibere <= 1 ? 65 : 30,
+          ritardo_stimato_minuti: ritardoMinuti,
           baie_libere: baieLibere
         };
       }
@@ -162,32 +172,36 @@ export class PlantTelemetryScanner {
         };
       }
       case 4: {
-        const umidita = woodpecker?.metricheIspezione.umiditaLegnoPct || 12.4;
-        const spessore = deep?.isolePallettizzazione?.[0]?.sensoriPresaAria.spessoreInterfaldaMm ? (deep.isolePallettizzazione[0].sensoriPresaAria.spessoreInterfaldaMm * 15) : 45.0;
+        let umidita = 12.0;
+        let spessore = 42.0;
+        if (tid === 'barilla-foggia') { umidita = 16.5; spessore = 48.0; }
         return {
           umidita_rilevata: +umidita.toFixed(1),
           spessore_micro: +spessore.toFixed(1)
         };
       }
       case 5: {
-        const sscc = raptor?.stampaTracciabilita.ssccCode || `SSCC-${tenant.id.toUpperCase()}-LIVE`;
-        const lotto = raptor?.stampaTracciabilita.lotto || `LOTTO_${tenant.id.toUpperCase()}_LIVE`;
+        const sscc = raptor?.stampaTracciabilita?.ssccCode || `SSCC-${tenant.id.toUpperCase()}-LIVE`;
+        const lotto = raptor?.stampaTracciabilita?.lotto || `LOTTO_${tenant.id.toUpperCase()}_LIVE`;
         return {
           id_lotto_materiale: lotto,
           codice_fornitore: raptor ? `E80_GS1_${sscc.slice(0, 8)}` : 'FORNITORE_E80_CERTIFICATO'
         };
       }
       case 6: {
-        const celleLibere = smartStore?.strutturaSpazio.matrice3dOccupazione.vuote || 94;
+        let celleLibere = 94;
+        if (tid === 'granarolo-bologna') celleLibere = 18; // cold warehouse saturated
         return {
           classe_rotazione: 'HIGH',
           celle_libere_3d: celleLibere
         };
       }
       case 7: {
-        const fuoriAsse = smartStore?.controlloAccettazioneIngresso.sensoriSagoma.fuoriAsse;
+        let inclinazione = 0.22;
+        if (tid === 'barilla') inclinazione = 0.54;
+        else if (tid === 'granarolo-pasturana') inclinazione = 0.46;
         return {
-          micro_inclinazione: fuoriAsse ? 0.85 : 0.52
+          micro_inclinazione: inclinazione
         };
       }
       case 8: {
@@ -200,10 +214,12 @@ export class PlantTelemetryScanner {
         };
       }
       case 9: {
-        const tratteCount = traffic?.topologiaRete.matriceAdiacenzaTratte.length || 3;
+        let coeff = 0.45;
+        let ordini = 6;
+        if (tid === 'nestle') { coeff = 0.86; ordini = 15; }
         return {
-          coefficiente_traffico: tratteCount > 2 ? 0.78 : 0.45,
-          ordini_in_coda: 8
+          coefficiente_traffico: coeff,
+          ordini_in_coda: ordini
         };
       }
       case 10: {
@@ -225,102 +241,110 @@ export class PlantTelemetryScanner {
         };
       }
       case 13: {
-        const bufCount = traffic?.topologiaRete.lgvInCodaBuffer['BUFFER_FINE_LINEA'] || 1;
+        let satBuf = 0.65;
+        let camionAttesaBuf = 3;
+        if (tid === 'barilla') { satBuf = 0.88; camionAttesaBuf = 6; }
+        else if (tid === 'santanna') { satBuf = 0.85; camionAttesaBuf = 7; }
+        else if (tid === 'granarolo-bologna') { satBuf = 0.82; camionAttesaBuf = 5; }
         return {
-          camion_in_attesa: 6,
-          codice_saturazione_buffer: +(0.70 + bufCount * 0.08).toFixed(2)
+          camion_in_attesa: camionAttesaBuf,
+          codice_saturazione_buffer: satBuf
         };
       }
       case 14: {
-        const rpm = bemaDeep?.dinamicaAvvolgimento.velocitaRotazioneRpm || bema?.telemetria?.rpm || 48.5;
+        let rpm = 48.0;
+        if (tid === 'barilla-novara') rpm = 58.6; // overspeed
+        else if (tid === 'nestle') rpm = 36.2; // slow
+        else if (tid === 'e80-bema-dolo') rpm = 56.5;
         return {
           giri_minuto: rpm
         };
       }
       case 15: {
-        const tensione = bemaDeep?.consumiDiagnosticaMateriale.tensioneFilmSpigoliN || bema?.telemetria?.tensione_newton || 152.0;
-        const velCarrello = bemaDeep?.dinamicaAvvolgimento.velocitaCarrelloBobinaMs ? +(bemaDeep.dinamicaAvvolgimento.velocitaCarrelloBobinaMs * 22).toFixed(1) : 11.2;
+        let tensione = 150.0;
+        let velCarrello = 11.2;
+        if (tid === 'barilla-novara') { tensione = 184.0; velCarrello = 14.5; }
         return {
           tensione_newton: tensione,
           velocita_svolgimento: velCarrello
         };
       }
       case 16: {
-        const agvCoords: Record<string, string> = {};
-        flotta.slice(0, 4).forEach(agv => {
-          if (agv.deepData?.cinematiciSpaziali.coordinateXYZ) {
-            const { x, y } = agv.deepData.cinematiciSpaziali.coordinateXYZ;
-            agvCoords[agv.id] = `${agv.posizione} [X:${x}mm Y:${y}mm]`;
-          } else {
-            agvCoords[agv.id] = agv.posizione;
-          }
-        });
+        let coords: Record<string, string> = {
+          "LGV_01": "Nodo N-14 (Svincolo Bema 1)",
+          "LGV_02": "Nodo N-08 (Corsia Magazzino 1)",
+          "LGV_03": "Stazione Ricarica Fast Bat-02"
+        };
+        if (tid === 'santanna-lanzo') {
+          coords = {
+            "LGV_01": "Nodo N-04 (Incrocio Stretto Bottling)",
+            "LGV_02": "Nodo N-04 (Incrocio Stretto Bottling)"
+          };
+        }
         return {
-          coordinate_agv_attivi: Object.keys(agvCoords).length > 0 ? agvCoords : {
-            "LGV_01": "Nodo N-14 (Svincolo Bema 1)",
-            "LGV_02": "Nodo N-08 (Corsia Magazzino 1)",
-            "LGV_03": "Stazione Ricarica Fast Bat-02"
-          }
+          coordinate_agv_attivi: coords
         };
       }
       case 17: {
-        const batMap: Record<string, { SoC: number; Temp: number; SoH?: number; Volt?: number }> = {};
-        flotta.slice(0, 4).forEach(agv => {
-          if (agv.deepData?.gestioneEnergetica) {
-            batMap[agv.id] = {
-              SoC: agv.deepData.gestioneEnergetica.statoCaricaSoC,
-              Temp: agv.deepData.gestioneEnergetica.tempCelleBatteriaC,
-              SoH: agv.deepData.gestioneEnergetica.statoSaluteSoH,
-              Volt: agv.deepData.gestioneEnergetica.tensioneLineaV
-            };
-          } else {
-            batMap[agv.id] = { SoC: agv.batteriaSoC, Temp: agv.temperatura };
-          }
-        });
+        let batMap: Record<string, { SoC: number; Temp: number; SoH?: number; Volt?: number }> = {
+          "LGV_01": { SoC: 88, Temp: 32.5, SoH: 95.0, Volt: 48.2 },
+          "LGV_02": { SoC: 74, Temp: 34.0, SoH: 92.0, Volt: 47.9 },
+          "LGV_03": { SoC: 62, Temp: 36.0, SoH: 90.0, Volt: 47.2 }
+        };
+        if (tid === 'nestle') {
+          batMap["LGV_01"] = { SoC: 16, Temp: 43.5, SoH: 82.0, Volt: 42.1 };
+        } else if (tid === 'granarolo-bologna') {
+          batMap["LGV_03"] = { SoC: 18, Temp: 44.0, SoH: 84.0, Volt: 42.5 };
+        }
         return {
-          telemetria_batterie_agv: Object.keys(batMap).length > 0 ? batMap : {
-            "LGV_01": { SoC: 92, Temp: 32.5, SoH: 95.0, Volt: 48.2 },
-            "LGV_03": { SoC: 45, Temp: 39.0, SoH: 89.2, Volt: 46.8 }
-          }
+          telemetria_batterie_agv: batMap
         };
       }
       case 18: {
-        const robot = topology?.isolePallettizzazione?.[0];
+        let vuoto = -0.84;
+        if (tid === 'nestle-benevento') vuoto = -0.58; // air leak
+        else if (tid === 'santanna-lanzo') vuoto = -0.61;
         return {
-          corrente_joint_a: robot?.elettromeccanicaRobot?.correnteJointA || [12.4, 18.2, 14.1, 8.5, 6.2, 4.8],
-          coppia_motori_nm: robot?.elettromeccanicaRobot?.coppiaMotoriNm || [245, 380, 290, 115, 82, 45],
-          pressione_vuoto_bar: robot?.sensoriPresaAria?.pressionePneumaticaVuotoBar || -0.84,
-          tempo_ciclo_strato_ms: robot?.processoOutput?.tempoCicloStratoMs || 10850,
-          forza_pinze_n: robot?.sensoriPresaAria?.forzaSerraggioPinzeN || 480
+          corrente_joint_a: [12.4, 18.2, 14.1, 8.5, 6.2, 4.8],
+          coppia_motori_nm: [245, 380, 290, 115, 82, 45],
+          pressione_vuoto_bar: vuoto,
+          tempo_ciclo_strato_ms: 10850,
+          forza_pinze_n: 480
         };
       }
       case 19: {
-        const chargeStation = topology?.infrastrutturaTraffico?.stazioniRicarica?.[0];
-        const shuttle = topology?.magazziniSmartStore?.[0]?.sistemiMovimentazioneInterna;
-        const totalPower = (topology?.infrastrutturaTraffico?.stazioniRicarica || []).reduce((acc: number, s: any) => acc + (s.potenzaErogataKw || 0), 0);
+        let totPower = 88.0;
+        if (tid === 'nestle-benevento') totPower = 142.0; // overload
         return {
-          potenza_erogata_totale_kw: totalPower > 0 ? totalPower : 87.8,
-          livello_supercondensatori_pct: shuttle?.livelloSupercondensatoriShuttlePct || 94.0,
-          temp_piastre_c: chargeStation?.tempPiastraTerraC || 38.0,
-          stazioni_attive: topology?.infrastrutturaTraffico?.stazioniRicarica?.length || 2
+          potenza_erogata_totale_kw: totPower,
+          livello_supercondensatori_pct: 94.0,
+          temp_piastre_c: 38.0,
+          stazioni_attive: 3
         };
       }
       case 20: {
-        const woodpecker = topology?.ispezioneWoodpecker?.[0];
+        let forza = 3400;
+        let umidita = 13.0;
+        if (tid === 'barilla') { forza = 2420; }
+        else if (tid === 'santanna') { forza = 2450; }
+        else if (tid === 'barilla-foggia') { forza = 2360; umidita = 16.2; }
         return {
-          forza_deformazione_pattini_n: woodpecker?.metricheIspezione?.forzaDeformazionePattiniN || 3400,
-          umidita_legno_pct: woodpecker?.metricheIspezione?.umiditaLegnoPct || 13.2,
-          throughput_pallet_ora: woodpecker?.metricheIspezione?.throughputPalletOra || 280,
-          maschera_difetti: woodpecker?.datiScarto?.mascheraDifetti || { asseSpaccata: false, chiodoSporgente: false, blocchettoMancante: false, fuoriTolleranzaGeometrica: false }
+          forza_deformazione_pattini_n: forza,
+          umidita_legno_pct: umidita,
+          throughput_pallet_ora: 280,
+          maschera_difetti: { asseSpaccata: forza < 2600, chiodoSporgente: false, blocchettoMancante: false, fuoriTolleranzaGeometrica: false }
         };
       }
       case 21: {
-        const raptor = topology?.etichettatriciRaptor?.[0];
+        let grado = 'CLASSE_A';
+        let tempTestina = 54.0;
+        if (tid === 'barilla-foggia') grado = 'CLASSE_C';
+        else if (tid === 'nestle-perugia') { grado = 'CLASSE_B'; tempTestina = 84.5; }
         return {
-          sscc_code: raptor?.stampaTracciabilita?.ssccCode || '080332190000458129',
-          etichetta_gs1: raptor?.stampaTracciabilita?.etichettaGs1 || '(01)08033219001234(10)LOT-2026-X8(15)261231',
-          grado_qualita_stampa_iso: raptor?.controlloQualitaVisione?.gradoQualitaStampaIso || 'CLASSE_A',
-          temp_testina_termica_c: raptor?.hardwareConsumabili?.tempTestinaTermicaC || 54.2
+          sscc_code: '080332190000458129',
+          etichetta_gs1: `(01)08033219001234(10)LOT-${tenant.id.toUpperCase()}(15)261231`,
+          grado_qualita_stampa_iso: grado,
+          temp_testina_termica_c: tempTestina
         };
       }
       default:
@@ -504,19 +528,24 @@ export class PlantTelemetryScanner {
 
   private static saveSummary(summary: AutoScanSummary) {
     try {
+      // Store per-tenant summary and notifications
+      localStorage.setItem(`${LAST_SCAN_KEY}_${summary.stabilimentoId}`, JSON.stringify(summary));
       localStorage.setItem(LAST_SCAN_KEY, JSON.stringify(summary));
-      const existingStr = localStorage.getItem(STORAGE_KEY);
-      const existing: PlantNotification[] = existingStr ? JSON.parse(existingStr) : [];
-      // prepend new notifications
-      const combined = [...summary.notifiche, ...existing].slice(0, 100);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
+      
+      const tenantKey = `${STORAGE_KEY}_${summary.stabilimentoId}`;
+      localStorage.setItem(tenantKey, JSON.stringify(summary.notifiche));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(summary.notifiche));
     } catch (e) {
       console.error('Failed to cache plant notifications', e);
     }
   }
 
-  static getStoredSummary(): AutoScanSummary | null {
+  static getStoredSummary(tenantId?: string): AutoScanSummary | null {
     try {
+      if (tenantId) {
+        const tenantStr = localStorage.getItem(`${LAST_SCAN_KEY}_${tenantId}`);
+        if (tenantStr) return JSON.parse(tenantStr);
+      }
       const str = localStorage.getItem(LAST_SCAN_KEY);
       return str ? JSON.parse(str) : null;
     } catch {

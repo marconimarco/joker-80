@@ -15,7 +15,11 @@ import {
   CheckCircle2, 
   AlertCircle,
   Clock,
-  Sliders
+  Sliders,
+  HelpCircle,
+  Share2,
+  Network,
+  X
 } from 'lucide-react';
 
 interface Props {
@@ -43,6 +47,8 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
   const [results, setResults] = useState<Record<number, any>>({});
   const [executingId, setExecutingId] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [selectedCpuCalc, setSelectedCpuCalc] = useState<QuantumCalculationMeta | null>(null);
+  const [hoveredCalcId, setHoveredCalcId] = useState<number | null>(null);
 
   const filteredCalculations = QUANTUM_CALCULATIONS.filter(
     c => c.category === selectedCategory
@@ -81,16 +87,16 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Category Tabs */}
-      <div className="flex flex-wrap gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Category Tabs: Smooth touch-scroll on smartphones */}
+      <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar touch-pan-x flex-nowrap sm:flex-wrap">
         {CATEGORIES.map((cat) => {
           const isSelected = selectedCategory === cat;
           return (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`flex-1 min-w-[200px] px-4 py-2.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+              className={`shrink-0 sm:flex-1 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs font-mono font-semibold whitespace-nowrap min-h-[38px] transition-all cursor-pointer ${
                 isSelected
                   ? 'bg-cyan-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -103,7 +109,7 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
       </div>
 
       {/* Calculations Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {filteredCalculations.map((calc) => {
           const isLocked = calc.entanglement === 'OBBLIGATORIO';
           const inputs = formInputs[calc.id] || calc.defaultInputs;
@@ -113,7 +119,7 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
           return (
             <div 
               key={calc.id}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between space-y-5 hover:border-slate-700 transition-colors"
+              className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col justify-between space-y-4 sm:space-y-5 hover:border-slate-700 transition-colors"
             >
               {/* Header */}
               <div className="space-y-3">
@@ -142,9 +148,51 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
                     </span>
                   </div>
 
-                  <span className="text-xs font-mono text-slate-400">
-                    {calc.subFunction}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-slate-400">
+                      {calc.subFunction}
+                    </span>
+
+                    {/* Punto di domanda '?' per visualizzare la riga esatta di Telemetria CPU */}
+                    <div className="relative inline-block">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCpuCalc(calc)}
+                        onMouseEnter={() => setHoveredCalcId(calc.id)}
+                        onMouseLeave={() => setHoveredCalcId(null)}
+                        className="p-1 sm:p-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 hover:border-cyan-400 text-cyan-300 hover:text-white transition-all cursor-pointer shadow-sm group flex items-center gap-1"
+                        title="Visualizza telemetria CPU / specifiche tecniche complete del calcolo (Punto di domanda)"
+                      >
+                        <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                        <span className="text-[11px] font-mono font-bold text-cyan-400">?</span>
+                      </button>
+
+                      {/* Tooltip popup al passaggio del mouse */}
+                      {hoveredCalcId === calc.id && !selectedCpuCalc && (
+                        <div className="absolute z-50 right-0 top-full mt-2 w-72 sm:w-80 p-3 rounded-xl bg-slate-950/95 border border-cyan-500/60 shadow-2xl backdrop-blur-md text-left font-mono text-[11px] pointer-events-none animate-in fade-in zoom-in-95 space-y-2">
+                          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                            <span className="font-bold text-cyan-400 flex items-center gap-1">
+                              <Cpu className="w-3.5 h-3.5" />
+                              Telemetria CPU [{calc.id}]
+                            </span>
+                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${calc.isCrossCategory ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                              {calc.isCrossCategory ? '[+] INCROCIATO' : '[-] LOCALE'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-[10px] block font-semibold">Dati e Parametri Telemetria CPU:</span>
+                            <span className="text-slate-200 text-[10px] leading-snug">
+                              {calc.crossCategoryDetails?.parametersOrData || calc.description}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-800/80 flex items-center justify-between">
+                            <span>Target: <strong className="text-slate-300">{calc.hardwareTarget.split('/')[0]}</strong></span>
+                            <span className="text-cyan-400 font-bold">Clicca per dettagli completi</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {calc.isCrossCategory && calc.crossCategoryDetails && (
@@ -849,6 +897,141 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
           );
         })}
       </div>
+
+      {/* Modal Popup Punto di Domanda: Riga Esatta Telemetria CPU */}
+      {selectedCpuCalc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div 
+            className="w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100 font-mono"
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
+                  <Cpu className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">
+                      Telemetria CPU: Calcolo [{selectedCpuCalc.id}]
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      {selectedCpuCalc.technicalModule}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">{selectedCpuCalc.subFunction}</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedCpuCalc(null)}
+                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content Table / Specs */}
+            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              {/* Algorithm Name & Category */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+                  <span className="text-slate-400">Nome Algoritmo Quantistico:</span>
+                  <span className="text-white font-bold">{selectedCpuCalc.name}</span>
+                </div>
+                <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+                  <span className="text-slate-400">Categoria di Origine:</span>
+                  <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700 text-[11px]">
+                    {selectedCpuCalc.category}
+                  </span>
+                </div>
+              </div>
+
+              {/* Incrocio / Entanglement */}
+              <div className={`p-4 rounded-xl border ${
+                selectedCpuCalc.isCrossCategory
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+              }`}>
+                <div className="flex items-center gap-2 font-bold text-xs uppercase mb-2">
+                  <span>{selectedCpuCalc.entanglementSymbol}</span>
+                  <span>{selectedCpuCalc.isCrossCategory ? '[+] INCROCIO / ENTANGLEMENT OBBLIGATORIO' : '[-] ELABORAZIONE LOCALE AUTONOMA'}</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {selectedCpuCalc.isCrossCategory
+                    ? 'Questo calcolo intreccia i qubit e le variabili con altri moduli della fabbrica tramite Gate CNOT quantistici.'
+                    : 'Questo calcolo elabora parametri interni alla propria macchina o isola senza dipendenze inter-categoria.'}
+                </p>
+              </div>
+
+              {/* Dati e Parametri Incrociati o Usati */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-cyan-400" />
+                  <span>Dati e Parametri Incrociati o Usati</span>
+                </div>
+
+                {selectedCpuCalc.crossCategoryDetails ? (
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-slate-400 text-[11px] block">Incrociato con:</span>
+                      <span className="text-amber-300 font-bold">{selectedCpuCalc.crossCategoryDetails.crossedWith}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[11px] block">Flusso Dati & Specifiche CPU:</span>
+                      <span className="text-slate-200 leading-relaxed block bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                        {selectedCpuCalc.crossCategoryDetails.parametersOrData}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-300 bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                    {selectedCpuCalc.description}
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-slate-800/80 text-xs">
+                  <span className="text-slate-400 text-[11px] block">Parametri Input:</span>
+                  <code className="text-cyan-300 text-[11px]">{selectedCpuCalc.inputDescription}</code>
+                </div>
+              </div>
+
+              {/* Hardware Target */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-400">Target Hardware di Esecuzione:</span>
+                <span className="text-slate-200 font-bold">{selectedCpuCalc.hardwareTarget}</span>
+              </div>
+            </div>
+
+            {/* Footer with Circuit Action */}
+            <div className="px-5 py-3.5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setSelectedCpuCalc(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs cursor-pointer"
+              >
+                Chiudi
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const target = selectedCpuCalc;
+                  setSelectedCpuCalc(null);
+                  onOpenCircuit(target);
+                }}
+                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-cyan-600/30 cursor-pointer"
+              >
+                <Layers className="w-4 h-4" />
+                <span>Visualizza Circuito CUDA-Q</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -3,13 +3,15 @@ import { Header } from './components/Header';
 import { QuantumChatTerminal } from './components/QuantumChatTerminal';
 import { QuantumCatalog } from './components/QuantumCatalog';
 import { NotificationsView } from './components/NotificationsView';
-import { SystemSpecs } from './components/SystemSpecs';
+import { CompanyPlantSelectorModal } from './components/CompanyPlantSelectorModal';
 import { CircuitVisualizerModal } from './components/CircuitVisualizerModal';
 import { LoginModal } from './components/LoginModal';
 import { AdminControlPanel } from './components/AdminControlPanel';
 import { FactoryTenant, QuantumCalculationMeta, UserAccount } from './types/quantum';
 import { AuthStorage } from './services/authStorage';
 import { PlantTelemetryScanner, AutoScanSummary } from './services/plantTelemetryScanner';
+import { GeminiLiveVoice } from './components/GeminiLiveVoice';
+import { Terminal, LayoutGrid, Bell, Sliders } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => AuthStorage.getCurrentUser());
@@ -24,11 +26,15 @@ export default function App() {
     return all[0];
   });
 
-  const [allowPlcWrite, setAllowPlcWrite] = useState<boolean>(false);
-  const [activeView, setActiveView] = useState<'chat' | 'catalog' | 'notifications' | 'telemetry' | 'admin'>('chat');
+  const [activeView, setActiveView] = useState<'chat' | 'catalog' | 'notifications' | 'admin'>('chat');
+  const [isCompanyPlantSelectorOpen, setIsCompanyPlantSelectorOpen] = useState<boolean>(false);
 
   // Automatic plant telemetry scan state
-  const [scanSummary, setScanSummary] = useState<AutoScanSummary | null>(() => PlantTelemetryScanner.getStoredSummary());
+  const [scanSummary, setScanSummary] = useState<AutoScanSummary | null>(() => {
+    const all = AuthStorage.getTenants();
+    const firstTenant = all[0];
+    return PlantTelemetryScanner.getStoredSummary(firstTenant?.id);
+  });
   const [isScanning, setIsScanning] = useState<boolean>(false);
 
   // Circuit modal state
@@ -50,6 +56,11 @@ export default function App() {
 
   // Trigger automatic download and 21 calculations when user enters or activeTenant changes
   useEffect(() => {
+    // Immediately load cached summary for this tenant if available
+    const cached = PlantTelemetryScanner.getStoredSummary(activeTenant.id);
+    if (cached) {
+      setScanSummary(cached);
+    }
     if (currentUser && activeTenant) {
       runAutoTelemetryScan(activeTenant);
     }
@@ -102,40 +113,39 @@ export default function App() {
   // If not logged in, enforce authentication via LoginModal
   if (!currentUser) {
     return (
-      <div className="h-screen w-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 overflow-hidden selection:bg-cyan-500/30 selection:text-cyan-200">
+      <div className="h-[100dvh] min-h-[100dvh] w-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-3 sm:p-4 overflow-y-auto selection:bg-cyan-500/30 selection:text-cyan-200">
         <LoginModal onLoginSuccess={handleLoginSuccess} />
       </div>
     );
   }
 
+  const isAdmin = currentUser.ruolo === 'Amministratore';
+
   return (
-    <div className="h-screen w-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="h-full min-h-full w-full bg-slate-950 text-slate-100 flex flex-col overflow-hidden selection:bg-cyan-500/30 selection:text-cyan-200">
       {/* Top Application Header */}
       <Header
         tenants={tenants}
         activeTenant={activeTenant}
         onSelectTenant={(tenant) => {
-          if (currentUser.ruolo === 'Amministratore') {
-            setActiveTenant(tenant);
-            runAutoTelemetryScan(tenant);
-          }
+          setActiveTenant(tenant);
+          runAutoTelemetryScan(tenant);
         }}
         currentUser={currentUser}
         onLogout={handleLogout}
-        allowPlcWrite={allowPlcWrite}
-        onTogglePlcWrite={setAllowPlcWrite}
         activeView={activeView}
         onChangeView={setActiveView}
         anomaliesCount={scanSummary?.anomalieTrovate || 0}
         isScanning={isScanning}
+        onOpenCompanyPlantSelector={() => setIsCompanyPlantSelectorOpen(true)}
       />
 
       {/* Main Content View */}
-      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-4 py-2 flex flex-col overflow-hidden">
+      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-2 sm:px-4 py-1.5 sm:py-2 flex flex-col overflow-hidden">
         {activeView === 'chat' && (
           <QuantumChatTerminal
             onOpenCircuit={handleOpenCircuit}
-            allowPlcWrite={allowPlcWrite}
+            allowPlcWrite={false}
             activeTenantEndpoint={activeTenant.endpoint}
             activeTenantName={activeTenant.nome}
             userRole={currentUser.ruolo}
@@ -149,7 +159,7 @@ export default function App() {
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             <QuantumCatalog
               onOpenCircuit={handleOpenCircuit}
-              allowPlcWrite={allowPlcWrite}
+              allowPlcWrite={false}
             />
           </div>
         )}
@@ -164,15 +174,7 @@ export default function App() {
           />
         )}
 
-        {activeView === 'telemetry' && currentUser.ruolo === 'Amministratore' && (
-          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-            <SystemSpecs
-              onOpenCircuit={handleOpenCircuit}
-            />
-          </div>
-        )}
-
-        {activeView === 'admin' && currentUser.ruolo === 'Amministratore' && (
+        {activeView === 'admin' && isAdmin && (
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             <AdminControlPanel
               tenants={tenants}
@@ -185,6 +187,91 @@ export default function App() {
         )}
       </main>
 
+      {/* Gemini 3.8 Live with Voice Assistance - Voce Live in basso a destra */}
+      <GeminiLiveVoice
+        activeTenant={activeTenant}
+        userRole={currentUser.ruolo}
+        allowPlcWrite={false}
+        onChangeView={setActiveView}
+        onOpenCompanyPlantSelector={() => setIsCompanyPlantSelectorOpen(true)}
+      />
+
+      {/* Dedicated Company & Multi-Plant Selector Modal */}
+      <CompanyPlantSelectorModal
+        isOpen={isCompanyPlantSelectorOpen}
+        onClose={() => setIsCompanyPlantSelectorOpen(false)}
+        tenants={tenants}
+        activeTenant={activeTenant}
+        onSelectTenant={(selected) => {
+          setActiveTenant(selected);
+          runAutoTelemetryScan(selected);
+        }}
+      />
+
+      {/* Mobile Bottom Navigation Bar (Visible only on smartphones < 640px) */}
+      <nav aria-label="Navigazione Mobile" className="sm:hidden border-t border-slate-800 bg-slate-950/95 backdrop-blur-md px-1 py-1 flex items-center justify-around shrink-0 pb-safe z-30 shadow-lg">
+        <button
+          type="button"
+          onClick={() => setActiveView('chat')}
+          className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer min-h-[44px] ${
+            activeView === 'chat'
+              ? 'text-cyan-400 font-bold bg-cyan-500/10'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Terminal className="w-4 h-4 mb-0.5" />
+          <span>Chat</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveView('catalog')}
+          className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer min-h-[44px] ${
+            activeView === 'catalog'
+              ? 'text-cyan-400 font-bold bg-cyan-500/10'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <LayoutGrid className="w-4 h-4 mb-0.5" />
+          <span>Catalogo</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveView('notifications')}
+          className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer min-h-[44px] relative ${
+            activeView === 'notifications'
+              ? 'text-amber-400 font-bold bg-amber-500/10'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <div className="relative">
+            <Bell className={`w-4 h-4 mb-0.5 ${isScanning ? 'animate-spin text-amber-400' : ''}`} />
+            {(scanSummary?.anomalieTrovate || 0) > 0 && (
+              <span className="absolute -top-1 -right-2 px-1 py-0.2 rounded-full text-[8px] font-bold bg-rose-500 text-white animate-pulse">
+                {scanSummary?.anomalieTrovate}
+              </span>
+            )}
+          </div>
+          <span>Notifiche</span>
+        </button>
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveView('admin')}
+            className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer min-h-[44px] ${
+              activeView === 'admin'
+                ? 'text-purple-300 font-bold bg-purple-500/15'
+                : 'text-purple-400/80 hover:text-purple-300'
+            }`}
+          >
+            <Sliders className="w-4 h-4 mb-0.5" />
+            <span>Admin</span>
+          </button>
+        )}
+      </nav>
+
       {/* Modal for CUDA-Q Circuit Diagram */}
       <CircuitVisualizerModal
         calculation={selectedCircuitCalc}
@@ -192,8 +279,8 @@ export default function App() {
         onClose={handleCloseCircuit}
       />
 
-      {/* Footer status strip */}
-      <footer className="border-t border-slate-800/80 bg-slate-950 text-slate-500 text-[11px] py-1.5 px-4 font-mono flex flex-wrap items-center justify-between gap-1.5 shrink-0 overflow-hidden">
+      {/* Desktop Footer status strip */}
+      <footer className="hidden sm:flex border-t border-slate-800/80 bg-slate-950 text-slate-500 text-[11px] py-1.5 px-4 font-mono flex-wrap items-center justify-between gap-1.5 shrink-0 overflow-hidden">
         <div className="flex items-center gap-2.5 truncate">
           <span className="truncate">SM.I.LE80 Quantum Middleware v2026.2</span>
           <span className="text-slate-700">|</span>

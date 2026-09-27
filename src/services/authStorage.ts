@@ -80,22 +80,7 @@ export const INITIAL_USERS: UserAccount[] = [
 ];
 
 export const INITIAL_TENANTS: FactoryTenant[] = [
-  {
-    id: 'local',
-    nome: 'Hub Viano - Sede Centrale',
-    azienda: 'Elettric80 / SM.I.LE80',
-    numeroStabilimento: 1,
-    sito: 'Viano, Reggio Emilia (RE)',
-    endpoint: 'http://127.0.0.1:8080/api/v1',
-    plcIp: '192.168.1.100:502',
-    protocol: 'REST_HTTPS',
-    connectionStatus: 'CONNESSO',
-    qpuTarget: 'Simulatore GPU CUDA-Q (cuStateVec)',
-    logoColor: '#06b6d4',
-    plantTopology: TOPOLOGY_BARILLA,
-    operatoriAssegnati: ['op_barilla'],
-    createdAt: '2026-01-01'
-  },
+  // 1. BARILLA
   {
     id: 'barilla',
     nome: 'Barilla - Stabilimento Pedrignano',
@@ -113,6 +98,48 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     createdAt: '2026-01-15'
   },
   {
+    id: 'barilla-novara',
+    nome: 'Barilla - Stabilimento Novara',
+    azienda: 'Barilla G. e R. Fratelli',
+    numeroStabilimento: 2,
+    sito: 'Novara, Piemonte (NO)',
+    endpoint: 'https://barilla-novara.smile80.net/cudaq',
+    plcIp: '10.24.110.50:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'NVIDIA Grace Hopper GH200',
+    logoColor: '#2563eb',
+    plantTopology: {
+      ...TOPOLOGY_BARILLA,
+      qubitCapacity: 64,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: ['op_barilla'],
+    createdAt: '2026-01-20'
+  },
+  {
+    id: 'barilla-foggia',
+    nome: 'Barilla - Stabilimento Foggia',
+    azienda: 'Barilla G. e R. Fratelli',
+    numeroStabilimento: 3,
+    sito: 'Foggia, Puglia (FG)',
+    endpoint: 'https://barilla-foggia.smile80.net/cudaq',
+    plcIp: '10.24.120.50:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'Simulatore CUDA-Q TensorNet',
+    logoColor: '#1d4ed8',
+    plantTopology: {
+      ...TOPOLOGY_BARILLA,
+      qubitCapacity: 48,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: ['op_barilla'],
+    createdAt: '2026-02-05'
+  },
+
+  // 2. NESTLÉ
+  {
     id: 'nestle',
     nome: 'Nestlé - Stabilimento Assago',
     azienda: 'Nestlé Italiana',
@@ -129,6 +156,48 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     createdAt: '2026-02-01'
   },
   {
+    id: 'nestle-benevento',
+    nome: 'Nestlé - Stabilimento Benevento',
+    azienda: 'Nestlé Italiana',
+    numeroStabilimento: 2,
+    sito: 'Benevento, Campania (BN)',
+    endpoint: 'https://nestle-benevento.smile80.net/cudaq',
+    plcIp: '172.18.30.10:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'CUDA-Q Hybrid Grace Hopper',
+    logoColor: '#dc2626',
+    plantTopology: {
+      ...TOPOLOGY_NESTLE,
+      qubitCapacity: 64,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: ['op_nestle'],
+    createdAt: '2026-02-12'
+  },
+  {
+    id: 'nestle-perugia',
+    nome: 'Nestlé - Stabilimento San Sisto (Perugia)',
+    azienda: 'Nestlé Italiana',
+    numeroStabilimento: 3,
+    sito: 'San Sisto, Perugia (PG)',
+    endpoint: 'https://nestle-perugia.smile80.net/cudaq',
+    plcIp: '172.18.40.10:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'Quantum Edge QPU Perugina',
+    logoColor: '#b91c1c',
+    plantTopology: {
+      ...TOPOLOGY_NESTLE,
+      qubitCapacity: 56,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: ['op_nestle'],
+    createdAt: '2026-02-18'
+  },
+
+  // 3. ACQUA SANT'ANNA
+  {
     id: 'santanna',
     nome: 'Acqua Sant\'Anna - Stabilimento Vinadio',
     azienda: 'Acqua Sant\'Anna',
@@ -143,6 +212,106 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     plantTopology: TOPOLOGY_SANTANNA,
     operatoriAssegnati: ['op_santanna'],
     createdAt: '2026-02-10'
+  },
+  {
+    id: 'santanna-lanzo',
+    nome: 'Acqua Sant\'Anna - Stabilimento Valli di Lanzo',
+    azienda: 'Acqua Sant\'Anna',
+    numeroStabilimento: 2,
+    sito: 'Lanzo Torinese, Torino (TO)',
+    endpoint: 'https://santanna-lanzo.smile80.net/cudaq',
+    plcIp: '192.168.55.80:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'QPU D-Wave Advantage 5000Q',
+    logoColor: '#059669',
+    plantTopology: {
+      ...TOPOLOGY_SANTANNA,
+      qubitCapacity: 64,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: ['op_santanna'],
+    createdAt: '2026-02-22'
+  },
+
+  // 4. GRANAROLO GROUP
+  {
+    id: 'granarolo-bologna',
+    nome: 'Granarolo - Stabilimento Cadriano (Bologna)',
+    azienda: 'Granarolo Group',
+    numeroStabilimento: 1,
+    sito: 'Cadriano di Granarolo, Bologna (BO)',
+    endpoint: 'https://granarolo-bologna.smile80.net/cudaq',
+    plcIp: '10.50.10.15:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'QPU Cold-Atom / CUDA-Q MPI',
+    logoColor: '#0ea5e9',
+    plantTopology: {
+      ...TOPOLOGY_BARILLA,
+      qubitCapacity: 72,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: [],
+    createdAt: '2026-02-25'
+  },
+  {
+    id: 'granarolo-pasturana',
+    nome: 'Granarolo - Stabilimento Pasturana',
+    azienda: 'Granarolo Group',
+    numeroStabilimento: 2,
+    sito: 'Pasturana, Alessandria (AL)',
+    endpoint: 'https://granarolo-pasturana.smile80.net/cudaq',
+    plcIp: '10.50.20.15:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'Simulatore Quantum cuStateVec',
+    logoColor: '#0284c7',
+    plantTopology: {
+      ...TOPOLOGY_BARILLA,
+      qubitCapacity: 48,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: [],
+    createdAt: '2026-02-28'
+  },
+
+  // 5. ELETTRIC80 / SM.I.LE80 HQ & LABS
+  {
+    id: 'local',
+    nome: 'Hub Viano - Sede Centrale R&D',
+    azienda: 'Elettric80 / SM.I.LE80',
+    numeroStabilimento: 1,
+    sito: 'Viano, Reggio Emilia (RE)',
+    endpoint: 'http://127.0.0.1:8080/api/v1',
+    plcIp: '192.168.1.100:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'Simulatore GPU CUDA-Q (cuStateVec)',
+    logoColor: '#06b6d4',
+    plantTopology: TOPOLOGY_BARILLA,
+    operatoriAssegnati: ['op_barilla'],
+    createdAt: '2026-01-01'
+  },
+  {
+    id: 'e80-bema-dolo',
+    nome: 'Hub Bema - Centro Robotica Silkworm',
+    azienda: 'Elettric80 / SM.I.LE80',
+    numeroStabilimento: 2,
+    sito: 'Dolo, Venezia (VE)',
+    endpoint: 'https://bema-dolo.smile80.net/cudaq',
+    plcIp: '192.168.20.100:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'NVIDIA GH200 QPU Accelerator',
+    logoColor: '#14b8a6',
+    plantTopology: {
+      ...TOPOLOGY_BARILLA,
+      qubitCapacity: 96,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: [],
+    createdAt: '2026-01-10'
   }
 ];
 
@@ -219,18 +388,40 @@ export const AuthStorage = {
       const saved = localStorage.getItem(STORAGE_KEY_TENANTS);
       if (saved) {
         const parsed: FactoryTenant[] = JSON.parse(saved);
-        // Ensure all stored tenants have topologies and connectionStatus
+        const existingIds = new Set(parsed.map(t => t.id));
         let modified = false;
-        const enriched = parsed.map(t => {
-          if (!t.plantTopology) {
+
+        for (const initTenant of INITIAL_TENANTS) {
+          if (!existingIds.has(initTenant.id)) {
+            parsed.push(initTenant);
             modified = true;
-            if (t.id === 'barilla') return { ...t, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_BARILLA };
-            if (t.id === 'nestle') return { ...t, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_NESTLE };
-            if (t.id === 'santanna') return { ...t, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_SANTANNA };
-            return { ...t, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_BARILLA };
           }
-          return t;
+        }
+
+        // Ensure all stored tenants have topologies, azienda and connectionStatus
+        const enriched = parsed.map(t => {
+          const matchInit = INITIAL_TENANTS.find(it => it.id === t.id);
+          let item = { ...t };
+          if (matchInit) {
+            if (!item.azienda && matchInit.azienda) {
+              item.azienda = matchInit.azienda;
+              modified = true;
+            }
+            if (!item.numeroStabilimento && matchInit.numeroStabilimento) {
+              item.numeroStabilimento = matchInit.numeroStabilimento;
+              modified = true;
+            }
+          }
+          if (!item.plantTopology) {
+            modified = true;
+            if (item.id.includes('barilla')) item = { ...item, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_BARILLA };
+            else if (item.id.includes('nestle')) item = { ...item, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_NESTLE };
+            else if (item.id.includes('santanna')) item = { ...item, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_SANTANNA };
+            else item = { ...item, protocol: 'REST_HTTPS' as const, connectionStatus: 'CONNESSO' as const, plantTopology: TOPOLOGY_BARILLA };
+          }
+          return item;
         });
+
         if (modified) {
           localStorage.setItem(STORAGE_KEY_TENANTS, JSON.stringify(enriched));
         }
