@@ -33,6 +33,8 @@ interface Props {
   activeTenant?: FactoryTenant;
   anomaliesCount?: number;
   onNavigateToNotifications?: () => void;
+  voiceQueryToExecute?: string | null;
+  onVoiceQueryHandled?: () => void;
 }
 
 interface PresetScenario {
@@ -360,7 +362,9 @@ export const QuantumChatTerminal: React.FC<Props> = ({
   activeTenantName,
   activeTenant,
   anomaliesCount = 0,
-  onNavigateToNotifications
+  onNavigateToNotifications,
+  voiceQueryToExecute,
+  onVoiceQueryHandled
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -507,6 +511,14 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
     setDispatchedPlcId(msgId);
     setTimeout(() => setDispatchedPlcId(null), 3000);
   };
+
+  // Handle voice query execution dispatched hands-free from GeminiLiveVoice
+  useEffect(() => {
+    if (voiceQueryToExecute && voiceQueryToExecute.trim()) {
+      handleSend(voiceQueryToExecute);
+      onVoiceQueryHandled?.();
+    }
+  }, [voiceQueryToExecute]);
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
@@ -700,9 +712,13 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
               </div>
 
               {/* Dropdown Footer */}
-              <div className="px-3 py-1.5 bg-slate-900/80 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                <span>🔒 Entanglement Obbligatorio | 🔓 Facoltativo</span>
-                <span className="text-cyan-400">Clicca per simulare</span>
+              <div className="px-3 py-2 bg-slate-900/90 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] font-mono text-slate-400">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-amber-400 font-semibold">🔒 Chiuso: Entanglement Obbligatorio (CNOT, dati incrociati)</span>
+                  <span className="text-slate-600">|</span>
+                  <span className="text-slate-300">🔓 Aperto: Calcolo Locale / Indipendente</span>
+                </div>
+                <span className="text-cyan-400 font-bold shrink-0">Clicca per simulare</span>
               </div>
             </div>
           )}

@@ -41,6 +41,9 @@ export default function App() {
   const [selectedCircuitCalc, setSelectedCircuitCalc] = useState<QuantumCalculationMeta | null>(null);
   const [selectedCircuitState, setSelectedCircuitState] = useState<string | undefined>(undefined);
 
+  // Voice command execution state dispatched from GeminiLiveVoice
+  const [voiceQueryToExecute, setVoiceQueryToExecute] = useState<string | null>(null);
+
   // Function to execute the auto-upload of plant data and run all 21 quantum calculations
   const runAutoTelemetryScan = useCallback(async (tenant: FactoryTenant) => {
     setIsScanning(true);
@@ -54,17 +57,30 @@ export default function App() {
     }
   }, []);
 
-  // Trigger automatic download and 21 calculations when user enters or activeTenant changes
-  useEffect(() => {
-    // Immediately load cached summary for this tenant if available
-    const cached = PlantTelemetryScanner.getStoredSummary(activeTenant.id);
-    if (cached) {
+  // Safe handler to select tenant, clear obsolete summaries immediately and trigger scan
+  const handleSelectTenant = useCallback((tenant: FactoryTenant) => {
+    setActiveTenant(tenant);
+    setIsCompanyPlantSelectorOpen(false);
+    const cached = PlantTelemetryScanner.getStoredSummary(tenant.id);
+    if (cached && cached.stabilimentoId === tenant.id) {
       setScanSummary(cached);
+    } else {
+      setScanSummary(null);
     }
-    if (currentUser && activeTenant) {
-      runAutoTelemetryScan(activeTenant);
+    runAutoTelemetryScan(tenant);
+  }, [runAutoTelemetryScan]);
+
+  // Trigger automatic download and 21 calculations when activeTenant changes
+  useEffect(() => {
+    // Immediately load cached summary for this specific tenant if available
+    const cached = PlantTelemetryScanner.getStoredSummary(activeTenant.id);
+    if (cached && cached.stabilimentoId === activeTenant.id) {
+      setScanSummary(cached);
+    } else {
+      setScanSummary(null);
     }
-  }, [currentUser?.id, activeTenant.id, runAutoTelemetryScan]);
+    runAutoTelemetryScan(activeTenant);
+  }, [activeTenant.id, runAutoTelemetryScan]);
 
   // Sync active tenant if user changes or tenants list updates
   useEffect(() => {
@@ -127,15 +143,12 @@ export default function App() {
       <Header
         tenants={tenants}
         activeTenant={activeTenant}
-        onSelectTenant={(tenant) => {
-          setActiveTenant(tenant);
-          runAutoTelemetryScan(tenant);
-        }}
+        onSelectTenant={handleSelectTenant}
         currentUser={currentUser}
         onLogout={handleLogout}
         activeView={activeView}
         onChangeView={setActiveView}
-        anomaliesCount={scanSummary?.anomalieTrovate || 0}
+        anomaliesCount={scanSummary && scanSummary.stabilimentoId === activeTenant.id ? scanSummary.anomalieTrovate : 0}
         isScanning={isScanning}
         onOpenCompanyPlantSelector={() => setIsCompanyPlantSelectorOpen(true)}
       />
@@ -150,8 +163,10 @@ export default function App() {
             activeTenantName={activeTenant.nome}
             userRole={currentUser.ruolo}
             activeTenant={activeTenant}
-            anomaliesCount={scanSummary?.anomalieTrovate || 0}
+            anomaliesCount={scanSummary && scanSummary.stabilimentoId === activeTenant.id ? scanSummary.anomalieTrovate : 0}
             onNavigateToNotifications={() => setActiveView('notifications')}
+            voiceQueryToExecute={voiceQueryToExecute}
+            onVoiceQueryHandled={() => setVoiceQueryToExecute(null)}
           />
         )}
 
@@ -166,7 +181,7 @@ export default function App() {
 
         {activeView === 'notifications' && (
           <NotificationsView
-            summary={scanSummary}
+            summary={scanSummary && scanSummary.stabilimentoId === activeTenant.id ? scanSummary : null}
             isScanning={isScanning}
             onRefreshScan={() => runAutoTelemetryScan(activeTenant)}
             activeTenant={activeTenant}
@@ -180,7 +195,7 @@ export default function App() {
               tenants={tenants}
               onUpdateTenants={(updated) => setTenants(updated)}
               activeTenant={activeTenant}
-              onSelectTenant={setActiveTenant}
+              onSelectTenant={handleSelectTenant}
               currentUser={currentUser}
             />
           </div>
@@ -190,10 +205,18 @@ export default function App() {
       {/* Gemini 3.8 Live with Voice Assistance - Voce Live in basso a destra */}
       <GeminiLiveVoice
         activeTenant={activeTenant}
+        tenants={tenants}
         userRole={currentUser.ruolo}
         allowPlcWrite={false}
         onChangeView={setActiveView}
         onOpenCompanyPlantSelector={() => setIsCompanyPlantSelectorOpen(true)}
+        onSelectTenant={handleSelectTenant}
+        onExecuteVoiceQuery={(query) => {
+          setActiveView('chat');
+          setVoiceQueryToExecute(query);
+        }}
+        onOpenCircuit={handleOpenCircuit}
+        onRefreshScan={() => runAutoTelemetryScan(activeTenant)}
       />
 
       {/* Dedicated Company & Multi-Plant Selector Modal */}
@@ -202,10 +225,7 @@ export default function App() {
         onClose={() => setIsCompanyPlantSelectorOpen(false)}
         tenants={tenants}
         activeTenant={activeTenant}
-        onSelectTenant={(selected) => {
-          setActiveTenant(selected);
-          runAutoTelemetryScan(selected);
-        }}
+        onSelectTenant={handleSelectTenant}
       />
 
       {/* Mobile Bottom Navigation Bar (Visible only on smartphones < 640px) */}

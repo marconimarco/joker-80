@@ -345,7 +345,11 @@ export class AvatarVoiceService {
   static stopListening(): void {
     if (this.recognition) {
       try {
+        this.recognition.onend = null;
+        this.recognition.onerror = null;
+        this.recognition.onresult = null;
         this.recognition.stop();
+        this.recognition.abort();
       } catch (_) {}
       this.recognition = null;
     }
@@ -369,6 +373,7 @@ export class AvatarVoiceService {
     }
 
     try {
+      this.stopListening();
       this.stopSpeaking();
       window.speechSynthesis.cancel();
 

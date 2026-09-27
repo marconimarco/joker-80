@@ -395,6 +395,32 @@ export class PlantTelemetryScanner {
       }
     }
 
+    if (calcId === 4) {
+      if (inputs.umidita_rilevata > 14.5) {
+        return {
+          livelloAllarme: 'ATTENZIONE',
+          titolo: 'Umidità Eccessiva Materie Prime (Grano/Impasti)',
+          dettaglio: `Sensore silos rileva umidità al ${inputs.umidita_rilevata}% (soglia max 14.0%). Rischio alterazione viscosità impasto e agglomerazione prodotto.`,
+          parametro: 'umidita_rilevata',
+          valore: `${inputs.umidita_rilevata}%`,
+          azione: 'Attivare ricircolo deumidificatore silos e deviare lotto a linea secondaria.'
+        };
+      }
+    }
+
+    if (calcId === 6) {
+      if (inputs.celle_libere_3d < 25) {
+        return {
+          livelloAllarme: 'ATTENZIONE',
+          titolo: 'Saturazione Celle Magazzino Automatico SmartStore',
+          dettaglio: `Rilevate solo ${inputs.celle_libere_3d} celle libere disponibili per stoccaggio ad alta rotazione. Rischio saturazione imminente.`,
+          parametro: 'celle_libere_3d',
+          valore: `${inputs.celle_libere_3d} celle`,
+          azione: 'Avviare riallocazione predittiva dei colli verso il magazzino polmone secondario.'
+        };
+      }
+    }
+
     if (calcId === 7) {
       if (inputs.micro_inclinazione > 0.40 || res.codice_stato_struttura === 333) {
         return {
@@ -404,6 +430,19 @@ export class PlantTelemetryScanner {
           parametro: 'micro_inclinazione',
           valore: `${inputs.micro_inclinazione}°`,
           azione: res.azione_sicurezza_wms || 'Bloccare trasloelevatore corsia 2 per ispezione meccanica.'
+        };
+      }
+    }
+
+    if (calcId === 9) {
+      if (inputs.coefficiente_traffico > 0.75) {
+        return {
+          livelloAllarme: 'ATTENZIONE',
+          titolo: 'Congestione Traffico Flotta Navette LGV',
+          dettaglio: `Coefficiente di traffico all'${Math.round(inputs.coefficiente_traffico * 100)}% con ${inputs.ordini_in_coda} ordini in coda. Tempo medio attesa navetta +35%.`,
+          parametro: 'coefficiente_traffico / ordini',
+          valore: `${Math.round(inputs.coefficiente_traffico * 100)}% | ${inputs.ordini_in_coda} ordini`,
+          azione: 'Ribilanciare nodi di transito LGV e dare priorità alle baie di pallettizzazione veloci.'
         };
       }
     }
@@ -443,6 +482,21 @@ export class PlantTelemetryScanner {
           parametro: 'tensione_newton',
           valore: `${inputs.tensione_newton} N`,
           azione: res.azione_correttiva_plc || 'Inviare comando PLC di decelerazione pre-stiro film (-15%).'
+        };
+      }
+    }
+
+    if (calcId === 16) {
+      const coordValues = Object.values(inputs.coordinate_agv_attivi || {});
+      const hasConflict = coordValues.length > 1 && new Set(coordValues).size < coordValues.length;
+      if (hasConflict) {
+        return {
+          livelloAllarme: 'CRITICO',
+          titolo: 'Rischio Collisione / Deadlock Incrocio Navette LGV',
+          dettaglio: `Rilevate due navette LGV in convergenza sullo stesso nodo critico. Rischio stallo o collisione intercettato dal circuito QAOA.`,
+          parametro: 'coordinate_agv_attivi',
+          valore: 'Conflitto Nodo N-04',
+          azione: 'Fermare temporaneamente LGV_02 e assegnare diritto di precedenza ad alta priorità a LGV_01.'
         };
       }
     }
