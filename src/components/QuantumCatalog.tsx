@@ -25,6 +25,8 @@ import {
 interface Props {
   onOpenCircuit: (calc: QuantumCalculationMeta, state?: string) => void;
   allowPlcWrite: boolean;
+  targetInspectCalcId?: number | null;
+  onClearInspectTarget?: () => void;
 }
 
 const CATEGORIES: MacroCategory[] = [
@@ -34,7 +36,12 @@ const CATEGORIES: MacroCategory[] = [
   '4. IoT & Controllo Macchine'
 ];
 
-export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }) => {
+export const QuantumCatalog: React.FC<Props> = ({ 
+  onOpenCircuit, 
+  allowPlcWrite,
+  targetInspectCalcId,
+  onClearInspectTarget
+}) => {
   const [selectedCategory, setSelectedCategory] = useState<MacroCategory>('1. Inbound & Materie Prime');
   const [formInputs, setFormInputs] = useState<Record<number, Record<string, any>>>(() => {
     const initial: Record<number, Record<string, any>> = {};
@@ -49,6 +56,18 @@ export const QuantumCatalog: React.FC<Props> = ({ onOpenCircuit, allowPlcWrite }
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [selectedCpuCalc, setSelectedCpuCalc] = useState<QuantumCalculationMeta | null>(null);
   const [hoveredCalcId, setHoveredCalcId] = useState<number | null>(null);
+
+  // When instructed via voice or navigation to inspect a calculation:
+  React.useEffect(() => {
+    if (targetInspectCalcId) {
+      const target = QUANTUM_CALCULATIONS.find(c => c.id === targetInspectCalcId);
+      if (target) {
+        setSelectedCategory(target.category);
+        setSelectedCpuCalc(target);
+        onClearInspectTarget?.();
+      }
+    }
+  }, [targetInspectCalcId, onClearInspectTarget]);
 
   const filteredCalculations = QUANTUM_CALCULATIONS.filter(
     c => c.category === selectedCategory

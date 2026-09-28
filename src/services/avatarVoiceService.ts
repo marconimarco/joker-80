@@ -273,7 +273,7 @@ export class AvatarVoiceService {
       const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       this.recognition = new SpeechRecognitionClass();
       this.recognition.lang = langCode;
-      this.recognition.continuous = true;
+      this.recognition.continuous = false;
       this.recognition.interimResults = true;
       this.recognition.maxAlternatives = 1;
 
@@ -285,7 +285,7 @@ export class AvatarVoiceService {
         let interimTranscript = '';
         let finalTranscript = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
+        for (let i = 0; i < event.results.length; ++i) {
           const item = event.results[i];
           if (item.isFinal) {
             finalTranscript += item[0].transcript;

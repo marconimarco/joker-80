@@ -3,23 +3,19 @@ import {
   Play, 
   Square, 
   Mic, 
-  MicOff, 
-  Radio, 
-  Sparkles, 
   Volume2, 
   VolumeX, 
   Bot, 
   Layers, 
-  CheckCircle2,
-  X,
-  Compass,
-  ArrowRight,
-  Send,
-  HelpCircle,
-  Cpu,
-  Building2,
-  Bell,
-  Terminal
+  X, 
+  Send, 
+  HelpCircle, 
+  Cpu, 
+  Building2, 
+  Bell, 
+  Terminal,
+  BookOpen,
+  Sparkles
 } from 'lucide-react';
 import { FactoryTenant, QuantumCalculationMeta } from '../types/quantum';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
@@ -32,9 +28,12 @@ interface GeminiLiveVoiceProps {
   allowPlcWrite?: boolean;
   onChangeView?: (view: 'chat' | 'catalog' | 'notifications' | 'admin') => void;
   onOpenCompanyPlantSelector?: () => void;
+  onCloseAllModals?: () => void;
   onSelectTenant?: (tenant: FactoryTenant) => void;
   onExecuteVoiceQuery?: (query: string) => void;
   onOpenCircuit?: (calc: QuantumCalculationMeta) => void;
+  onInspectCalculation?: (calc: QuantumCalculationMeta) => void;
+  onOpenScenari?: () => void;
   onRefreshScan?: () => void;
 }
 
@@ -44,9 +43,12 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
   userRole,
   onChangeView,
   onOpenCompanyPlantSelector,
+  onCloseAllModals,
   onSelectTenant,
   onExecuteVoiceQuery,
   onOpenCircuit,
+  onInspectCalculation,
+  onOpenScenari,
   onRefreshScan
 }) => {
   const [isActive, setIsActive] = useState<boolean>(false);
@@ -61,13 +63,16 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [audioLevel, setAudioLevel] = useState<number>(0);
 
-  // Keep a ref to isActive and isSpeaking to avoid stale state in async callbacks
+  // References to avoid stale state in asynchronous browser speech events
   const isActiveRef = useRef<boolean>(false);
   isActiveRef.current = isActive;
   const isSpeakingRef = useRef<boolean>(false);
   isSpeakingRef.current = isSpeaking;
+  const pendingTranscriptRef = useRef<string>('');
+  const silenceDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const speechWatchdogTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Visual audio pulse
+  // Visual audio pulse when listening or speaking
   useEffect(() => {
     if (isListening || isSpeaking) {
       const interval = setInterval(() => {
@@ -82,6 +87,8 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
   // Clean up voice on unmount or tenant switch
   useEffect(() => {
     return () => {
+      if (silenceDebounceTimerRef.current) clearTimeout(silenceDebounceTimerRef.current);
+      if (speechWatchdogTimerRef.current) clearTimeout(speechWatchdogTimerRef.current);
       AvatarVoiceService.stopListening();
       AvatarVoiceService.stopSpeaking();
     };
@@ -99,34 +106,64 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     AvatarVoiceService.startListening(
       'it-IT',
       (text: string, isFinal: boolean) => {
-        setTranscript(text);
-        if (isFinal && text.trim().length > 1) {
-          // Immediately stop recognition before processing and answering
+        const clean = text.trim();
+        setTranscript(clean);
+        pendingTranscriptRef.current = clean;
+
+        if (silenceDebounceTimerRef.current) {
+          clearTimeout(silenceDebounceTimerRef.current);
+          silenceDebounceTimerRef.current = null;
+        }
+
+        if (isFinal && clean.length > 1) {
+          // Final sentence detected by Web Speech API
+          pendingTranscriptRef.current = '';
           AvatarVoiceService.stopListening();
           setIsListening(false);
-          setLastRecognizedCommand(text.trim());
-          handleVoiceCommand(text.trim());
+          setLastRecognizedCommand(clean);
+          handleVoiceCommand(clean);
+        } else if (clean.length > 1) {
+          // Silence debounce: If speaker paused for 750ms, commit interim transcript
+          silenceDebounceTimerRef.current = setTimeout(() => {
+            const pending = pendingTranscriptRef.current;
+            if (pending && pending.length > 1 && !isSpeakingRef.current) {
+              pendingTranscriptRef.current = '';
+              AvatarVoiceService.stopListening();
+              setIsListening(false);
+              setLastRecognizedCommand(pending);
+              handleVoiceCommand(pending);
+            }
+          }, 750);
         }
       },
       (error: any) => {
-        console.warn('[GeminiLiveVoice] Listening note:', error);
         setIsListening(false);
         if (isActiveRef.current && !isSpeakingRef.current) {
           setTimeout(() => {
             if (isActiveRef.current && !isSpeakingRef.current) {
               startListeningLoop();
             }
-          }, 800);
+          }, 600);
         }
       },
       () => {
         setIsListening(false);
+        // If onend fired and we still had an uncommitted utterance, process it immediately
+        if (pendingTranscriptRef.current && pendingTranscriptRef.current.length > 1 && !isSpeakingRef.current) {
+          const pending = pendingTranscriptRef.current;
+          pendingTranscriptRef.current = '';
+          setLastRecognizedCommand(pending);
+          handleVoiceCommand(pending);
+          return;
+        }
+
+        // Restart listening loop if still active
         if (isActiveRef.current && !isSpeakingRef.current) {
           setTimeout(() => {
             if (isActiveRef.current && !isSpeakingRef.current) {
               startListeningLoop();
             }
-          }, 400);
+          }, 350);
         }
       }
     ).catch(err => {
@@ -143,11 +180,10 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     setStatusMessage(replyText);
 
     if (isMuted) {
-      // If muted, resume listening shortly
       if (isActiveRef.current) {
         setTimeout(() => {
           if (isActiveRef.current) startListeningLoop();
-        }, 1000);
+        }, 1200);
       }
       return;
     }
@@ -155,6 +191,16 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     setIsSpeaking(true);
     isSpeakingRef.current = true;
     AvatarVoiceService.stopListening();
+
+    // Watchdog timer: prevent speech hanging forever if browser fails to fire onend
+    if (speechWatchdogTimerRef.current) clearTimeout(speechWatchdogTimerRef.current);
+    speechWatchdogTimerRef.current = setTimeout(() => {
+      if (isSpeakingRef.current) {
+        setIsSpeaking(false);
+        isSpeakingRef.current = false;
+        if (isActiveRef.current) startListeningLoop();
+      }
+    }, 9000);
 
     AvatarVoiceService.speak(
       replyText,
@@ -165,9 +211,9 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
         isSpeakingRef.current = true;
       },
       () => {
+        if (speechWatchdogTimerRef.current) clearTimeout(speechWatchdogTimerRef.current);
         setIsSpeaking(false);
         isSpeakingRef.current = false;
-        // Resume listening automatically if still active
         if (isActiveRef.current) {
           setTimeout(() => {
             if (isActiveRef.current) {
@@ -180,32 +226,52 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
   }, [isMuted, startListeningLoop]);
 
   /**
-   * Process and execute user voice commands across the entire application
+   * Process and execute user voice commands across the entire application hands-free!
    */
   const handleVoiceCommand = useCallback((rawText: string) => {
     const text = rawText.toLowerCase().trim();
     let reply = '';
 
-    // 1. QUESTION ABOUT THE LOCKS (Lucchetto Aperto e Lucchetto Chiuso)
+    // ==========================================
+    // 1. CLOSE ALL MODALS / CANCEL / BACK
+    // ==========================================
     if (
-      text.includes('lucchetto') || 
-      text.includes('lucchetti') || 
-      text.includes('chiave') ||
-      text.includes('aperto e chiuso')
+      text.includes('chiudi') || 
+      text.includes('esci') || 
+      text.includes('annulla') || 
+      text.includes('torna indietro') ||
+      text.includes('nascondi')
     ) {
-      reply = `Ti spiego i lucchetti: il lucchetto chiuso indica l'Entanglement Quantistico Obbligatorio tra variabili interconnesse, come camion e saturazione magazzino, che usano porte CNOT. Il lucchetto aperto indica invece un calcolo locale o facoltativo, che opera su una singola variabile o nodo indipendente.`;
+      onCloseAllModals?.();
+      reply = `Ho chiuso la finestra attiva.`;
       speakReply(reply);
       return;
     }
 
-    // 2. SWITCH PLANT DIRECTLY BY VOICE
+    // ==========================================
+    // 2. QUESTION ABOUT THE LOCKS (Lucchetto Aperto e Lucchetto Chiuso)
+    // ==========================================
+    if (
+      text.includes('lucchetto') || 
+      text.includes('lucchetti') || 
+      text.includes('chiave') ||
+      text.includes('aperto e chiuso') ||
+      text.includes('perché il lucchetto')
+    ) {
+      reply = `I lucchetti indicano il tipo di circuito: il lucchetto chiuso segnala l'Entanglement Quantistico Obbligatorio con porte CNOT tra variabili industriali dipendenti, come camion e magazzino. Il lucchetto aperto indica invece un calcolo locale o facoltativo, che elabora un singolo nodo o variabile indipendente.`;
+      speakReply(reply);
+      return;
+    }
+
+    // ==========================================
+    // 3. SWITCH PLANT DIRECTLY BY VOICE
+    // ==========================================
     const foundTenant = tenants.find(t => {
       const tName = t.nome.toLowerCase();
       const tAzienda = (t.azienda || '').toLowerCase();
       const tSito = (t.sito || '').toLowerCase();
       const tId = t.id.toLowerCase();
 
-      // Check if command explicitly mentions plant or city or company
       if (text.includes(tId)) return true;
       if (text.includes('novara') && tId.includes('novara')) return true;
       if (text.includes('foggia') && tId.includes('foggia')) return true;
@@ -220,7 +286,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
       if (text.includes('viano') && tId === 'elettric80') return true;
       if (text.includes('dolo') && tId.includes('dolo')) return true;
 
-      // Or company mention
+      // Brand mentions
       if (text.includes('barilla') && !text.includes('novara') && !text.includes('foggia') && tId === 'barilla') return true;
       if (text.includes('nestle') && !text.includes('benevento') && !text.includes('perugia') && tId === 'nestle') return true;
       if (text.includes("sant'anna") && !text.includes('lanzo') && tId === 'santanna') return true;
@@ -230,110 +296,220 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
       return false;
     });
 
-    if (foundTenant && (text.includes('passa') || text.includes('metti') || text.includes('vai a') || text.includes('seleziona') || text.includes('apri') || text.includes('cambia'))) {
+    if (
+      foundTenant && 
+      (text.includes('passa') || text.includes('metti') || text.includes('vai a') || text.includes('seleziona') || text.includes('apri') || text.includes('cambia') || text.includes('imposta'))
+    ) {
       onSelectTenant?.(foundTenant);
-      reply = `Impianto selezionato: ${foundTenant.nome}. Ho ricaricato i dati di fabbrica e aggiornato istantaneamente le notifiche per questo stabilimento.`;
+      reply = `Impianto selezionato: ${foundTenant.nome}. Dati di fabbrica ricaricati e notifiche sincronizzate per questo sito.`;
       speakReply(reply);
       return;
     }
 
-    // 3. OPEN COMPANY / PLANT SELECTOR MODAL
+    // ==========================================
+    // 4. OPEN COMPANY & MULTI-PLANT SELECTOR MODAL
+    // ==========================================
     if (
       text.includes('cambia stabilimento') || 
       text.includes('seleziona stabilimento') || 
       text.includes('elenco stabilimenti') || 
+      text.includes('apri stabilimenti') ||
+      text.includes('mostra stabilimenti') ||
+      text.includes('clicca stabilimenti') ||
       text.includes('cambia fabbrica') ||
       text.includes('seleziona azienda') ||
-      text.includes('mostra aziende')
+      text.includes('mostra aziende') ||
+      text.includes('apri aziende') ||
+      text.includes('clicca aziende') ||
+      text.includes('lista stabilimenti') ||
+      text.includes('menu stabilimenti')
     ) {
       onOpenCompanyPlantSelector?.();
-      reply = `Apro la pagina di selezione per scegliere azienda e stabilimento. Puoi cliccare su una qualsiasi azienda per vedere i suoi stabilimenti.`;
+      reply = `Apro la schermata di selezione a due livelli per scegliere azienda e stabilimento. Clicca o dimmi quale stabilimento desideri.`;
       speakReply(reply);
       return;
     }
 
-    // 4. NAVIGATION TO NOTIFICATIONS
+    // ==========================================
+    // 5. OPEN SCENARI DROPDOWN IN CHAT TERMINAL
+    // ==========================================
+    if (
+      text.includes('scenari') || 
+      text.includes('apri scenari') || 
+      text.includes('mostra scenari') || 
+      text.includes('clicca scenari') || 
+      text.includes('menu scenari') || 
+      text.includes('scenari preconfigurati')
+    ) {
+      onChangeView?.('chat');
+      onOpenScenari?.();
+      reply = `Apro il menù Scenari nel terminale con i 21 casi quantistici preconfigurati.`;
+      speakReply(reply);
+      return;
+    }
+
+    // ==========================================
+    // 6. OPEN QUANTUM CIRCUIT MODAL
+    // ==========================================
+    if (
+      text.includes('circuito') || 
+      text.includes('diagramma') || 
+      text.includes('porte quantistiche') || 
+      text.includes('cnot') ||
+      text.includes('schema quantistico') ||
+      text.includes('mostra circuito') ||
+      text.includes('apri circuito') ||
+      text.includes('clicca circuito')
+    ) {
+      let targetCalc = QUANTUM_CALCULATIONS[0];
+      for (let i = 1; i <= 21; i++) {
+        if (text.includes(`calcolo ${i}`) || text.includes(`numero ${i}`) || text.includes(` ${i}`)) {
+          const match = QUANTUM_CALCULATIONS.find(c => c.id === i);
+          if (match) {
+            targetCalc = match;
+            break;
+          }
+        }
+      }
+      onOpenCircuit?.(targetCalc);
+      reply = `Apro il diagramma del circuito CUDA-Q per il Calcolo ${targetCalc.id}: ${targetCalc.name}.`;
+      speakReply(reply);
+      return;
+    }
+
+    // ==========================================
+    // 7. OPEN CALCULATION DETAILS / CPU TELEMETRY (QUESTION MARK ?)
+    // ==========================================
+    if (
+      text.includes('punto di domanda') || 
+      text.includes('telemetria cpu') || 
+      text.includes('specifiche tecniche') || 
+      text.includes('dettagli calcolo') ||
+      text.includes('spiega calcolo') ||
+      text.includes('apri dettagli') ||
+      text.includes('clicca sul punto di domanda')
+    ) {
+      let targetCalc = QUANTUM_CALCULATIONS[0];
+      for (let i = 1; i <= 21; i++) {
+        if (text.includes(`calcolo ${i}`) || text.includes(`numero ${i}`) || text.includes(` ${i}`)) {
+          const match = QUANTUM_CALCULATIONS.find(c => c.id === i);
+          if (match) {
+            targetCalc = match;
+            break;
+          }
+        }
+      }
+      onChangeView?.('catalog');
+      onInspectCalculation?.(targetCalc);
+      reply = `Apro le specifiche e la telemetria CPU per il Calcolo ${targetCalc.id}: ${targetCalc.name}.`;
+      speakReply(reply);
+      return;
+    }
+
+    // ==========================================
+    // 8. NAVIGATION TO NOTIFICATIONS
+    // ==========================================
     if (
       text.includes('notific') || 
       text.includes('allarm') || 
       text.includes('anomali') || 
       text.includes('critici') || 
-      text.includes('fuori linea')
+      text.includes('fuori linea') ||
+      text.includes('avvisi') ||
+      text.includes('apri notifiche') ||
+      text.includes('vai alle notifiche') ||
+      text.includes('clicca notifiche') ||
+      text.includes('mostra allarmi')
     ) {
       onChangeView?.('notifications');
-      reply = `Ti porto alle Notifiche e agli Allarmi dello stabilimento ${activeTenant.nome}. Qui vedi i log telemetrici e le misure di sicurezza.`;
+      reply = `Apro la pagina Notifiche e Allarmi dello stabilimento ${activeTenant.nome}.`;
       speakReply(reply);
       return;
     }
 
-    // 5. NAVIGATION TO CATALOG (21 CALCULATIONS)
+    // ==========================================
+    // 9. NAVIGATION TO CATALOG (21 CALCULATIONS)
+    // ==========================================
     if (
-      text.includes('catalogo') || 
+      (text.includes('catalogo') || 
       text.includes('21 calcoli') || 
       text.includes('tutti i calcoli') || 
-      text.includes('algoritmi')
+      text.includes('algoritmi') ||
+      text.includes('apri catalogo') ||
+      text.includes('vai al catalogo') ||
+      text.includes('clicca catalogo') ||
+      text.includes('mostra catalogo')) &&
+      !text.includes('esegui')
     ) {
       onChangeView?.('catalog');
-      reply = `Apro il Catalogo dei 21 Calcoli. Su ogni calcolo trovi il punto di domanda con la telemetria CPU e i parametri specifici.`;
+      reply = `Apro il Catalogo dei 21 Calcoli. Puoi cliccare sul punto di domanda di ciascun calcolo per vederne la telemetria CPU.`;
       speakReply(reply);
       return;
     }
 
-    // 6. NAVIGATION TO CHAT / TERMINAL
+    // ==========================================
+    // 10. NAVIGATION TO CHAT / TERMINAL
+    // ==========================================
     if (
       text.includes('terminale') || 
       text.includes('chat') || 
       text.includes('console') || 
-      text.includes('schermata principale')
+      text.includes('schermata principale') ||
+      text.includes('apri chat') ||
+      text.includes('vai alla chat') ||
+      text.includes('clicca chat') ||
+      text.includes('torna alla chat')
     ) {
       onChangeView?.('chat');
-      reply = `Torniamo alla Chat Terminal per interagire direttamente con il processore quantistico.`;
+      reply = `Ti porto alla Chat Terminal interattiva.`;
       speakReply(reply);
       return;
     }
 
-    // 7. NAVIGATION TO ADMIN PANEL
+    // ==========================================
+    // 11. NAVIGATION TO ADMIN PANEL
+    // ==========================================
     if (
       text.includes('admin') || 
       text.includes('amministrazione') || 
-      text.includes('impostazioni')
+      text.includes('impostazioni') ||
+      text.includes('apri amministrazione') ||
+      text.includes('vai ad amministrazione') ||
+      text.includes('clicca admin')
     ) {
       onChangeView?.('admin');
-      reply = `Apro il Pannello di Amministrazione per la gestione delle frequenze dei demoni e la configurazione dei tenant.`;
+      reply = `Apro il Pannello di Amministrazione per la gestione dell'infrastruttura quantistica.`;
       speakReply(reply);
       return;
     }
 
-    // 8. REFRESH / SCAN TELEMETRY
+    // ==========================================
+    // 12. REFRESH / SCAN TELEMETRY
+    // ==========================================
     if (
       text.includes('aggiorna telemetria') || 
       text.includes('scansiona') || 
       text.includes('scarica telemetria') || 
-      text.includes('nuova scansione')
+      text.includes('nuova scansione') ||
+      text.includes('fai scansione') ||
+      text.includes('clicca scansione') ||
+      text.includes('aggiorna dati')
     ) {
       onRefreshScan?.();
-      reply = `Ho avviato il download della telemetria in tempo reale dal gateway di ${activeTenant.nome} ed eseguito i 21 circuiti quantistici.`;
+      reply = `Ho avviato la scansione telemetrica live dal gateway di ${activeTenant.nome} ed eseguito i 21 circuiti quantistici.`;
       speakReply(reply);
       return;
     }
 
-    // 9. OPEN QUANTUM CIRCUIT MODAL
-    if (text.includes('circuito') || text.includes('diagramma') || text.includes('porte quantistiche') || text.includes('cnot')) {
-      // Find which calculation is requested, or default to 1
-      const calcMatch = QUANTUM_CALCULATIONS.find(c => text.includes(`calcolo ${c.id}`) || text.includes(`numero ${c.id}`)) || QUANTUM_CALCULATIONS[0];
-      onOpenCircuit?.(calcMatch);
-      reply = `Apro il diagramma del circuito quantistico CUDA-Q per il Calcolo ${calcMatch.id}: ${calcMatch.name}.`;
-      speakReply(reply);
-      return;
-    }
-
-    // 10. RUN QUANTUM CALCULATIONS DIRECTLY (HANDS-FREE EXECUTION!)
+    // ==========================================
+    // 13. OPEN OR EXECUTE A SPECIFIC CALCULATION (1 TO 21)
+    // ==========================================
     let targetCalcId: number | null = null;
-    let customQuery = '';
+    const isExecuteIntent = text.includes('esegui') || text.includes('fai') || text.includes('lancia') || text.includes('calcola') || text.includes('risolvi');
+    const isOpenIntent = text.includes('apri') || text.includes('mostra') || text.includes('clicca') || text.includes('vai al') || text.includes('vedi');
 
-    // Check by calculation number: "calcolo 1", "calcolo 2", ... "calcolo 21"
     for (let i = 1; i <= 21; i++) {
-      if (text.includes(`calcolo ${i}`) || text.includes(`calcolo numero ${i}`) || text.includes(`fai il ${i}`) || text.includes(`esegui il ${i}`)) {
+      if (text.includes(`calcolo ${i}`) || text.includes(`calcolo numero ${i}`) || text.includes(`numero ${i}`) || text.includes(`il ${i}`)) {
         targetCalcId = i;
         break;
       }
@@ -342,32 +518,42 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     // Check by domain keywords if number wasn't explicitly said
     if (!targetCalcId) {
       if (text.includes('camion') || text.includes('inbound') || text.includes('piazzale')) targetCalcId = 1;
-      else if (text.includes('monte carlo') || text.includes('rischio')) targetCalcId = 2;
-      else if (text.includes('turni') || text.includes('orari')) targetCalcId = 3;
-      else if (text.includes('umidità') || text.includes('materie prime')) targetCalcId = 4;
-      else if (text.includes('lotto') || text.includes('tracciabilità')) targetCalcId = 5;
+      else if (text.includes('monte carlo') || text.includes('rischio fornitore')) targetCalcId = 2;
+      else if (text.includes('turni') || text.includes('orari dipendenti')) targetCalcId = 3;
+      else if (text.includes('umidità') || text.includes('materie prime') || text.includes('nir')) targetCalcId = 4;
+      else if (text.includes('lotto') || text.includes('tracciabilità') || text.includes('blockchain')) targetCalcId = 5;
       else if (text.includes('smartstore') || text.includes('stoccaggio 3d')) targetCalcId = 6;
-      else if (text.includes('hopfield') || text.includes('inclinazione')) targetCalcId = 7;
+      else if (text.includes('hopfield') || text.includes('inclinazione scaffale')) targetCalcId = 7;
       else if (text.includes('percorsi agv') || text.includes('percorsi navette')) targetCalcId = 8;
       else if (text.includes('traffico agv') || text.includes('code navette')) targetCalcId = 9;
       else if (text.includes('knapsack') || text.includes('saturazione camion')) targetCalcId = 10;
-      else if (text.includes('vettori') || text.includes('spedizioni')) targetCalcId = 11;
+      else if (text.includes('vettori') || text.includes('spedizioni') || text.includes('penali')) targetCalcId = 11;
       else if (text.includes('buffer baie') || text.includes('carico simultaneo')) targetCalcId = 12;
-      else if (text.includes('polmone') || text.includes('parcheggio')) targetCalcId = 13;
-      else if (text.includes('bema') || text.includes('silkworm') || text.includes('giri minuto') || text.includes('vibrazioni')) targetCalcId = 14;
+      else if (text.includes('polmone') || text.includes('parcheggio camion')) targetCalcId = 13;
+      else if (text.includes('bema') || text.includes('silkworm') || text.includes('vibrazioni') || text.includes('giri minuto')) targetCalcId = 14;
       else if (text.includes('tensione film') || text.includes('pre-stiro')) targetCalcId = 15;
-      else if (text.includes('incroci') || text.includes('collisioni agv')) targetCalcId = 16;
+      else if (text.includes('incroci agv') || text.includes('collisioni')) targetCalcId = 16;
       else if (text.includes('batteria') || text.includes('ricarica navetta')) targetCalcId = 17;
       else if (text.includes('robot') || text.includes('pallettizzazione') || text.includes('vuoto')) targetCalcId = 18;
       else if (text.includes('fast charge') || text.includes('piastre induttive')) targetCalcId = 19;
-      else if (text.includes('woodpecker') || text.includes('ispezione pallet') || text.includes('scarto')) targetCalcId = 20;
+      else if (text.includes('woodpecker') || text.includes('ispezione pallet') || text.includes('scarto pallet')) targetCalcId = 20;
       else if (text.includes('raptor') || text.includes('etichetta') || text.includes('barcode') || text.includes('zkp')) targetCalcId = 21;
     }
 
     if (targetCalcId) {
       const calcMeta = QUANTUM_CALCULATIONS.find(c => c.id === targetCalcId);
       if (calcMeta) {
-        // Map to realistic query
+        // If user said "apri calcolo X" or "mostra calcolo X", open it in Catalog with CPU specs!
+        if (isOpenIntent && !isExecuteIntent) {
+          onChangeView?.('catalog');
+          onInspectCalculation?.(calcMeta);
+          reply = `Apro il Calcolo ${targetCalcId}: ${calcMeta.name} nel catalogo, con le specifiche CPU e la telemetria.`;
+          speakReply(reply);
+          return;
+        }
+
+        // Otherwise execute it in Terminal!
+        let customQuery = '';
         if (targetCalcId === 1) customQuery = "Ho 12 camion in attesa nel piazzale con 45 minuti di ritardo e saturazione magazzino WMS all'88.5%";
         else if (targetCalcId === 2) customQuery = "Calcola il rischio Monte Carlo con ritardo stimato di 75 minuti e 1 baia libera";
         else if (targetCalcId === 3) customQuery = "Pianifica i turni di carico con 8 ore di lavoro disponibili su 6 baie operative";
@@ -394,21 +580,46 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
         onChangeView?.('chat');
         onExecuteVoiceQuery?.(customQuery);
 
-        reply = `Eseguo il Calcolo ${targetCalcId}: ${calcMeta.name} per lo stabilimento ${activeTenant.nome}. I risultati e la simulazione quantistica sono ora visibili nella Chat Terminal.`;
+        reply = `Eseguo il Calcolo ${targetCalcId}: ${calcMeta.name} per ${activeTenant.nome}. I risultati sono visibili nella Chat Terminal.`;
         speakReply(reply);
         return;
       }
     }
 
-    // 11. GENERAL INDUSTRIAL EXPLANATIONS / WHO ARE YOU
-    if (text.includes('chi sei') || text.includes('come ti chiami') || text.includes('cosa sai fare')) {
-      reply = `Sono il supervisore vocale intelligente di JOKER 80 per ${activeTenant.nome}. Posso navigare per te senza mouse tra Catalogo, Notifiche, Chat e Amministrazione, cambiare impianto, ed eseguire ciascuno dei 21 algoritmi quantistici CUDA-Q. Dimmi pure cosa vuoi fare!`;
+    // ==========================================
+    // 14. GENERAL FACTORY SITUATION -> SEND DIRECTLY TO QUANTUM TERMINAL
+    // ==========================================
+    if (
+      text.includes('camion') || 
+      text.includes('ritardo') || 
+      text.includes('gradi') || 
+      text.includes('temperatura') || 
+      text.includes('allarme') || 
+      text.includes('pallet') ||
+      text.includes('batteria') ||
+      text.includes('pressione') ||
+      text.includes('giri')
+    ) {
+      onChangeView?.('chat');
+      onExecuteVoiceQuery?.(rawText);
+      reply = `Ho inoltrato la richiesta al terminale quantistico per ${activeTenant.nome}. Elaborazione del circuito in corso.`;
       speakReply(reply);
       return;
     }
 
-    // 12. FALLBACK COURTEOUS REPLY
-    reply = `Comando ricevuto per ${activeTenant.nome}: "${rawText}". Posso eseguire per te uno dei 21 calcoli, mostrarti le notifiche, aprire il catalogo, oppure passare a un altro stabilimento come Barilla Novara o Nestlé. Dimmi cosa preferisci.`;
+    // ==========================================
+    // 15. WHO ARE YOU / HELP
+    // ==========================================
+    if (text.includes('chi sei') || text.includes('come ti chiami') || text.includes('cosa sai fare') || text.includes('aiuto')) {
+      reply = `Sono il supervisore vocale hands-free di JOKER 80. Puoi chiedermi a voce di aprire il catalogo, le notifiche, la chat, selezionare un impianto come Barilla Novara o Nestlé Assago, oppure eseguire uno dei 21 calcoli quantistici senza usare il mouse.`;
+      speakReply(reply);
+      return;
+    }
+
+    // ==========================================
+    // 16. FALLBACK RESPONSE
+    // ==========================================
+    reply = `Comando ricevuto: "${rawText}". Posso aprire per te il Catalogo, le Notifiche, gli Scenari, cambiare stabilimento o eseguire uno dei 21 calcoli. Dimmi pure!`;
     speakReply(reply);
   }, [
     activeTenant.nome, 
@@ -416,9 +627,12 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     speakReply, 
     onChangeView, 
     onOpenCompanyPlantSelector, 
+    onCloseAllModals,
     onSelectTenant, 
     onRefreshScan, 
     onOpenCircuit, 
+    onInspectCalculation,
+    onOpenScenari,
     onExecuteVoiceQuery
   ]);
 
@@ -431,8 +645,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     setIsExpanded(true);
     setStatusMessage('Attivazione assistenza vocale in corso...');
 
-    // Welcome speech
-    const welcome = `Assistenza vocale attiva per ${activeTenant.nome}. Puoi parlarmi liberamente: dimmi quale calcolo eseguire, quale pagina aprire o quale stabilimento selezionare. Ti ascolto!`;
+    const welcome = `Assistenza vocale attiva per ${activeTenant.nome}. Puoi parlarmi liberamente senza usare il mouse: dimmi quale pagina aprire, quale stabilimento selezionare o quale calcolo eseguire!`;
     speakReply(welcome);
   };
 
@@ -440,11 +653,14 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
    * STOP VOCE
    */
   const handleStop = () => {
+    if (silenceDebounceTimerRef.current) clearTimeout(silenceDebounceTimerRef.current);
+    if (speechWatchdogTimerRef.current) clearTimeout(speechWatchdogTimerRef.current);
     setIsActive(false);
     isActiveRef.current = false;
     setIsListening(false);
     setIsSpeaking(false);
     isSpeakingRef.current = false;
+    pendingTranscriptRef.current = '';
     AvatarVoiceService.stopListening();
     AvatarVoiceService.stopSpeaking();
     setStatusMessage('Assistente Vocale in Pausa');
@@ -545,7 +761,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
             <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-[11px] text-emerald-300 font-mono flex items-start gap-1.5">
               <Mic className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-400 animate-pulse" />
               <div className="min-w-0">
-                <span className="text-[9px] uppercase tracking-wider text-emerald-400 block font-bold">Riconosciuto:</span>
+                <span className="text-[9px] uppercase tracking-wider text-emerald-400 block font-bold">Riconosciuto a voce:</span>
                 <p className="italic">"{transcript}"</p>
               </div>
             </div>
@@ -562,7 +778,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
           {/* Hands-Free Quick Voice Actions */}
           <div className="space-y-1.5 pt-1">
             <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
-              Comandi Vocali Rapidi:
+              Comandi Vocali Rapidi (Clicca o Pronuncia):
             </span>
             <div className="flex flex-wrap gap-1 text-[10px] font-mono">
               <button
@@ -574,10 +790,24 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => handleVoiceCommand('vai alle notifiche')}
+                onClick={() => handleVoiceCommand('apri le notifiche')}
                 className="px-2 py-1 rounded bg-slate-900 hover:bg-amber-950 text-slate-300 hover:text-amber-300 border border-slate-800 hover:border-amber-500/50 cursor-pointer transition-colors"
               >
                 🔔 Notifiche & Allarmi
+              </button>
+              <button
+                type="button"
+                onClick={() => handleVoiceCommand('apri gli scenari')}
+                className="px-2 py-1 rounded bg-slate-900 hover:bg-indigo-950 text-slate-300 hover:text-indigo-300 border border-slate-800 hover:border-indigo-500/50 cursor-pointer transition-colors"
+              >
+                ✨ Apri Scenari
+              </button>
+              <button
+                type="button"
+                onClick={() => handleVoiceCommand('apri calcolo 1')}
+                className="px-2 py-1 rounded bg-slate-900 hover:bg-blue-950 text-slate-300 hover:text-blue-300 border border-slate-800 hover:border-blue-500/50 cursor-pointer transition-colors"
+              >
+                🔍 Calcolo 1 (Dettagli CPU)
               </button>
               <button
                 type="button"
@@ -591,25 +821,32 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
                 onClick={() => handleVoiceCommand('cambia stabilimento')}
                 className="px-2 py-1 rounded bg-slate-900 hover:bg-purple-950 text-slate-300 hover:text-purple-300 border border-slate-800 hover:border-purple-500/50 cursor-pointer transition-colors"
               >
-                🏢 Seleziona Azienda
+                🏢 Seleziona Stabilimento
               </button>
               <button
                 type="button"
                 onClick={() => handleVoiceCommand('cosa significa il lucchetto')}
-                className="px-2 py-1 rounded bg-slate-900 hover:bg-blue-950 text-slate-300 hover:text-blue-300 border border-slate-800 hover:border-blue-500/50 cursor-pointer transition-colors"
+                className="px-2 py-1 rounded bg-slate-900 hover:bg-yellow-950 text-slate-300 hover:text-yellow-300 border border-slate-800 hover:border-yellow-500/50 cursor-pointer transition-colors"
               >
                 🔒 Spiega Lucchetto
+              </button>
+              <button
+                type="button"
+                onClick={() => handleVoiceCommand('chiudi finestra')}
+                className="px-2 py-1 rounded bg-slate-900 hover:bg-rose-950 text-slate-300 hover:text-rose-300 border border-slate-800 hover:border-rose-500/50 cursor-pointer transition-colors"
+              >
+                ✕ Chiudi
               </button>
             </div>
           </div>
 
-          {/* Fallback Text Input (useful in noisy room or without mic permission) */}
+          {/* Fallback Text Input */}
           <form onSubmit={handleManualCommandSubmit} className="flex items-center gap-1.5 pt-1">
             <input
               type="text"
               value={textCommand}
               onChange={(e) => setTextCommand(e.target.value)}
-              placeholder="Oppure digita qui un comando per l'assistente..."
+              placeholder="Oppure digita un comando da eseguire..."
               className="flex-1 bg-slate-900 border border-slate-800 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none font-sans"
             />
             <button

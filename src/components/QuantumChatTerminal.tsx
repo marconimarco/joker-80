@@ -35,6 +35,7 @@ interface Props {
   onNavigateToNotifications?: () => void;
   voiceQueryToExecute?: string | null;
   onVoiceQueryHandled?: () => void;
+  openScenariTrigger?: number;
 }
 
 interface PresetScenario {
@@ -364,7 +365,8 @@ export const QuantumChatTerminal: React.FC<Props> = ({
   anomaliesCount = 0,
   onNavigateToNotifications,
   voiceQueryToExecute,
-  onVoiceQueryHandled
+  onVoiceQueryHandled,
+  openScenariTrigger
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -392,6 +394,13 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Open scenari dropdown via voice or external trigger
+  useEffect(() => {
+    if (openScenariTrigger) {
+      setIsScenariOpen(true);
+    }
+  }, [openScenariTrigger]);
 
   // Close dropdown on outside click
   useEffect(() => {

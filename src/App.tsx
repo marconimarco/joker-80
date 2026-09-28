@@ -43,6 +43,8 @@ export default function App() {
 
   // Voice command execution state dispatched from GeminiLiveVoice
   const [voiceQueryToExecute, setVoiceQueryToExecute] = useState<string | null>(null);
+  const [targetInspectCalcId, setTargetInspectCalcId] = useState<number | null>(null);
+  const [openScenariTrigger, setOpenScenariTrigger] = useState<number>(0);
 
   // Function to execute the auto-upload of plant data and run all 21 quantum calculations
   const runAutoTelemetryScan = useCallback(async (tenant: FactoryTenant) => {
@@ -126,6 +128,13 @@ export default function App() {
     setSelectedCircuitState(undefined);
   };
 
+  const handleCloseAllModals = () => {
+    setSelectedCircuitCalc(null);
+    setSelectedCircuitState(undefined);
+    setIsCompanyPlantSelectorOpen(false);
+    setTargetInspectCalcId(null);
+  };
+
   // If not logged in, enforce authentication via LoginModal
   if (!currentUser) {
     return (
@@ -167,6 +176,7 @@ export default function App() {
             onNavigateToNotifications={() => setActiveView('notifications')}
             voiceQueryToExecute={voiceQueryToExecute}
             onVoiceQueryHandled={() => setVoiceQueryToExecute(null)}
+            openScenariTrigger={openScenariTrigger}
           />
         )}
 
@@ -175,6 +185,8 @@ export default function App() {
             <QuantumCatalog
               onOpenCircuit={handleOpenCircuit}
               allowPlcWrite={false}
+              targetInspectCalcId={targetInspectCalcId}
+              onClearInspectTarget={() => setTargetInspectCalcId(null)}
             />
           </div>
         )}
@@ -210,12 +222,21 @@ export default function App() {
         allowPlcWrite={false}
         onChangeView={setActiveView}
         onOpenCompanyPlantSelector={() => setIsCompanyPlantSelectorOpen(true)}
+        onCloseAllModals={handleCloseAllModals}
         onSelectTenant={handleSelectTenant}
         onExecuteVoiceQuery={(query) => {
           setActiveView('chat');
           setVoiceQueryToExecute(query);
         }}
         onOpenCircuit={handleOpenCircuit}
+        onInspectCalculation={(calc) => {
+          setActiveView('catalog');
+          setTargetInspectCalcId(calc.id);
+        }}
+        onOpenScenari={() => {
+          setActiveView('chat');
+          setOpenScenariTrigger(Date.now());
+        }}
         onRefreshScan={() => runAutoTelemetryScan(activeTenant)}
       />
 
