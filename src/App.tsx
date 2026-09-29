@@ -49,30 +49,19 @@ export default function App() {
   const [isMicModalOpen, setIsMicModalOpen] = useState<boolean>(false);
   const [autoStartVoiceTrigger, setAutoStartVoiceTrigger] = useState<number>(0);
 
-  // Automatically request microphone permissions on browser load/login
+  // Automatically manage microphone authorization and auto-start voice assistant
   useEffect(() => {
     if (!currentUser) return;
-    if (localStorage.getItem('joker_mic_prompted')) return;
 
-    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
-      navigator.permissions.query({ name: 'microphone' as PermissionName }).then((status) => {
-        if (status.state === 'prompt') {
-          setIsMicModalOpen(true);
-        }
-        status.onchange = () => {
-          if (status.state === 'granted') {
-            setIsMicModalOpen(false);
-          }
-        };
-      }).catch(() => {
-        if (!localStorage.getItem('joker_mic_prompted')) {
-          setIsMicModalOpen(true);
-        }
-      });
-    } else {
-      if (!localStorage.getItem('joker_mic_prompted')) {
-        setIsMicModalOpen(true);
-      }
+    if (localStorage.getItem('joker_mic_permitted') === 'true') {
+      // Auto-start voice in listening mode immediately
+      setAutoStartVoiceTrigger(Date.now());
+      return;
+    }
+
+    // If not yet granted and not explicitly dismissed in this session, open modal
+    if (!sessionStorage.getItem('joker_mic_modal_dismissed')) {
+      setIsMicModalOpen(true);
     }
   }, [currentUser]);
 
@@ -124,7 +113,7 @@ export default function App() {
     }
   }, [currentUser]);
 
-  const handleLoginSuccess = (user: UserAccount) => {
+  const handleLoginSuccess = (user: UserAccount, startVoiceImmediately: boolean = true) => {
     setCurrentUser(user);
     const allTenants = AuthStorage.getTenants();
     setTenants(allTenants);
@@ -140,12 +129,20 @@ export default function App() {
       runAutoTelemetryScan(allTenants[0]);
     }
     setActiveView('chat');
+
+    // Automatically launch voice assistant in listening mode immediately upon login
+    if (startVoiceImmediately) {
+      setAutoStartVoiceTrigger(Date.now());
+    }
   };
 
   const handleLogout = () => {
     AuthStorage.logout();
     setCurrentUser(null);
     setActiveView('chat');
+    // Ensure that subsequent login prompts for microphone authorization fresh
+    localStorage.removeItem('joker_mic_permitted');
+    localStorage.removeItem('joker_mic_prompted');
   };
 
   const handleOpenCircuit = (calc: QuantumCalculationMeta, state?: string) => {
@@ -275,12 +272,16 @@ export default function App() {
       {/* Microphone Access & Browser Permission Request Modal */}
       <MicrophoneAccessModal
         isOpen={isMicModalOpen}
-        onClose={() => setIsMicModalOpen(false)}
+        onClose={() => {
+          sessionStorage.setItem('joker_mic_modal_dismissed', 'true');
+          setIsMicModalOpen(false);
+        }}
         onAccessGranted={(stream) => {
           setIsMicModalOpen(false);
           setAutoStartVoiceTrigger(Date.now());
         }}
         onUseTextMode={() => {
+          sessionStorage.setItem('joker_mic_modal_dismissed', 'true');
           setIsMicModalOpen(false);
         }}
         personaName="Laila"

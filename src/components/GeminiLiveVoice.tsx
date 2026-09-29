@@ -16,7 +16,8 @@ import {
   Terminal,
   BookOpen,
   Sparkles,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react';
 import { FactoryTenant, QuantumCalculationMeta } from '../types/quantum';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
@@ -67,7 +68,13 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
   const [textCommand, setTextCommand] = useState<string>('');
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [audioLevel, setAudioLevel] = useState<number>(0);
-  const [micPermissionDenied, setMicPermissionDenied] = useState<boolean>(false);
+  const [micPermissionDenied, setMicPermissionDenied] = useState<boolean>(() => {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('joker_mic_permitted') === 'false') {
+      return true;
+    }
+    return false;
+  });
+  const [isRecordingPushToTalk, setIsRecordingPushToTalk] = useState<boolean>(false);
 
   // References to avoid stale state in asynchronous browser speech events
   const isActiveRef = useRef<boolean>(false);
@@ -78,17 +85,22 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
   const silenceDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const speechWatchdogTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Visual audio pulse when listening or speaking
+  // Visual audio pulse: animates when speaking or actively receiving spoken words
   useEffect(() => {
-    if (isListening || isSpeaking) {
+    if (isSpeaking) {
       const interval = setInterval(() => {
-        setAudioLevel(Math.random() * 0.75 + 0.25);
-      }, 120);
+        setAudioLevel(Math.random() * 0.7 + 0.3);
+      }, 100);
+      return () => clearInterval(interval);
+    } else if (isListening && !micPermissionDenied && transcript.trim().length > 0) {
+      const interval = setInterval(() => {
+        setAudioLevel(Math.random() * 0.8 + 0.2);
+      }, 100);
       return () => clearInterval(interval);
     } else {
       setAudioLevel(0);
     }
-  }, [isListening, isSpeaking]);
+  }, [isListening, isSpeaking, micPermissionDenied, transcript]);
 
   // Clean up voice on unmount or tenant switch
   useEffect(() => {
@@ -100,7 +112,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     };
   }, [activeTenant.id]);
 
-  // Automatically start voice if triggered externally (e.g. after granting mic permission)
+  // Automatically start voice if triggered externally (e.g. after granting mic permission or on login)
   useEffect(() => {
     if (autoStartVoiceTrigger && autoStartVoiceTrigger > 0) {
       handleStart();
@@ -128,6 +140,10 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
           silenceDebounceTimerRef.current = null;
         }
 
+        if (clean.length > 1) {
+          setStatusMessage(`Rilevato: "${clean}"...`);
+        }
+
         if (isFinal && clean.length > 1) {
           // Final sentence detected by Web Speech API
           pendingTranscriptRef.current = '';
@@ -136,7 +152,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
           setLastRecognizedCommand(clean);
           handleVoiceCommand(clean);
         } else if (clean.length > 1) {
-          // Silence debounce: If speaker paused for 750ms, commit interim transcript
+          // Silence debounce: If speaker paused for 1300ms, commit interim transcript
           silenceDebounceTimerRef.current = setTimeout(() => {
             const pending = pendingTranscriptRef.current;
             if (pending && pending.length > 1 && !isSpeakingRef.current) {
@@ -146,7 +162,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
               setLastRecognizedCommand(pending);
               handleVoiceCommand(pending);
             }
-          }, 750);
+          }, 1300);
         }
       },
       (errInfo: { error: string; message: string; fatal: boolean }) => {
@@ -656,8 +672,49 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
       }
     }
 
-    const welcome = `Assistenza vocale attiva per ${activeTenant.nome}. Puoi parlarmi liberamente o digitare per governare l'applicazione senza mouse.`;
+    const hasMic = typeof localStorage !== 'undefined' && localStorage.getItem('joker_mic_permitted') === 'true';
+    const welcome = hasMic
+      ? `Assistente vocale attiva. Sono in ascolto: puoi parlarmi per governare l'impianto.`
+      : `Assistente vocale pronta per ${activeTenant.nome}. Microfono non abilitato nel browser: puoi digitare o cliccare i comandi rapidi.`;
     speakReply(welcome);
+  };
+
+  /**
+   * Direct push-to-talk mic button
+   */
+  const handleDirectPushToTalk = () => {
+    if (isRecordingPushToTalk) {
+      AvatarVoiceService.stopListening();
+      setIsRecordingPushToTalk(false);
+      return;
+    }
+
+    setIsRecordingPushToTalk(true);
+    setStatusMessage('In ascolto diretto (parla adesso)...');
+
+    AvatarVoiceService.startListening(
+      'it-IT',
+      (text: string, isFinal: boolean) => {
+        setTextCommand(text);
+        if (isFinal && text.trim().length > 1) {
+          setIsRecordingPushToTalk(false);
+          AvatarVoiceService.stopListening();
+          setTextCommand('');
+          setLastRecognizedCommand(text);
+          handleVoiceCommand(text);
+        }
+      },
+      (err) => {
+        setIsRecordingPushToTalk(false);
+        if (err.error === 'not-allowed') {
+          setMicPermissionDenied(true);
+        }
+        setStatusMessage(err.message);
+      },
+      () => {
+        setIsRecordingPushToTalk(false);
+      }
+    );
   };
 
   /**
@@ -746,19 +803,21 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
           <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs font-mono">
             <div className="flex items-center gap-2 min-w-0">
               <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                isSpeaking 
+                micPermissionDenied
+                  ? 'bg-rose-500'
+                  : isSpeaking 
                   ? 'bg-cyan-400 animate-bounce' 
                   : isListening 
                   ? 'bg-emerald-400 animate-pulse' 
                   : 'bg-amber-400'
               }`} />
-              <span className="truncate text-slate-300 text-[11px]">
-                {statusMessage}
+              <span className={`truncate text-[11px] ${micPermissionDenied ? 'text-rose-300 font-semibold' : 'text-slate-300'}`}>
+                {micPermissionDenied ? 'Microfono disattivato (permesso negato nel browser)' : statusMessage}
               </span>
             </div>
 
-            {/* Visualizer wave bars */}
-            {(isListening || isSpeaking) && (
+            {/* Visualizer wave bars - ONLY if mic is permitted and actively listening/speaking */}
+            {!micPermissionDenied && (isListening || isSpeaking) && (
               <div className="flex items-center gap-0.5 shrink-0 pl-1">
                 <span className="w-1 bg-cyan-400 rounded-full transition-all duration-75" style={{ height: `${Math.max(4, audioLevel * 16)}px` }} />
                 <span className="w-1 bg-cyan-400 rounded-full transition-all duration-75" style={{ height: `${Math.max(6, audioLevel * 22)}px` }} />
@@ -771,21 +830,27 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
           {micPermissionDenied && (
             <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-[11px] text-amber-300 font-sans flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
-              <div className="space-y-1.5 flex-1">
-                <span className="font-bold block text-amber-200">Microfono non abilitato nel browser</span>
+              <div className="space-y-2 flex-1">
+                <span className="font-bold block text-amber-200">Microfono bloccato nel riquadro AI Studio</span>
                 <p className="text-[10px] text-amber-300/90 leading-tight">
-                  L'accesso al microfono è stato rifiutato o non ancora concesso dal browser.
+                  Per policy di sicurezza Android e Chrome, i frame incorporati non possono accedere al microfono hardware. Per sbloccarlo, apri l'app a schermo intero:
                 </p>
-                {onOpenMicModal && (
-                  <button
-                    type="button"
-                    onClick={onOpenMicModal}
-                    className="mt-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-[10px] font-mono flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
-                  >
-                    <Mic className="w-3.5 h-3.5" />
-                    <span>Richiedi Autorizzazione Microfono</span>
-                  </button>
-                )}
+
+                <a
+                  href={typeof window !== 'undefined' ? window.location.href : '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-cyan-950/60 transition-all active:scale-95 text-center cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Apri a Schermo Intero (Sblocca Microfono)</span>
+                </a>
+
+                <div className="pt-1.5 border-t border-amber-500/20 text-[10px] text-slate-300 leading-snug space-y-1">
+                  <p className="text-amber-200 font-semibold">💡 Oppure resta qui e usa:</p>
+                  <p>• Il <strong>microfono della tastiera Android (Gboard)</strong> toccando la casella in basso per dettare a voce.</p>
+                  <p>• I <strong>Comandi Rapidi</strong> sotto: Laila eseguirà l'azione e ti risponderà subito a voce!</p>
+                </div>
               </div>
             </div>
           )}
@@ -874,15 +939,27 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
             </div>
           </div>
 
-          {/* Text Input to control everything without mouse or if mic is blocked */}
+          {/* Text Input & Direct Push-to-Talk to control everything without mouse */}
           <form onSubmit={handleManualCommandSubmit} className="flex items-center gap-1.5 pt-1">
             <input
               type="text"
               value={textCommand}
               onChange={(e) => setTextCommand(e.target.value)}
-              placeholder="Scrivi qui qualsiasi comando o richiesta..."
+              placeholder="Scrivi o tocca il microfono per parlare..."
               className="flex-1 bg-slate-900 border border-slate-800 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none font-sans"
             />
+            <button
+              type="button"
+              onClick={handleDirectPushToTalk}
+              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                isRecordingPushToTalk
+                  ? 'bg-rose-600 border-rose-400 text-white animate-pulse'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-cyan-400'
+              }`}
+              title={isRecordingPushToTalk ? 'In ascolto... tocca per fermare' : 'Tocca per parlare adesso (Push-to-Talk)'}
+            >
+              <Mic className="w-3.5 h-3.5" />
+            </button>
             <button
               type="submit"
               className="p-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer transition-colors"

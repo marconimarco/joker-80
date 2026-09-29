@@ -281,14 +281,19 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
               </button>
 
               {/* OPEN IN NEW TAB BUTTON (For iFrame restrictions) */}
-              <button
-                type="button"
-                onClick={handleOpenInNewTab}
-                className="w-full py-2 px-3 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 text-xs font-mono flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              <a
+                href={typeof window !== 'undefined' ? window.location.href : '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  localStorage.setItem('joker_mic_prompted', 'true');
+                  onClose();
+                }}
+                className="w-full py-2.5 px-3 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 text-xs font-mono flex items-center justify-center gap-1.5 transition-colors cursor-pointer text-center"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>Apri in nuova scheda (sblocca microfono)</span>
-              </button>
+                <span>Apri a schermo intero (sblocca microfono)</span>
+              </a>
 
               <div className="flex gap-2">
                 <button

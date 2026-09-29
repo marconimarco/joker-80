@@ -202,7 +202,7 @@ export class AvatarVoiceService {
       const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       this.recognition = new SpeechRecognitionClass();
       this.recognition.lang = langCode;
-      this.recognition.continuous = false;
+      this.recognition.continuous = true;
       this.recognition.interimResults = true;
       this.recognition.maxAlternatives = 1;
 
@@ -214,19 +214,24 @@ export class AvatarVoiceService {
         let interimTranscript = '';
         let finalTranscript = '';
 
-        for (let i = 0; i < event.results.length; ++i) {
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
           const item = event.results[i];
-          if (item.isFinal) {
-            finalTranscript += item[0].transcript;
-          } else {
-            interimTranscript += item[0].transcript;
+          if (item && item[0]) {
+            if (item.isFinal) {
+              finalTranscript += item[0].transcript;
+            } else {
+              interimTranscript += item[0].transcript;
+            }
           }
         }
 
-        if (finalTranscript.trim()) {
-          onResult(finalTranscript.trim(), true);
-        } else if (interimTranscript.trim()) {
-          onResult(interimTranscript.trim(), false);
+        const recognizedFinal = finalTranscript.trim();
+        const recognizedInterim = interimTranscript.trim();
+
+        if (recognizedFinal) {
+          onResult(recognizedFinal, true);
+        } else if (recognizedInterim) {
+          onResult(recognizedInterim, false);
         }
       };
 
@@ -367,20 +372,18 @@ export class AvatarVoiceService {
       this.currentSpeechUtterance = utterance;
       (window as any).__jokerUtterance = utterance;
 
-      setTimeout(() => {
-        try {
-          if (window.speechSynthesis.paused) {
-            window.speechSynthesis.resume();
-          }
-          window.speechSynthesis.speak(utterance);
-          if (window.speechSynthesis.paused) {
-            window.speechSynthesis.resume();
-          }
-        } catch (err) {
-          console.warn('[AvatarVoiceService] speak invocation error:', err);
-          finish();
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
         }
-      }, 25);
+        window.speechSynthesis.speak(utterance);
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+      } catch (err) {
+        console.warn('[AvatarVoiceService] speak invocation error:', err);
+        finish();
+      }
     } catch (e) {
       console.error('[AvatarVoiceService] Speech synthesis failed:', e);
       this.stopLipSyncLoop();
