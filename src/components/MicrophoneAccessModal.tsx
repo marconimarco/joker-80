@@ -1,11 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, CheckCircle2, AlertTriangle, Volume2, ShieldCheck, X, RefreshCw, MessageSquare } from 'lucide-react';
+import { 
+  Mic, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Volume2, 
+  ShieldCheck, 
+  X, 
+  RefreshCw, 
+  MessageSquare,
+  ExternalLink,
+  Sparkles,
+  ArrowRight
+} from 'lucide-react';
 import { AvatarVoiceService } from '../services/avatarVoiceService';
 
 interface MicrophoneAccessModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAccessGranted: (stream: MediaStream) => void;
+  onAccessGranted: (stream: MediaStream | null) => void;
   onUseTextMode: () => void;
   personaName?: string;
 }
@@ -20,8 +32,9 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
   const [status, setStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [liveVolume, setLiveVolume] = useState<number>(0);
-  const [requireConfirmationEveryTime, setRequireConfirmationEveryTime] = useState<boolean>(true);
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
+
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   // Reset when opened
   useEffect(() => {
@@ -29,16 +42,12 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
       setStatus('idle');
       setErrorMessage(null);
       setLiveVolume(0);
-    } else {
-      if (activeStream) {
-        // don't close here if handed over to onAccessGranted
-      }
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Direct user-gesture click handler to trigger native browser prompt
+  // User-gesture click handler to trigger native browser prompt
   const handleRequestPermission = async () => {
     setStatus('requesting');
     setErrorMessage(null);
@@ -84,14 +93,32 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
   };
 
   const handleConfirmAndProceed = () => {
+    localStorage.setItem('joker_mic_prompted', 'true');
     if (activeStream) {
+      try {
+        activeStream.getTracks().forEach(t => t.stop());
+      } catch (_) {}
       onAccessGranted(activeStream);
+    } else {
+      onAccessGranted(null);
     }
     onClose();
   };
 
+  const handleOpenInNewTab = () => {
+    localStorage.setItem('joker_mic_prompted', 'true');
+    try {
+      window.open(window.location.href, '_blank');
+    } catch (_) {}
+  };
+
+  const handleDismiss = () => {
+    localStorage.setItem('joker_mic_prompted', 'true');
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn font-sans">
       <div className="relative w-full max-w-md rounded-2xl border border-cyan-500/50 bg-slate-900 shadow-2xl p-5 text-slate-100 flex flex-col space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -109,18 +136,19 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            onClick={handleDismiss}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Chiudi"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Content Body based on Status */}
+        {/* 1. IDLE STATE: Initial Prompt */}
         {status === 'idle' && (
           <div className="space-y-3.5 text-xs text-slate-300">
             <p className="leading-relaxed">
-              Per consentire a <strong className="text-cyan-400">{personaName}</strong> di ascoltare la tua voce e dialogare in tempo reale in oltre 90 lingue, è necessario autorizzare il microfono.
+              Per consentire a <strong className="text-cyan-400">{personaName}</strong> di ascoltare la tua voce e governare l'applicazione hands-free, è necessario autorizzare il microfono nel browser.
             </p>
 
             <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
@@ -129,7 +157,7 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
                 <span>Sicurezza e Riservatezza</span>
               </div>
               <p className="text-[10px] text-slate-400 leading-normal">
-                L'audio viene elaborato esclusivamente durante la sessione di conversazione attiva e non viene salvato.
+                L'audio viene elaborato direttamente dal motore vocale durante la conversazione attiva e non viene salvato.
               </p>
             </div>
 
@@ -146,10 +174,11 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  localStorage.setItem('joker_mic_prompted', 'true');
                   onUseTextMode();
                   onClose();
                 }}
-                className="w-full py-2 px-3 rounded-lg bg-slate-800/80 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full py-2 px-3 rounded-lg bg-slate-800/80 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Preferisco scrivere nella chat</span>
@@ -158,6 +187,7 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
           </div>
         )}
 
+        {/* 2. REQUESTING STATE */}
         {status === 'requesting' && (
           <div className="py-6 flex flex-col items-center justify-center space-y-3 text-center">
             <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin" />
@@ -168,6 +198,7 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
           </div>
         )}
 
+        {/* 3. GRANTED STATE */}
         {status === 'granted' && (
           <div className="space-y-3.5 text-xs text-slate-300">
             <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-500/50 flex items-center gap-2.5">
@@ -195,17 +226,6 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
               </div>
             </div>
 
-            {/* Confirmation on every access checkbox */}
-            <label className="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer pt-1">
-              <input
-                type="checkbox"
-                checked={requireConfirmationEveryTime}
-                onChange={(e) => setRequireConfirmationEveryTime(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-slate-700 text-cyan-600 focus:ring-cyan-500"
-              />
-              <span>Richiedi conferma del microfono ad ogni accesso</span>
-            </label>
-
             <button
               type="button"
               onClick={handleConfirmAndProceed}
@@ -217,46 +237,82 @@ export const MicrophoneAccessModal: React.FC<MicrophoneAccessModalProps> = ({
           </div>
         )}
 
+        {/* 4. DENIED / IFRAME BLOCKED STATE */}
         {status === 'denied' && (
-          <div className="space-y-3.5 text-xs text-slate-300">
+          <div className="space-y-3 text-xs text-slate-300">
             <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 flex items-start gap-2.5">
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-xs font-bold text-rose-300">Microfono non autorizzato</p>
+                <p className="text-xs font-bold text-rose-300">Microfono non autorizzato nel riquadro</p>
                 <p className="text-[10px] text-rose-200/90 leading-tight mt-1">{errorMessage}</p>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5 text-[11px] text-slate-400">
-              <p className="font-semibold text-slate-200">Come risolvere nel browser:</p>
-              <ol className="list-decimal list-inside space-y-1 text-[10px]">
-                <li>Clicca sull'icona a sinistra dell'URL (lucchetto 🔒 o permessi sito).</li>
-                <li>Verifica che <strong>Microfono</strong> sia impostato su <strong>Consenti</strong>.</li>
-                <li>Riprova premendo il pulsante qui sotto.</li>
-              </ol>
-            </div>
+            {isInIframe ? (
+              <div className="p-3 rounded-xl bg-slate-950/90 border border-cyan-500/30 space-y-1.5 text-[11px] text-slate-300">
+                <p className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  Riquadro di Anteprima (iFrame) Rilevato
+                </p>
+                <p className="text-[10px] text-slate-400 leading-normal">
+                  Il browser blocca l'accesso diretto ai dispositivi audio all'interno dei frame incorporati. Per usare il microfono con il popup nativo, puoi aprire l'app in una nuova scheda, oppure procedere direttamente con l'assistente vocale!
+                </p>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5 text-[11px] text-slate-400">
+                <p className="font-semibold text-slate-200">Come autorizzare nel browser:</p>
+                <ol className="list-decimal list-inside space-y-1 text-[10px]">
+                  <li>Clicca sull'icona a sinistra dell'indirizzo URL (icona lucchetto 🔒 o impostazioni sito).</li>
+                  <li>Imposta <strong>Microfono</strong> su <strong>Consenti</strong>.</li>
+                  <li>Ricarica la pagina o riprova premendo il tasto sotto.</li>
+                </ol>
+              </div>
+            )}
 
             <div className="pt-2 flex flex-col gap-2">
+              {/* PRIMARY PROCEED BUTTON */}
               <button
                 type="button"
-                onClick={handleRequestPermission}
-                className="w-full py-2.5 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                onClick={handleConfirmAndProceed}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition-all cursor-pointer ring-1 ring-emerald-400/40"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Riprova Autorizzazione</span>
+                <ArrowRight className="w-4 h-4" />
+                <span>Procedi con l'Assistente Vocale {personaName}</span>
               </button>
 
+              {/* OPEN IN NEW TAB BUTTON (For iFrame restrictions) */}
               <button
                 type="button"
-                onClick={() => {
-                  onUseTextMode();
-                  onClose();
-                }}
-                className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-750 text-cyan-300 text-xs font-mono flex items-center justify-center gap-1.5 transition-colors"
+                onClick={handleOpenInNewTab}
+                className="w-full py-2 px-3 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 text-xs font-mono flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>Usa la Console di Scrittura (Laila risponde a voce)</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Apri in nuova scheda (sblocca microfono)</span>
               </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleRequestPermission}
+                  className="flex-1 py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-mono flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Riprova</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('joker_mic_prompted', 'true');
+                    onUseTextMode();
+                    onClose();
+                  }}
+                  className="flex-1 py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-mono flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                >
+                  <MessageSquare className="w-3 h-3 text-cyan-400" />
+                  <span>Solo Scrittura</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -7,6 +7,7 @@ import { CompanyPlantSelectorModal } from './components/CompanyPlantSelectorModa
 import { CircuitVisualizerModal } from './components/CircuitVisualizerModal';
 import { LoginModal } from './components/LoginModal';
 import { AdminControlPanel } from './components/AdminControlPanel';
+import { MicrophoneAccessModal } from './components/MicrophoneAccessModal';
 import { FactoryTenant, QuantumCalculationMeta, UserAccount } from './types/quantum';
 import { AuthStorage } from './services/authStorage';
 import { PlantTelemetryScanner, AutoScanSummary } from './services/plantTelemetryScanner';
@@ -45,6 +46,35 @@ export default function App() {
   const [voiceQueryToExecute, setVoiceQueryToExecute] = useState<string | null>(null);
   const [targetInspectCalcId, setTargetInspectCalcId] = useState<number | null>(null);
   const [openScenariTrigger, setOpenScenariTrigger] = useState<number>(0);
+  const [isMicModalOpen, setIsMicModalOpen] = useState<boolean>(false);
+  const [autoStartVoiceTrigger, setAutoStartVoiceTrigger] = useState<number>(0);
+
+  // Automatically request microphone permissions on browser load/login
+  useEffect(() => {
+    if (!currentUser) return;
+    if (localStorage.getItem('joker_mic_prompted')) return;
+
+    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'microphone' as PermissionName }).then((status) => {
+        if (status.state === 'prompt') {
+          setIsMicModalOpen(true);
+        }
+        status.onchange = () => {
+          if (status.state === 'granted') {
+            setIsMicModalOpen(false);
+          }
+        };
+      }).catch(() => {
+        if (!localStorage.getItem('joker_mic_prompted')) {
+          setIsMicModalOpen(true);
+        }
+      });
+    } else {
+      if (!localStorage.getItem('joker_mic_prompted')) {
+        setIsMicModalOpen(true);
+      }
+    }
+  }, [currentUser]);
 
   // Function to execute the auto-upload of plant data and run all 21 quantum calculations
   const runAutoTelemetryScan = useCallback(async (tenant: FactoryTenant) => {
@@ -238,6 +268,22 @@ export default function App() {
           setOpenScenariTrigger(Date.now());
         }}
         onRefreshScan={() => runAutoTelemetryScan(activeTenant)}
+        onOpenMicModal={() => setIsMicModalOpen(true)}
+        autoStartVoiceTrigger={autoStartVoiceTrigger}
+      />
+
+      {/* Microphone Access & Browser Permission Request Modal */}
+      <MicrophoneAccessModal
+        isOpen={isMicModalOpen}
+        onClose={() => setIsMicModalOpen(false)}
+        onAccessGranted={(stream) => {
+          setIsMicModalOpen(false);
+          setAutoStartVoiceTrigger(Date.now());
+        }}
+        onUseTextMode={() => {
+          setIsMicModalOpen(false);
+        }}
+        personaName="Laila"
       />
 
       {/* Dedicated Company & Multi-Plant Selector Modal */}

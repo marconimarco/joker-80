@@ -111,11 +111,7 @@ export class AvatarVoiceService {
   private static visemeListeners: Set<(viseme: LipSyncViseme) => void> = new Set();
   private static audioLevelListeners: Set<(level: number) => void> = new Set();
   
-  // Real AudioContext and Mic Stream handling for live audio metering
-  private static activeAudioStream: MediaStream | null = null;
-  private static audioContext: AudioContext | null = null;
-  private static micAnalyser: AnalyserNode | null = null;
-  private static micMeterAnimId: number | null = null;
+  private static cachedVoices: SpeechSynthesisVoice[] = [];
 
   /**
    * Subscribe to real-time lip-sync mouth shape updates (0-60fps)
@@ -148,7 +144,7 @@ export class AvatarVoiceService {
   }
 
   /**
-   * Explicitly request and verify microphone permissions
+   * Safe optional check for microphone hardware permissions (used only in permission modals)
    */
   static async requestMicrophonePermission(): Promise<{ ok: boolean; error?: string; stream?: MediaStream }> {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -162,10 +158,9 @@ export class AvatarVoiceService {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       return { ok: true, stream };
     } catch (err: any) {
-      console.warn('[AvatarVoiceService] getUserMedia error:', err);
       let errorMsg = 'Permesso per il microfono non concesso.';
       if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
-        errorMsg = 'Accesso al microfono bloccato. Clicca sull\'icona del lucchetto o della fotocamera/microfono nella barra del browser per consentire l\'audio.';
+        errorMsg = 'Accesso al microfono bloccato. Consenti il microfono nelle impostazioni del browser.';
       } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
         errorMsg = 'Nessun microfono rilevato. Collega un microfono o usa la console di scrittura.';
       } else if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
@@ -176,98 +171,32 @@ export class AvatarVoiceService {
   }
 
   /**
-   * Attach mic audio stream to AnalyserNode to drive real-time audio volume visualizer
-   */
-  private static startMicAudioMetering(stream: MediaStream): void {
-    try {
-      this.stopMicAudioMetering();
-      this.activeAudioStream = stream;
-
-      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtxClass) return;
-
-      this.audioContext = new AudioCtxClass();
-      const source = this.audioContext.createMediaStreamSource(stream);
-      this.micAnalyser = this.audioContext.createAnalyser();
-      this.micAnalyser.fftSize = 64;
-      source.connect(this.micAnalyser);
-
-      const buffer = new Uint8Array(this.micAnalyser.frequencyBinCount);
-
-      const pollMeter = () => {
-        if (!this.micAnalyser || !this.isListening) return;
-        this.micAnalyser.getByteFrequencyData(buffer);
-        let sum = 0;
-        for (let i = 0; i < buffer.length; i++) {
-          sum += buffer[i];
-        }
-        const avg = sum / buffer.length;
-        const normalized = Math.min(1, avg / 90);
-        this.audioLevelListeners.forEach(cb => cb(normalized));
-        this.micMeterAnimId = requestAnimationFrame(pollMeter);
-      };
-
-      this.micMeterAnimId = requestAnimationFrame(pollMeter);
-    } catch (e) {
-      console.warn('[AvatarVoiceService] Could not init mic meter:', e);
-    }
-  }
-
-  private static stopMicAudioMetering(): void {
-    if (this.micMeterAnimId !== null) {
-      cancelAnimationFrame(this.micMeterAnimId);
-      this.micMeterAnimId = null;
-    }
-    if (this.audioContext) {
-      try {
-        this.audioContext.close();
-      } catch (_) {}
-      this.audioContext = null;
-    }
-    this.micAnalyser = null;
-    if (this.activeAudioStream) {
-      this.activeAudioStream.getTracks().forEach(t => t.stop());
-      this.activeAudioStream = null;
-    }
-    this.audioLevelListeners.forEach(cb => cb(0));
-  }
-
-  /**
-   * Start listening to user voice via Web Speech API with automatic permission check
+   * Start listening to user voice via Web Speech API (NO getUserMedia needed)
    */
   static async startListening(
     langCode: string,
     onResult: (transcript: string, isFinal: boolean) => void,
-    onError: (err: any) => void,
+    onError: (err: { error: string; message: string; fatal: boolean }) => void,
     onEnd: () => void
   ): Promise<{ success: boolean; error?: string }> {
     this.stopSpeaking();
 
-    // 1. Request microphone permission first
-    const permResult = await this.requestMicrophonePermission();
-    if (!permResult.ok) {
-      const err = new Error(permResult.error || 'Permesso microfono non concesso');
-      onError(err);
-      return { success: false, error: permResult.error };
-    }
-
-    // 2. Start mic audio metering for visualizer
-    if (permResult.stream) {
-      this.startMicAudioMetering(permResult.stream);
-    }
-
-    // 3. Verify Web Speech API support
+    // Verify Web Speech API support
     if (!this.isSpeechRecognitionSupported()) {
       const errorMsg = 'Riconoscimento vocale SpeechRecognition non supportato in questo browser. Puoi digitare nella console di scrittura.';
-      onError(new Error(errorMsg));
+      onError({ error: 'not-supported', message: errorMsg, fatal: true });
       return { success: false, error: errorMsg };
     }
 
     try {
       if (this.recognition) {
         try {
+          this.recognition.onend = null;
+          this.recognition.onerror = null;
+          this.recognition.onresult = null;
           this.recognition.abort();
         } catch (_) {}
+        this.recognition = null;
       }
 
       const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -302,39 +231,41 @@ export class AvatarVoiceService {
       };
 
       this.recognition.onerror = (event: any) => {
-        console.warn('[AvatarVoiceService] SpeechRecognition error:', event.error);
-        if (event.error === 'no-speech') {
-          // Normal timeout if user was silent, ignore
+        const errType = event.error || 'unknown';
+        console.warn('[AvatarVoiceService] SpeechRecognition error:', errType);
+        
+        if (errType === 'no-speech') {
+          // Normal timeout if user was silent
           return;
         }
 
-        let userMsg = `Errore microfono: ${event.error}`;
-        if (event.error === 'not-allowed') {
-          userMsg = 'Accesso al microfono non consentito. Abilitalo nelle impostazioni del browser.';
-        } else if (event.error === 'service-not-allowed') {
+        let userMsg = `Errore microfono: ${errType}`;
+        const isFatal = errType === 'not-allowed' || errType === 'service-not-allowed';
+
+        if (errType === 'not-allowed') {
+          userMsg = 'Accesso al microfono non consentito. Abilitalo nelle impostazioni del browser o usa la digitazione.';
+        } else if (errType === 'service-not-allowed') {
           userMsg = 'Riconoscimento vocale online non autorizzato.';
-        } else if (event.error === 'network') {
-          userMsg = 'Problema di rete nel servizio vocale. Puoi usare la tastiera.';
-        } else if (event.error === 'audio-capture') {
+        } else if (errType === 'network') {
+          userMsg = 'Problema di connessione nel servizio vocale. Puoi usare la tastiera.';
+        } else if (errType === 'audio-capture') {
           userMsg = 'Nessun segnale audio catturato dal microfono.';
         }
 
-        onError(new Error(userMsg));
+        onError({ error: errType, message: userMsg, fatal: isFatal });
       };
 
       this.recognition.onend = () => {
         this.isListening = false;
-        this.stopMicAudioMetering();
         onEnd();
       };
 
       this.recognition.start();
       return { success: true };
     } catch (e: any) {
-      console.error('[AvatarVoiceService] Failed to start recognition:', e);
-      const errMsg = e?.message || 'Impossibile avviare il riconoscimento vocale.';
-      onError(new Error(errMsg));
-      this.stopMicAudioMetering();
+      console.warn('[AvatarVoiceService] startListening error:', e);
+      const errMsg = e?.message || 'Impossibile avviare il microfono.';
+      onError({ error: 'start-failed', message: errMsg, fatal: true });
       return { success: false, error: errMsg };
     }
   }
@@ -354,7 +285,6 @@ export class AvatarVoiceService {
       this.recognition = null;
     }
     this.isListening = false;
-    this.stopMicAudioMetering();
   }
 
   /**
@@ -375,7 +305,6 @@ export class AvatarVoiceService {
     try {
       this.stopListening();
       this.stopSpeaking();
-      window.speechSynthesis.cancel();
 
       // Clean text for speech: remove code blocks, JSON snippets, markdown stars
       const cleanText = text
@@ -390,12 +319,15 @@ export class AvatarVoiceService {
         return;
       }
 
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.lang = langCode;
-      utterance.rate = 1.02; // natural pace
-      utterance.pitch = persona === 'marco' ? 0.95 : 1.08;
+      utterance.rate = 1.0;
+      utterance.pitch = persona === 'marco' ? 0.95 : 1.05;
 
-      // Find best available voice matching language
       const voices = window.speechSynthesis.getVoices();
       const langPrefix = langCode.split('-')[0].toLowerCase();
       const matchingVoices = voices.filter(v => 
@@ -404,39 +336,51 @@ export class AvatarVoiceService {
       );
 
       if (matchingVoices.length > 0) {
-        // Prefer natural / google / premium voices if present
         const preferredVoice = matchingVoices.find(v => 
-          (persona === 'laila' ? /female|woman|laila|elena|alice|monica|samantha/i.test(v.name) : /male|man|marco|luca|cosimo|jorge/i.test(v.name)) ||
+          (persona === 'laila' ? /female|woman|laila|elena|alice|monica|samantha|paola|federica/i.test(v.name) : /male|man|marco|luca|cosimo|jorge/i.test(v.name)) ||
           /google|natural|premium/i.test(v.name)
         ) || matchingVoices[0];
         utterance.voice = preferredVoice;
       }
+
+      let isFinished = false;
+      const finish = () => {
+        if (isFinished) return;
+        isFinished = true;
+        this.stopLipSyncLoop();
+        this.currentSpeechUtterance = null;
+        (window as any).__jokerUtterance = null;
+        onEnd?.();
+      };
 
       utterance.onstart = () => {
         onStart?.();
         this.startLipSyncLoop();
       };
 
-      utterance.onend = () => {
-        this.stopLipSyncLoop();
-        this.currentSpeechUtterance = null;
-        onEnd?.();
-      };
-
+      utterance.onend = finish;
       utterance.onerror = (e) => {
-        console.warn('[AvatarVoiceService] TTS error:', e);
-        this.stopLipSyncLoop();
-        this.currentSpeechUtterance = null;
-        onEnd?.();
+        console.warn('[AvatarVoiceService] TTS event:', e);
+        finish();
       };
 
       this.currentSpeechUtterance = utterance;
-      window.speechSynthesis.speak(utterance);
+      (window as any).__jokerUtterance = utterance;
 
-      // Known Chromium workaround for synthesis pausing on long texts
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-      }
+      setTimeout(() => {
+        try {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+          window.speechSynthesis.speak(utterance);
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+        } catch (err) {
+          console.warn('[AvatarVoiceService] speak invocation error:', err);
+          finish();
+        }
+      }, 25);
     } catch (e) {
       console.error('[AvatarVoiceService] Speech synthesis failed:', e);
       this.stopLipSyncLoop();

@@ -15,7 +15,8 @@ import {
   Bell, 
   Terminal,
   BookOpen,
-  Sparkles
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 import { FactoryTenant, QuantumCalculationMeta } from '../types/quantum';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
@@ -35,6 +36,8 @@ interface GeminiLiveVoiceProps {
   onInspectCalculation?: (calc: QuantumCalculationMeta) => void;
   onOpenScenari?: () => void;
   onRefreshScan?: () => void;
+  onOpenMicModal?: () => void;
+  autoStartVoiceTrigger?: number;
 }
 
 export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
@@ -49,7 +52,9 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
   onOpenCircuit,
   onInspectCalculation,
   onOpenScenari,
-  onRefreshScan
+  onRefreshScan,
+  onOpenMicModal,
+  autoStartVoiceTrigger
 }) => {
   const [isActive, setIsActive] = useState<boolean>(false);
   const [isListening, setIsListening] = useState<boolean>(false);
@@ -62,6 +67,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
   const [textCommand, setTextCommand] = useState<string>('');
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [audioLevel, setAudioLevel] = useState<number>(0);
+  const [micPermissionDenied, setMicPermissionDenied] = useState<boolean>(false);
 
   // References to avoid stale state in asynchronous browser speech events
   const isActiveRef = useRef<boolean>(false);
@@ -93,6 +99,13 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
       AvatarVoiceService.stopSpeaking();
     };
   }, [activeTenant.id]);
+
+  // Automatically start voice if triggered externally (e.g. after granting mic permission)
+  useEffect(() => {
+    if (autoStartVoiceTrigger && autoStartVoiceTrigger > 0) {
+      handleStart();
+    }
+  }, [autoStartVoiceTrigger]);
 
   /**
    * Continuous Speech Recognition Loop while active
@@ -136,14 +149,22 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
           }, 750);
         }
       },
-      (error: any) => {
+      (errInfo: { error: string; message: string; fatal: boolean }) => {
         setIsListening(false);
+        setStatusMessage(errInfo.message);
+
+        // CRITICAL: NEVER retry on fatal or permission denied to avoid infinite loops
+        if (errInfo.fatal || errInfo.error === 'not-allowed' || errInfo.error === 'service-not-allowed') {
+          setMicPermissionDenied(true);
+          return;
+        }
+
         if (isActiveRef.current && !isSpeakingRef.current) {
           setTimeout(() => {
             if (isActiveRef.current && !isSpeakingRef.current) {
               startListeningLoop();
             }
-          }, 600);
+          }, 1500);
         }
       },
       () => {
@@ -163,7 +184,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
             if (isActiveRef.current && !isSpeakingRef.current) {
               startListeningLoop();
             }
-          }, 350);
+          }, 400);
         }
       }
     ).catch(err => {
@@ -180,9 +201,9 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     setStatusMessage(replyText);
 
     if (isMuted) {
-      if (isActiveRef.current) {
+      if (isActiveRef.current && !micPermissionDenied) {
         setTimeout(() => {
-          if (isActiveRef.current) startListeningLoop();
+          if (isActiveRef.current && !micPermissionDenied) startListeningLoop();
         }, 1200);
       }
       return;
@@ -198,7 +219,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
       if (isSpeakingRef.current) {
         setIsSpeaking(false);
         isSpeakingRef.current = false;
-        if (isActiveRef.current) startListeningLoop();
+        if (isActiveRef.current && !micPermissionDenied) startListeningLoop();
       }
     }, 9000);
 
@@ -214,19 +235,19 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
         if (speechWatchdogTimerRef.current) clearTimeout(speechWatchdogTimerRef.current);
         setIsSpeaking(false);
         isSpeakingRef.current = false;
-        if (isActiveRef.current) {
+        if (isActiveRef.current && !micPermissionDenied) {
           setTimeout(() => {
-            if (isActiveRef.current) {
+            if (isActiveRef.current && !micPermissionDenied) {
               startListeningLoop();
             }
-          }, 300);
+          }, 350);
         }
       }
     );
-  }, [isMuted, startListeningLoop]);
+  }, [isMuted, micPermissionDenied, startListeningLoop]);
 
   /**
-   * Process and execute user voice commands across the entire application hands-free!
+   * Process and execute user voice or text commands across the entire application
    */
   const handleVoiceCommand = useCallback((rawText: string) => {
     const text = rawText.toLowerCase().trim();
@@ -325,7 +346,7 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
       text.includes('menu stabilimenti')
     ) {
       onOpenCompanyPlantSelector?.();
-      reply = `Apro la schermata di selezione a due livelli per scegliere azienda e stabilimento. Clicca o dimmi quale stabilimento desideri.`;
+      reply = `Apro la schermata di selezione per scegliere azienda e stabilimento.`;
       speakReply(reply);
       return;
     }
@@ -587,39 +608,21 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     }
 
     // ==========================================
-    // 14. GENERAL FACTORY SITUATION -> SEND DIRECTLY TO QUANTUM TERMINAL
+    // 14. WHO ARE YOU / HELP
     // ==========================================
-    if (
-      text.includes('camion') || 
-      text.includes('ritardo') || 
-      text.includes('gradi') || 
-      text.includes('temperatura') || 
-      text.includes('allarme') || 
-      text.includes('pallet') ||
-      text.includes('batteria') ||
-      text.includes('pressione') ||
-      text.includes('giri')
-    ) {
-      onChangeView?.('chat');
-      onExecuteVoiceQuery?.(rawText);
-      reply = `Ho inoltrato la richiesta al terminale quantistico per ${activeTenant.nome}. Elaborazione del circuito in corso.`;
+    if (text.includes('chi sei') || text.includes('come ti chiami') || text.includes('cosa sai fare') || text === 'aiuto') {
+      reply = `Sono il supervisore vocale hands-free di JOKER 80. Puoi chiedermi a voce o digitando di aprire il catalogo, le notifiche, la chat, selezionare un impianto come Barilla Novara o Nestlé Assago, oppure eseguire uno dei 21 calcoli quantistici senza usare il mouse.`;
       speakReply(reply);
       return;
     }
 
     // ==========================================
-    // 15. WHO ARE YOU / HELP
+    // 15. ANY OTHER INDUSTRIAL / FACTORY STATEMENT OR FREEFORM COMMAND:
+    // ALWAYS FORWARD TO QUANTUM CHAT TERMINAL SO ACTION IS TAKEN!
     // ==========================================
-    if (text.includes('chi sei') || text.includes('come ti chiami') || text.includes('cosa sai fare') || text.includes('aiuto')) {
-      reply = `Sono il supervisore vocale hands-free di JOKER 80. Puoi chiedermi a voce di aprire il catalogo, le notifiche, la chat, selezionare un impianto come Barilla Novara o Nestlé Assago, oppure eseguire uno dei 21 calcoli quantistici senza usare il mouse.`;
-      speakReply(reply);
-      return;
-    }
-
-    // ==========================================
-    // 16. FALLBACK RESPONSE
-    // ==========================================
-    reply = `Comando ricevuto: "${rawText}". Posso aprire per te il Catalogo, le Notifiche, gli Scenari, cambiare stabilimento o eseguire uno dei 21 calcoli. Dimmi pure!`;
+    onChangeView?.('chat');
+    onExecuteVoiceQuery?.(rawText);
+    reply = `Ho preso in carico la tua richiesta "${rawText}" e l'ho inviata al risolutore quantistico CUDA-Q nel terminale per ${activeTenant.nome}.`;
     speakReply(reply);
   }, [
     activeTenant.nome, 
@@ -643,9 +646,17 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
     setIsActive(true);
     isActiveRef.current = true;
     setIsExpanded(true);
-    setStatusMessage('Attivazione assistenza vocale in corso...');
+    setMicPermissionDenied(false);
+    setStatusMessage('Avvio assistente vocale...');
 
-    const welcome = `Assistenza vocale attiva per ${activeTenant.nome}. Puoi parlarmi liberamente senza usare il mouse: dimmi quale pagina aprire, quale stabilimento selezionare o quale calcolo eseguire!`;
+    // Warm up speech synthesis on user interaction
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    }
+
+    const welcome = `Assistenza vocale attiva per ${activeTenant.nome}. Puoi parlarmi liberamente o digitare per governare l'applicazione senza mouse.`;
     speakReply(welcome);
   };
 
@@ -756,12 +767,35 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
             )}
           </div>
 
+          {/* Microphone Permission Banner if blocked */}
+          {micPermissionDenied && (
+            <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-[11px] text-amber-300 font-sans flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+              <div className="space-y-1.5 flex-1">
+                <span className="font-bold block text-amber-200">Microfono non abilitato nel browser</span>
+                <p className="text-[10px] text-amber-300/90 leading-tight">
+                  L'accesso al microfono è stato rifiutato o non ancora concesso dal browser.
+                </p>
+                {onOpenMicModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenMicModal}
+                    className="mt-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-[10px] font-mono flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>Richiedi Autorizzazione Microfono</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Real-time speech transcript feedback */}
           {transcript && (
             <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-[11px] text-emerald-300 font-mono flex items-start gap-1.5">
               <Mic className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-400 animate-pulse" />
               <div className="min-w-0">
-                <span className="text-[9px] uppercase tracking-wider text-emerald-400 block font-bold">Riconosciuto a voce:</span>
+                <span className="text-[9px] uppercase tracking-wider text-emerald-400 block font-bold">Riconosciuto:</span>
                 <p className="italic">"{transcript}"</p>
               </div>
             </div>
@@ -775,10 +809,10 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
             </div>
           )}
 
-          {/* Hands-Free Quick Voice Actions */}
+          {/* Hands-Free Quick Actions */}
           <div className="space-y-1.5 pt-1">
             <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
-              Comandi Vocali Rapidi (Clicca o Pronuncia):
+              Comandi Rapidi (Clicca o Pronuncia):
             </span>
             <div className="flex flex-wrap gap-1 text-[10px] font-mono">
               <button
@@ -840,19 +874,19 @@ export const GeminiLiveVoice: React.FC<GeminiLiveVoiceProps> = ({
             </div>
           </div>
 
-          {/* Fallback Text Input */}
+          {/* Text Input to control everything without mouse or if mic is blocked */}
           <form onSubmit={handleManualCommandSubmit} className="flex items-center gap-1.5 pt-1">
             <input
               type="text"
               value={textCommand}
               onChange={(e) => setTextCommand(e.target.value)}
-              placeholder="Oppure digita un comando da eseguire..."
+              placeholder="Scrivi qui qualsiasi comando o richiesta..."
               className="flex-1 bg-slate-900 border border-slate-800 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none font-sans"
             />
             <button
               type="submit"
               className="p-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer transition-colors"
-              title="Invia comando"
+              title="Invia comando all'assistente"
             >
               <Send className="w-3.5 h-3.5" />
             </button>
