@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   QUANTUM_CALCULATIONS, 
 } from '../data/calculationsMeta';
-import { QuantumCalculationMeta, MacroCategory } from '../types/quantum';
+import { QuantumCalculationMeta, MacroCategory, FactoryTenant } from '../types/quantum';
 import { QuantumEngine } from '../services/quantumEngine';
+import { isCalculationSupportedByPlant, PLANT_NODE_REQUIREMENTS } from '../data/plantNodeCalculations';
 import { 
   Cpu, 
   Lock, 
@@ -19,7 +20,11 @@ import {
   HelpCircle,
   Share2,
   Network,
-  X
+  X,
+  UploadCloud,
+  Filter,
+  Sparkles,
+  Zap
 } from 'lucide-react';
 
 interface Props {
@@ -27,6 +32,9 @@ interface Props {
   allowPlcWrite: boolean;
   targetInspectCalcId?: number | null;
   onClearInspectTarget?: () => void;
+  activeTenant?: FactoryTenant;
+  onOpenCsvUpload?: () => void;
+  importedInputs?: Record<string, any>;
 }
 
 const CATEGORIES: MacroCategory[] = [
@@ -40,22 +48,115 @@ export const QuantumCatalog: React.FC<Props> = ({
   onOpenCircuit, 
   allowPlcWrite,
   targetInspectCalcId,
-  onClearInspectTarget
+  onClearInspectTarget,
+  activeTenant,
+  onOpenCsvUpload,
+  importedInputs
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<MacroCategory>('1. Inbound & Materie Prime');
+  const [selectedCategory, setSelectedCategory] = useState<MacroCategory | 'ALL'>('1. Inbound & Materie Prime');
+  const [filterOnlyPlantNodes, setFilterOnlyPlantNodes] = useState<boolean>(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   const [formInputs, setFormInputs] = useState<Record<number, Record<string, any>>>(() => {
     const initial: Record<number, Record<string, any>> = {};
     for (const c of QUANTUM_CALCULATIONS) {
       initial[c.id] = { ...c.defaultInputs };
     }
+    if (activeTenant?.id) {
+      try {
+        const saved = localStorage.getItem(`joker_custom_telemetry_${activeTenant.id}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          for (const c of QUANTUM_CALCULATIONS) {
+            initial[c.id] = { ...initial[c.id], ...parsed };
+          }
+        }
+      } catch {}
+    }
     return initial;
   });
+
+  // Re-sync form inputs when activeTenant changes or receives custom telemetry
+  useEffect(() => {
+    if (activeTenant?.id) {
+      try {
+        const saved = localStorage.getItem(`joker_custom_telemetry_${activeTenant.id}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setFormInputs(prev => {
+            const next = { ...prev };
+            for (const c of QUANTUM_CALCULATIONS) {
+              next[c.id] = { ...(c.defaultInputs || {}), ...(next[c.id] || {}), ...parsed };
+            }
+            return next;
+          });
+        }
+      } catch {}
+    }
+  }, [activeTenant?.id]);
+
+  // When importedInputs changes from CSV upload, inject them immediately into all calculations
+  useEffect(() => {
+    if (importedInputs && Object.keys(importedInputs).length > 0) {
+      setFormInputs(prev => {
+        const next = { ...prev };
+        for (const c of QUANTUM_CALCULATIONS) {
+          next[c.id] = { ...(c.defaultInputs || {}), ...(next[c.id] || {}), ...importedInputs };
+        }
+        return next;
+      });
+      setToastMessage(`Dati CSV importati con successo nel catalogo (${Object.keys(importedInputs).length} parametri)!`);
+      setTimeout(() => setToastMessage(null), 3500);
+    }
+  }, [importedInputs]);
 
   const [results, setResults] = useState<Record<number, any>>({});
   const [executingId, setExecutingId] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [selectedCpuCalc, setSelectedCpuCalc] = useState<QuantumCalculationMeta | null>(null);
   const [hoveredCalcId, setHoveredCalcId] = useState<number | null>(null);
+
+  // Helper to format any input value for UI display
+  const formatInputValue = (val: any): string => {
+    if (val === undefined || val === null) return "";
+    if (typeof val === "string") return val;
+    if (typeof val === "number") return String(val);
+    return JSON.stringify(val);
+  };
+
+  // Helper to flexibly parse user inputs (numbers, JSON arrays, comma-separated lists)
+  const parseFlexibleInput = (val: any): any => {
+    if (val === undefined || val === null) return val;
+    if (typeof val === "number" || typeof val === "boolean") return val;
+    if (Array.isArray(val) || (typeof val === "object" && val !== null)) return val;
+    if (typeof val !== "string") return val;
+    const trimmed = val.trim();
+    if (trimmed === "") return 0;
+    // JSON arrays and objects
+    if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        const cleaned = trimmed.replace(/^[|]$/g, "");
+        const parts = cleaned.split(/[,;s]+/).map(s => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
+        const nums = parts.map(Number);
+        if (nums.length > 0 && nums.every(n => !isNaN(n))) return nums;
+        if (parts.length > 0) return parts;
+      }
+    }
+    // Comma-separated list
+    if (trimmed.includes(",")) {
+      const parts = trimmed.split(",").map(s => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
+      const nums = parts.map(Number);
+      if (nums.length > 0 && nums.every(n => !isNaN(n))) return nums;
+      return parts;
+    }
+    // Pure number
+    if (!isNaN(Number(trimmed)) && !isNaN(parseFloat(trimmed))) {
+      return Number(trimmed);
+    }
+    return val;
+  };
 
   // When instructed via voice or navigation to inspect a calculation:
   React.useEffect(() => {
@@ -69,15 +170,25 @@ export const QuantumCatalog: React.FC<Props> = ({
     }
   }, [targetInspectCalcId, onClearInspectTarget]);
 
-  const filteredCalculations = QUANTUM_CALCULATIONS.filter(
-    c => c.category === selectedCategory
-  );
+  // Calculations supported by the active plant's hardware nodes
+  const plantSupportedCalcs = useMemo(() => {
+    return QUANTUM_CALCULATIONS.filter(c => isCalculationSupportedByPlant(c.id, activeTenant));
+  }, [activeTenant]);
+
+  // Calculations displayed after applying plant nodes filter and selected category
+  const displayedCalculations = useMemo(() => {
+    const pool = (filterOnlyPlantNodes && activeTenant) ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
+    if (selectedCategory === 'ALL') return pool;
+    return pool.filter(c => c.category === selectedCategory);
+  }, [filterOnlyPlantNodes, activeTenant, plantSupportedCalcs, selectedCategory]);
 
   const handleInputChange = (calcId: number, field: string, value: any) => {
+    const meta = QUANTUM_CALCULATIONS.find(c => c.id === calcId);
     setFormInputs(prev => ({
       ...prev,
       [calcId]: {
-        ...prev[calcId],
+        ...(meta?.defaultInputs || {}),
+        ...(prev[calcId] || {}),
         [field]: value
       }
     }));
@@ -85,15 +196,32 @@ export const QuantumCatalog: React.FC<Props> = ({
 
   const executeCalculation = async (calc: QuantumCalculationMeta) => {
     setExecutingId(calc.id);
-    const inputs = formInputs[calc.id] || calc.defaultInputs;
+    const rawInputs = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
+    const inputs: Record<string, any> = {};
+    for (const [k, v] of Object.entries(rawInputs)) {
+      inputs[k] = parseFlexibleInput(v);
+    }
     
     try {
       // Simulate GPU quantum sampling delay
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 260));
       const res = await QuantumEngine.executeCalculation(calc.id, inputs);
       setResults(prev => ({ ...prev, [calc.id]: res }));
+      setToastMessage(`⚡ Calcolo [${calc.id}] "${calc.name}" eseguito con successo con i parametri inseriti!`);
+      setTimeout(() => setToastMessage(null), 3500);
+
+      // Auto-scroll directly to result card so the user sees immediate feedback
+      setTimeout(() => {
+        const el = document.getElementById(`result-card-${calc.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 50);
     } catch (err: any) {
-      setResults(prev => ({ ...prev, [calc.id]: { error: err.message } }));
+      console.error('Execution error for calc', calc.id, err);
+      setResults(prev => ({ ...prev, [calc.id]: { error: err.message || 'Errore esecuzione calcolo' } }));
+      setToastMessage(`❌ Errore durante l'esecuzione del calcolo: ${err.message || 'Verifica parametri'}`);
+      setTimeout(() => setToastMessage(null), 4000);
     } finally {
       setExecutingId(null);
     }
@@ -107,21 +235,87 @@ export const QuantumCatalog: React.FC<Props> = ({
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-20 right-4 z-50 p-3 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 text-xs font-mono shadow-2xl flex items-center gap-2 animate-in slide-in-from-top-4 duration-200 backdrop-blur-md">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Active Plant Nodes Filter Bar */}
+      {activeTenant && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3 font-mono text-xs">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
+              <Cpu className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-white text-sm">
+                  Stabilimento: {activeTenant.nome}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
+                  {plantSupportedCalcs.length} nodi/calcoli attivi su 21
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+                {filterOnlyPlantNodes
+                  ? `Mostrando esclusivamente i calcoli compatibili con i macchinari e i nodi presenti in "${activeTenant.nome}".`
+                  : `Visualizzazione estesa a tutti i 21 nodi dell'infrastruttura Elettric80.`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <button
+              type="button"
+              onClick={() => setFilterOnlyPlantNodes(!filterOnlyPlantNodes)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-sm ${
+                filterOnlyPlantNodes
+                  ? 'bg-cyan-600 text-white border-cyan-400'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>{filterOnlyPlantNodes ? `Filtro Nodi Attivo (${plantSupportedCalcs.length}/21)` : 'Mostra Tutti i 21 Nodi'}</span>
+            </button>
+
+            {onOpenCsvUpload && (
+              <button
+                type="button"
+                onClick={onOpenCsvUpload}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Carica un file CSV per aggiornare i sensori e i parametri di fabbrica per questo stabilimento"
+              >
+                <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Carica CSV Stabilimento</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Category Tabs: Smooth touch-scroll on smartphones */}
       <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar touch-pan-x flex-nowrap sm:flex-wrap">
         {CATEGORIES.map((cat) => {
           const isSelected = selectedCategory === cat;
+          const countInCat = (filterOnlyPlantNodes && activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).filter(c => c.category === cat).length;
+
           return (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`shrink-0 sm:flex-1 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs font-mono font-semibold whitespace-nowrap min-h-[38px] transition-all cursor-pointer ${
+              className={`shrink-0 sm:flex-1 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs font-mono font-semibold whitespace-nowrap min-h-[38px] transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 isSelected
                   ? 'bg-cyan-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
               }`}
             >
-              {cat}
+              <span>{cat}</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] ${isSelected ? 'bg-black/30 text-cyan-200' : 'bg-slate-800 text-slate-400'}`}>
+                {countInCat}
+              </span>
             </button>
           );
         })}
@@ -129,17 +323,53 @@ export const QuantumCatalog: React.FC<Props> = ({
 
       {/* Calculations Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {filteredCalculations.map((calc) => {
-          const isLocked = calc.entanglement === 'OBBLIGATORIO';
-          const inputs = formInputs[calc.id] || calc.defaultInputs;
-          const result = results[calc.id];
-          const isBusy = executingId === calc.id;
+        {displayedCalculations.length === 0 ? (
+          <div className="col-span-full p-8 text-center bg-slate-900/60 border border-slate-800 rounded-2xl font-mono text-slate-400 space-y-2">
+            <AlertCircle className="w-8 h-8 mx-auto text-amber-400" />
+            <p className="text-sm font-bold text-slate-200">
+              Nessun macchinario o nodo presente in questa categoria per lo stabilimento attivo.
+            </p>
+            <p className="text-xs">
+              Fai clic su "Mostra Tutti i 21 Nodi" in alto per visualizzare l'intero catalogo Elettric80.
+            </p>
+          </div>
+        ) : (
+          displayedCalculations.map((calc) => {
+            const isLocked = calc.entanglement === 'OBBLIGATORIO';
+            const inputs = formInputs[calc.id] || calc.defaultInputs;
+            const result = results[calc.id];
+            const isBusy = executingId === calc.id;
+            const nodeReq = PLANT_NODE_REQUIREMENTS[calc.id];
+            const isSupported = isCalculationSupportedByPlant(calc.id, activeTenant);
 
           return (
             <div 
               key={calc.id}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col justify-between space-y-4 sm:space-y-5 hover:border-slate-700 transition-colors"
+              className={`bg-slate-900 border rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col justify-between space-y-4 sm:space-y-5 transition-colors ${
+                isSupported ? 'border-slate-800 hover:border-slate-700' : 'border-slate-800/60 opacity-85'
+              }`}
             >
+              {/* Connected Plant Node Badge */}
+              {nodeReq && (
+                <div className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono flex items-center justify-between border ${
+                  isSupported
+                    ? 'bg-cyan-950/40 text-cyan-300 border-cyan-800/80 shadow-xs'
+                    : 'bg-slate-950/60 text-slate-500 border-slate-800'
+                }`}>
+                  <span className="flex items-center gap-1.5 truncate">
+                    <Cpu className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>Nodo Associato: <strong className="text-white">{nodeReq.nodeName}</strong></span>
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold shrink-0 ${
+                    isSupported 
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}>
+                    {isSupported ? '✓ Presente nello Stabilimento' : 'Macchinario Assente'}
+                  </span>
+                </div>
+              )}
+
               {/* Header */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -855,58 +1085,133 @@ export const QuantumCatalog: React.FC<Props> = ({
                 )}
               </div>
 
-              {/* Action buttons */}
-              <div className="flex items-center justify-between gap-3 pt-2">
-                <button
-                  onClick={() => onOpenCircuit(calc, result?.stato_qubit_dominante || result?.stato_qubit_rilevato || result?.stato_qubit_ottimale || result?.stato_qubit_calcolato)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
-                >
-                  <Layers className="w-4 h-4 text-cyan-400" />
-                  <span>Circuito CUDA-Q</span>
-                </button>
+              {/* Action buttons & Busy Banner */}
+              <div className="space-y-3 pt-2">
+                {isBusy && (
+                  <div className="p-3 rounded-xl bg-cyan-950/80 border border-cyan-500/50 text-cyan-200 font-mono text-xs flex items-center gap-2.5 shadow-lg animate-pulse">
+                    <div className="w-4 h-4 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin shrink-0" />
+                    <span>Elaborazione quantistica in corso sul circuito CUDA-Q con i parametri correnti...</span>
+                  </div>
+                )}
 
-                <button
-                  onClick={() => executeCalculation(calc)}
-                  disabled={isBusy}
-                  className={`px-5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all shadow-md ${
-                    isBusy
-                      ? 'bg-slate-800 text-slate-500 cursor-wait'
-                      : isLocked
-                      ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-slate-950'
-                      : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white'
-                  }`}
-                >
-                  {isBusy ? (
-                    <>
-                      <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                      <span>Campionamento...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>Esegui Calcolo ({calc.entanglementSymbol})</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => onOpenCircuit(calc, result?.stato_qubit_dominante || result?.stato_qubit_rilevato || result?.stato_qubit_ottimale || result?.stato_qubit_calcolato)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono font-medium border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Layers className="w-4 h-4 text-cyan-400" />
+                    <span>Circuito CUDA-Q</span>
+                  </button>
+
+                  <button
+                    onClick={() => executeCalculation(calc)}
+                    disabled={isBusy}
+                    className={`px-5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer ${
+                      isBusy
+                        ? 'bg-slate-800 text-slate-500 cursor-wait'
+                        : isLocked
+                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-slate-950'
+                        : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white'
+                    }`}
+                  >
+                    {isBusy ? (
+                      <>
+                        <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                        <span>Campionamento...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Esegui Calcolo ({calc.entanglementSymbol})</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Result Container */}
               {result && (
-                <div className="mt-4 p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 animate-in fade-in duration-150">
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-emerald-400 font-bold flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Risultato Payload JSON (Calcolo {calc.id})
-                    </span>
-                    <button
-                      onClick={() => copyResult(calc.id, result)}
-                      className="px-2 py-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white flex items-center gap-1"
-                    >
-                      {copiedId === calc.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      <span className="text-[10px]">{copiedId === calc.id ? 'Copiato' : 'Copia'}</span>
-                    </button>
+                <div id={`result-card-${calc.id}`} className="mt-4 p-4 rounded-xl bg-slate-950 border border-emerald-500/40 space-y-3 animate-in fade-in duration-150 shadow-lg shadow-emerald-950/20">
+                  <div className="flex items-center justify-between text-xs font-mono border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      </span>
+                      <div>
+                        <span className="text-emerald-300 font-bold">
+                          Calcolo [{calc.id}] Eseguito con Successo
+                        </span>
+                        {result.timestamp_esecuzione && (
+                          <span className="text-slate-400 text-[10px] ml-2">
+                            alle {result.timestamp_esecuzione}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {result.tempo_simulazione_qpu_ms && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800">
+                          QPU: {result.tempo_simulazione_qpu_ms}ms
+                        </span>
+                      )}
+                      <button
+                        onClick={() => copyResult(calc.id, result)}
+                        className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        {copiedId === calc.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-slate-400" />}
+                        <span className="text-[10px]">{copiedId === calc.id ? 'Copiato' : 'Copia JSON'}</span>
+                      </button>
+                    </div>
                   </div>
 
+                  {/* Human-readable diagnostic summary */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                    {(result.indice_rischio_blocco || result.livello_rischio) && (
+                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-slate-400 text-[10px] block">Diagnosi / Rischio:</span>
+                        <span className="font-bold text-amber-300">
+                          {result.indice_rischio_blocco || result.livello_rischio}
+                        </span>
+                      </div>
+                    )}
+
+                    {(result.azione_correttiva_suggerita || result.piano_azione || result.azione_immediata) && (
+                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-slate-400 text-[10px] block">Azione Suggerita:</span>
+                        <span className="font-bold text-cyan-300">
+                          {result.azione_correttiva_suggerita || result.piano_azione || result.azione_immediata}
+                        </span>
+                      </div>
+                    )}
+
+                    {(result.stato_qubit_dominante || result.stato_qubit_rilevato) && (
+                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 sm:col-span-2 flex items-center justify-between">
+                        <span className="text-slate-400 text-[10px]">Stato Qubit Collassato:</span>
+                        <span className="px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 font-bold border border-purple-800/80">
+                          |{result.stato_qubit_dominante || result.stato_qubit_rilevato}⟩
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Parameters Echo */}
+                  {result.parametri_elaborati && Object.keys(result.parametri_elaborati).length > 0 && (
+                    <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80">
+                      <span className="text-slate-400 text-[10px] block font-mono mb-1">
+                        Parametri di Fabbrica Elaborati (Input Utente):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(result.parametri_elaborati).map(([k, v]) => (
+                          <span key={k} className="px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-[10px] font-mono text-slate-200">
+                            <strong className="text-cyan-400">{k}:</strong> {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Raw JSON */}
                   <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-cyan-300 overflow-x-auto max-h-48 leading-relaxed">
                     {JSON.stringify(result, null, 2)}
                   </pre>
@@ -914,7 +1219,8 @@ export const QuantumCatalog: React.FC<Props> = ({
               )}
             </div>
           );
-        })}
+        })
+      )}
       </div>
 
       {/* Modal Popup Punto di Domanda: Riga Esatta Telemetria CPU */}

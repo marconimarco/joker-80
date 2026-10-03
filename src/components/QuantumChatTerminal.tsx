@@ -22,6 +22,7 @@ import {
 import { ChatMessage, QuantumCalculationMeta, FactoryTenant } from '../types/quantum';
 import { QuantumRouterService } from '../services/quantumRouter';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
+import { isCalculationSupportedByPlant } from '../data/plantNodeCalculations';
 import { GuidedChatAssistant } from './GuidedChatAssistant';
 
 interface Props {
@@ -48,6 +49,7 @@ interface PresetScenario {
   entanglementSymbol: string;
   entanglement: 'OBBLIGATORIO' | 'FACOLTATIVO';
   query: string;
+  actionTitle: string;
 }
 
 const PRESET_SCENARIOS: PresetScenario[] = [
@@ -60,6 +62,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "1. Inbound & Materie Prime",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Inbound Scheduler & Saturazione Piazzale WMS",
     query: "Ho 12 camion in attesa nel piazzale con 45 minuti di ritardo e saturazione magazzino WMS all'88.5%"
   },
   {
@@ -71,6 +74,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "1. Inbound & Materie Prime",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Stima Rischio Fermo Linea & Ritardi Fornitori",
     query: "Ritardo stimato del materiale di 75 minuti con 1 sola baia di scarico libera"
   },
   {
@@ -82,6 +86,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "1. Inbound & Materie Prime",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Schedulazione Baie 24h & Turni Personale",
     query: "Schedulazione baie 24h: 8 ore di lavoro disponibili con 4 baie totali da ottimizzare"
   },
   {
@@ -93,6 +98,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "1. Inbound & Materie Prime",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Controllo Qualità Lotto & Quarantena Bobine",
     query: "Controllo lotto materie prime: umidità rilevata al 13.2% e spessore micro-bobina a 45.2"
   },
   {
@@ -104,6 +110,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "1. Inbound & Materie Prime",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Tracciabilità Sicura & Sigillo Crittografico Lotto",
     query: "Tracciabilità lotti blindata: verifica salt NIST e qualità stampa ISO per lotto BOBINA_BEMA_2026_A fornitore PLAST_REGGIO_01"
   },
   {
@@ -115,6 +122,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "2. Magazzino & Stoccaggio",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Posizionamento 3D Pallet & Slot SmartStore",
     query: "Pallet in ingresso PALLET_BEMA_099 classe HIGH con 124 celle libere nello SmartStore"
   },
   {
@@ -126,6 +134,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "2. Magazzino & Stoccaggio",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Verifica Integrità Strutturale Scaffali & Shuttle",
     query: "Controllo integrità scaffali e shuttle: micro-inclinazione 0.4 gradi con carico pattini integri e pressione 14.1 bar"
   },
   {
@@ -137,6 +146,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "2. Magazzino & Stoccaggio",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Navigazione & Percorso Ottimo Missioni Picking",
     query: "Missione picking e percorso navetta: sequenza su 6 nodi corsie SmartStore con saturazione corsia 72%"
   },
   {
@@ -148,6 +158,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "2. Magazzino & Stoccaggio",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Raggruppamento Ordini & Batching Flotta WMS",
     query: "Ottimizzazione raggruppamento ordini e batching navette WMS per 14 missioni simultanee"
   },
   {
@@ -159,6 +170,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "3. Outbound & Spedizioni",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Bilanciamento Carico Camion & Distribuzione Assi",
     query: "Bilanciamento carico camion e carico assi: pianale con 33 pallet per un totale di 24800 kg e tolleranza baricentro 1.8%"
   },
   {
@@ -170,6 +182,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "3. Outbound & Spedizioni",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Firma Digitale Sicura Lettera di Vettura e-CMR",
     query: "Firma digitale e-CMR e transito doganale con certificato crittografico quantum-safe per trasporto merci"
   },
   {
@@ -181,6 +194,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "3. Outbound & Spedizioni",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Risoluzione Conflitti & Priorità Baie di Carico",
     query: "Teoria dei giochi per contesa baie di carico tra 5 trasportatori con ritardo medio 25 minuti"
   },
   {
@@ -192,6 +206,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "3. Outbound & Spedizioni",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Gestione Flussi & Traffico Piazzale Inbound/Outbound",
     query: "Clustering piazzale e posizionamento rimorchi per 8 camion in attesa nell'area buffer est"
   },
   {
@@ -203,6 +218,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "4. IoT & Controllo Macchine",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Diagnostica Vibrazionale Braccio Fasciatore Bema",
     query: "Analisi braccio rotante Bema Silkworm: velocità a 48 giri al minuto con forti micro-vibrazioni"
   },
   {
@@ -214,6 +230,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "4. IoT & Controllo Macchine",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Controllo Tensione Film & Rischio Rottura Bema",
     query: "Allarme fasciatore Bema: tensione del film estensibile a 148.5 Newton a 12.4 m/s"
   },
   {
@@ -225,6 +242,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "4. IoT & Controllo Macchine",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Prevenzione Collisioni Flotta Navette LGV/AGV",
     query: "Traffico flotta LGV critico: 3 veicoli attivi con NODO_03_BLOCCATO nei corridoi"
   },
   {
@@ -236,6 +254,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "4. IoT & Controllo Macchine",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Gestione Telemetria, Batterie & Missioni Navette",
     query: "Assegna missioni urgenti 942 e 943: AGV_04 batteria 78% temp 42.5°C, AGV_11 92% 31°C"
   },
   {
@@ -247,6 +266,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "4. IoT & Controllo Macchine",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Cinematica 6 Assi & Pressione Robot Pallettizzatore",
     query: "Robot pallettizzatore isola 1: pressione vuoto a -0.62 bar e sovraccarico joint J2 a 410 Nm"
   },
   {
@@ -258,6 +278,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "4. IoT & Controllo Macchine",
     entanglementSymbol: "🔒",
     entanglement: "OBBLIGATORIO",
+    actionTitle: "Modulazione Potenza Piastre Ricarica Rapida AGV",
     query: "Picco potenza ricarica flotta a 125 kW con piastra a terra a 46.5°C"
   },
   {
@@ -269,6 +290,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "1. Inbound & Materie Prime",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Controllo Qualità & Integrità Pallet Woodpecker",
     query: "Ispezione pallet Woodpecker: forza pattini a 2300 N, umidità 19.2% e chiodo sporgente"
   },
   {
@@ -280,6 +302,7 @@ const PRESET_SCENARIOS: PresetScenario[] = [
     categoryFull: "3. Outbound & Spedizioni",
     entanglementSymbol: "🔓",
     entanglement: "FACOLTATIVO",
+    actionTitle: "Validazione Anticontraffazione Etichetta Raptor GS1",
     query: "Verifica anticontraffazione SSCC 080332190000458129 qualità ottica CLASSE_A"
   }
 ];
@@ -374,16 +397,11 @@ export const QuantumChatTerminal: React.FC<Props> = ({
       sender: 'quantum-core',
       timestamp: new Date().toLocaleTimeString(),
       text: `Benvenuto nella console front-end del **Nucleo Computazionale Quantistico SM.I.LE80**.
-Tutti i **21 Calcoli Quantistici CUDA-Q** sono pre-caricati e attivi nel core:
-- Categoria 1 (Inbound): [1] QBM 🔒, [2] Monte Carlo 🔒, [3] Integer Prog. 🔓, [4] Walk Clustering 🔓, [5] Post-Quantum Hash 🔓, [20] Woodpecker QSVM 🔓
-- Categoria 2 (Magazzino): [6] Bin Packing Twin 🔒, [7] Hopfield 🔓, [8] TSP Walk 🔓, [9] QGNN Batching 🔒
-- Categoria 3 (Outbound): [10] VQE Knapsack 🔓, [11] Crypto e-CMR 🔓, [12] Game Theory 🔒, [13] K-Means Yard 🔒, [21] Raptor ZKP 🔓
-- Categoria 4 (IoT & Controllo Macchine): [14] QFT Bema 🔓, [15] QSVM Film 🔓, [16] QAOA Rotte 🔒, [17] Bipartite Matching 🔒, [18] Robot VQE 🔒, [19] Microgrid Knapsack 🔒
-
-Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema identificherà la sotto-funzione, simulerà il circuito quantistico con Entanglement Obbligatorio (🔒) o Facoltativo (🔓) e restituirà il payload JSON con l'azione immediata.`
+Tutti i **21 Calcoli Quantistici CUDA-Q** sono pre-caricati e attivi nel core:`
     }
   ]);
 
+  const [initialCalcsCategory, setInitialCalcsCategory] = useState<'Tutti' | 'Inbound' | 'Magazzino' | 'Outbound' | 'IoT'>('Tutti');
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -441,6 +459,16 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
       s.label.replace(/[^0-9]/g, '') === queryTerm;
     return matchesCategory && matchesSearch;
   });
+
+  // Calculations supported by the active plant's physical nodes & machinery
+  const tenantSupportedScenarios = React.useMemo(() => {
+    if (!activeTenant) return PRESET_SCENARIOS;
+    return PRESET_SCENARIOS.filter(s => isCalculationSupportedByPlant(s.id, activeTenant));
+  }, [activeTenant]);
+
+  const displayedInitialCalcs = initialCalcsCategory === 'Tutti'
+    ? tenantSupportedScenarios
+    : tenantSupportedScenarios.filter(s => s.category.toLowerCase() === initialCalcsCategory.toLowerCase());
 
   // Safely scroll ONLY the messages container itself, never the window or document
   useEffect(() => {
@@ -818,6 +846,91 @@ Descrivi qualsiasi situazione o fornisci i dati della fabbrica: il sistema ident
 
                   {/* User query or Bot explanation with elegant justified typography */}
                   <FormattedChatMessage text={msg.text || ''} isUser={isUser} />
+
+                  {/* Interactive Buttons for the 21 Quantum Calculations on Welcome Message */}
+                  {msg.id === 'init-sys' && (
+                    <div className="pt-2 space-y-3 font-sans">
+                      {/* Filter pills & count */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                          {(['Tutti', 'Inbound', 'Magazzino', 'Outbound', 'IoT'] as const).map(cat => {
+                            const count = cat === 'Tutti'
+                              ? tenantSupportedScenarios.length
+                              : tenantSupportedScenarios.filter(s => s.category.toLowerCase() === cat.toLowerCase()).length;
+                            return (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => setInitialCalcsCategory(cat)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer shrink-0 ${
+                                  initialCalcsCategory === cat
+                                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold shadow-xs'
+                                    : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border border-slate-800'
+                                }`}
+                              >
+                                {cat === 'Tutti' ? `Tutti (${count})` : cat === 'IoT' ? `IoT & Macchine (${count})` : `${cat} (${count})`}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <span className="text-[11px] font-mono text-cyan-400/90 hidden sm:inline">
+                          {displayedInitialCalcs.length} algoritmi nodo • Clicca per eseguire
+                        </span>
+                      </div>
+
+                      {/* The 21 clickable buttons in responsive grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
+                        {displayedInitialCalcs.map(scenario => (
+                          <button
+                            key={scenario.id}
+                            type="button"
+                            onClick={() => handleSend(scenario.query)}
+                            disabled={isProcessing}
+                            className="group relative p-3 rounded-xl bg-slate-900/95 hover:bg-slate-850 border border-slate-700/80 hover:border-cyan-400/80 text-left transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-sm hover:shadow-md hover:shadow-cyan-950/40 active:scale-[0.99] disabled:opacity-60"
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/80 shrink-0">
+                                [{scenario.id}]
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-300 border border-slate-700">
+                                  {scenario.category}
+                                </span>
+                                <span 
+                                  className="text-[11px]" 
+                                  title={scenario.entanglement === 'OBBLIGATORIO' ? 'Entanglement Obbligatorio 🔒' : 'Entanglement Facoltativo 🔓'}
+                                >
+                                  {scenario.entanglementSymbol}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors leading-snug">
+                                {scenario.actionTitle}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono mt-1 truncate">
+                                {scenario.name}
+                              </div>
+                            </div>
+
+                            <div className="pt-1.5 border-t border-slate-800/70 flex items-center justify-between text-[10.5px] font-mono text-cyan-400/90 group-hover:text-cyan-200">
+                              <span>Avvia Calcolo</span>
+                              <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-1 transition-transform" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Footer hint */}
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[11.5px] font-mono text-slate-300 flex items-start gap-2 leading-relaxed">
+                        <Radio className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                        <span>
+                          Descrivi qualsiasi situazione o fornisci i dati della fabbrica: clicca su uno dei <strong>21 pulsanti</strong> sopra per avviare subito la simulazione quantistica con i parametri reali, oppure digita liberamente nella barra in basso.
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Interactive Decision Assistance Cards */}
                   {msg.opzioniScelta && msg.opzioniScelta.length > 0 && (

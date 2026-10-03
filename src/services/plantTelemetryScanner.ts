@@ -66,7 +66,14 @@ export class PlantTelemetryScanner {
 
     // Run all 21 calculations sequentially or in parallel with actual plant topology inputs
     for (const calc of QUANTUM_CALCULATIONS) {
-      const inputs = this.extractInputsForCalc(calc.id, tenant);
+      let inputs = this.extractInputsForCalc(calc.id, tenant);
+      try {
+        const saved = localStorage.getItem(`joker_custom_telemetry_${tenant.id}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          inputs = { ...inputs, ...parsed };
+        }
+      } catch {}
       const res: QuantumExecutionResult = await QuantumEngine.executeCalculation(calc.id, inputs);
 
       const alertInfo = this.evaluateCalculationHealth(calc.id, res, inputs, tenant, calc.subFunction);

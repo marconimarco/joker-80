@@ -47,7 +47,11 @@ import {
   HelpCircle,
   Send,
   Download,
-  Clock
+  Clock,
+  Search,
+  Filter,
+  X,
+  UserPlus
 } from 'lucide-react';
 import { FactoryTenant, UserAccount, IndustrialProtocol } from '../types/quantum';
 import { AuthStorage } from '../services/authStorage';
@@ -63,6 +67,7 @@ interface Props {
   activeTenant: FactoryTenant;
   onSelectTenant: (tenant: FactoryTenant) => void;
   currentUser: UserAccount;
+  onOpenCsvModalForPlant?: (tenant: FactoryTenant) => void;
 }
 
 export const AdminControlPanel: React.FC<Props> = ({
@@ -70,9 +75,19 @@ export const AdminControlPanel: React.FC<Props> = ({
   onUpdateTenants,
   activeTenant,
   onSelectTenant,
-  currentUser
+  currentUser,
+  onOpenCsvModalForPlant
 }) => {
   const [activeTab, setActiveTab] = useState<'discovery' | 'topology' | 'operators' | 'mtls' | 'daemon_frequency'>('discovery');
+  const [adminSubView, setAdminSubView] = useState<'aziende' | 'stabilimenti' | 'nuovo_stabilimento'>('stabilimenti');
+  const [plantForOperatorsModal, setPlantForOperatorsModal] = useState<FactoryTenant | null>(null);
+  const [quickOpUsername, setQuickOpUsername] = useState('');
+  const [quickOpPassword, setQuickOpPassword] = useState('');
+  const [quickOpNome, setQuickOpNome] = useState('');
+  const [quickOpLinea, setQuickOpLinea] = useState('');
+  const [quickOpFeedback, setQuickOpFeedback] = useState<string | null>(null);
+  const [plantSearchTerm, setPlantSearchTerm] = useState('');
+
   const [users, setUsers] = useState<UserAccount[]>(() => AuthStorage.getUsers());
 
   // PFX / PKCS#12 Certificate Upload State
@@ -534,6 +549,7 @@ export const AdminControlPanel: React.FC<Props> = ({
   // Edit Tenant action with smooth scroll to form
   const handleEditTenant = (tenant: FactoryTenant) => {
     handleSelectExistingTenant(tenant);
+    setAdminSubView('nuovo_stabilimento');
     const formEl = document.getElementById('plant-form-section');
     if (formEl) {
       formEl.scrollIntoView({ behavior: 'smooth' });
@@ -559,10 +575,65 @@ export const AdminControlPanel: React.FC<Props> = ({
     setSelectedOperatorIds([]);
     setDiscoveryResult(null);
     setSaveSuccessMessage(null);
+    setAdminSubView('nuovo_stabilimento');
 
     const formEl = document.getElementById('plant-form-section');
     if (formEl) {
       formEl.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleCreateQuickOperatorForPlant = (tenant: FactoryTenant) => {
+    if (!quickOpUsername.trim() || !quickOpPassword.trim() || !quickOpNome.trim()) return;
+    const newOp: UserAccount = {
+      id: `usr-op-${Date.now()}`,
+      username: quickOpUsername.trim(),
+      password: quickOpPassword.trim(),
+      nomeCompleto: quickOpNome.trim(),
+      ruolo: 'Operatore di Linea',
+      tenantId: tenant.id,
+      lineaAssegnata: quickOpLinea.trim() || `Linea Generale - ${tenant.nome}`,
+      attivo: true,
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+    AuthStorage.addUser(newOp);
+    setUsers(AuthStorage.getUsers());
+
+    // Link operator to tenant
+    const updatedTenants = tenants.map(t => {
+      if (t.id === tenant.id) {
+        const currentOps = t.operatoriAssegnati || [];
+        if (!currentOps.includes(newOp.username) && !currentOps.includes(newOp.id)) {
+          return { ...t, operatoriAssegnati: [...currentOps, newOp.username] };
+        }
+      }
+      return t;
+    });
+    AuthStorage.saveTenants(updatedTenants);
+    onUpdateTenants(updatedTenants);
+
+    setQuickOpFeedback(`✅ Operatore "${newOp.nomeCompleto}" (@${newOp.username}) creato e assegnato a ${tenant.nome}!`);
+    setQuickOpUsername('');
+    setQuickOpPassword('');
+    setQuickOpNome('');
+    setQuickOpLinea('');
+    setTimeout(() => setQuickOpFeedback(null), 3500);
+  };
+
+  const handleToggleOperatorForTenant = (tenant: FactoryTenant, operatorUsername: string) => {
+    const currentOps = tenant.operatoriAssegnati || [];
+    const isAssigned = currentOps.includes(operatorUsername);
+    const updatedOps = isAssigned
+      ? currentOps.filter(u => u !== operatorUsername)
+      : [...currentOps, operatorUsername];
+
+    const updated = { ...tenant, operatoriAssegnati: updatedOps };
+    AuthStorage.updateTenant(updated);
+    const all = AuthStorage.getTenants();
+    onUpdateTenants(all);
+    setPlantForOperatorsModal(updated);
+    if (activeTenant.id === tenant.id) {
+      onSelectTenant(updated);
     }
   };
 
@@ -938,240 +1009,520 @@ export const AdminControlPanel: React.FC<Props> = ({
       {activeTab === 'discovery' && (
         <div className="space-y-6">
           {/* SELEZIONE SOCIETÀ E GESTIONE STABILIMENTI */}
+          {/* BARRA DI CONTROLLO IN ALTO A DESTRA: TUTTE LE AZIENDE | TUTTI GLI STABILIMENTI | NUOVO STABILIMENTO */}
           <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
                 <span className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
                   <Building className="w-4 h-4 text-cyan-400" />
-                  Gestione Stabilimenti per Società / Azienda
+                  Gestione Multi-Impianto & Stabilimenti Industriali
                 </span>
                 <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-                  Seleziona prima la società per visualizzarne gli stabilimenti collegati, modificarli con il pulsante Edit o registrarne uno nuovo.
+                  Visualizzazione separata per sezione: consulta le aziende, esplora gli stabilimenti o registra un nuovo impianto.
                 </p>
               </div>
 
-              <button
-                onClick={handleClearForm}
-                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white border border-purple-400/40 text-xs font-mono flex items-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-sm shadow-purple-600/30"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Nuovo Stabilimento (Pulisci Modulo)</span>
-              </button>
-            </div>
-
-            {/* FILTRO SOCIETÀ (AZIENDE) */}
-            <div className="space-y-2">
-              <div className="text-[10px] font-mono font-semibold text-slate-400 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-purple-400" />
-                  <span>1. Seleziona Società / Azienda:</span>
-                </span>
-                <span className="text-slate-500 text-[10px]">
-                  {companies.length} Società Registrate
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+              {/* I 3 PULSANTI IN ALTO A DESTRA */}
+              <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 shrink-0 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => setSelectedCompanyFilter('all')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5 ${
-                    selectedCompanyFilter === 'all'
-                      ? 'bg-cyan-600 text-white border-cyan-400 shadow-sm'
-                      : 'bg-slate-950/80 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                  onClick={() => setAdminSubView('aziende')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    adminSubView === 'aziende'
+                      ? 'bg-purple-600 text-white shadow-sm border border-purple-400/40'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
                   }`}
+                  title="Visualizza solo l'elenco di tutte le aziende e società registrate"
                 >
-                  <span>Tutte le Aziende</span>
-                  <span className="px-1.5 py-0.2 rounded bg-black/30 text-[10px] font-mono">
+                  <Building2 className="w-3.5 h-3.5 text-purple-300" />
+                  <span>Tutte le aziende</span>
+                  <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
+                    {companies.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAdminSubView('stabilimenti')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    adminSubView === 'stabilimenti'
+                      ? 'bg-cyan-600 text-white shadow-sm border border-cyan-400/40'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
+                  }`}
+                  title="Visualizza solo l'elenco di tutti gli stabilimenti registrati"
+                >
+                  <Factory className="w-3.5 h-3.5 text-cyan-300" />
+                  <span>Tutti gli stabilimenti</span>
+                  <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
                     {tenants.length}
                   </span>
                 </button>
 
-                {companies.map(comp => {
-                  const count = tenants.filter(t => (t.azienda || '').toLowerCase() === comp.toLowerCase()).length;
-                  const isSelected = selectedCompanyFilter.toLowerCase() === comp.toLowerCase();
-                  return (
-                    <button
-                      key={comp}
-                      type="button"
-                      onClick={() => setSelectedCompanyFilter(comp)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5 ${
-                        isSelected
-                          ? 'bg-purple-600 text-white border-purple-400 shadow-sm'
-                          : 'bg-slate-950/80 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
-                      }`}
-                    >
-                      <span>{comp}</span>
-                      <span className="px-1.5 py-0.2 rounded bg-black/30 text-[10px] font-mono">
-                        {count} {count === 1 ? 'stabilimento' : 'stabilimenti'}
-                      </span>
-                    </button>
-                  );
-                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleClearForm();
+                    setAdminSubView('nuovo_stabilimento');
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    adminSubView === 'nuovo_stabilimento'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm border border-emerald-400/40'
+                      : 'text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 hover:text-white'
+                  }`}
+                  title="Apri il modulo per registrare un nuovo stabilimento o modificare quello selezionato"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Nuovo stabilimento</span>
+                </button>
               </div>
             </div>
 
-            {/* ELENCO DEGLI STABILIMENTI PER LA SOCIETÀ SELEZIONATA */}
-            <div className="space-y-2 pt-1 border-t border-slate-800/60">
-              <div className="text-[10px] font-mono font-semibold text-slate-400 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <Factory className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>2. Stabilimenti {selectedCompanyFilter !== 'all' ? `per "${selectedCompanyFilter}"` : 'nel Sistema'} ({displayedTenants.length}):</span>
-                </span>
-                <span className="text-slate-500 text-[10px]">
-                  Fai clic su "Modifica" per compilare e salvare i parametri
-                </span>
-              </div>
+            {/* ========================================================================= */}
+            {/* SOTTO-VISTA 1: SOLO TUTTE LE AZIENDE                                      */}
+            {/* ========================================================================= */}
+            {adminSubView === 'aziende' && (
+              <div className="space-y-4 pt-1 animate-in fade-in duration-150">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      <Building2 className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-bold font-mono text-white">
+                        Società e Gruppi Industriali ({companies.length})
+                      </h4>
+                      <p className="text-[11px] font-mono text-slate-400">
+                        Panoramica aziendale con stabilimenti associati, macchinari Elettric80 e personale operatore.
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {displayedTenants.map(t => {
-                  const isSelected = selectedExistingTenantId === t.id;
-                  const isActive = activeTenant.id === t.id;
-                  const assignedOps = users.filter(u => 
-                    (t.operatoriAssegnati && t.operatoriAssegnati.includes(u.id)) || u.tenantId === t.id
+                  <span className="text-[10px] font-mono text-slate-500">
+                    Totale Stabilimenti nel Network: <strong className="text-cyan-400">{tenants.length}</strong>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {companies.map(comp => {
+                    const companyTenants = tenants.filter(t => (t.azienda || '').toLowerCase() === comp.toLowerCase());
+                    const companyNodes = companyTenants.reduce((acc, t) => acc + (t.plantTopology?.macchinari?.length || 0), 0);
+                    const assignedUsers = users.filter(u => 
+                      companyTenants.some(t => (t.operatoriAssegnati || []).includes(u.id) || u.tenantId === t.id)
+                    );
+                    const primeColor = companyTenants[0]?.logoColor || '#a855f7';
+
+                    return (
+                      <div
+                        key={comp}
+                        className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-purple-500/50 shadow-lg space-y-3 flex flex-col justify-between transition-all"
+                      >
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span 
+                                className="w-3 h-3 rounded-full shrink-0" 
+                                style={{ backgroundColor: primeColor }}
+                              />
+                              <h5 className="font-mono font-bold text-sm text-slate-100 truncate">
+                                {comp}
+                              </h5>
+                            </div>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0">
+                              {companyTenants.length} {companyTenants.length === 1 ? 'stabilimento' : 'stabilimenti'}
+                            </span>
+                          </div>
+
+                          {/* Stats Pills */}
+                          <div className="grid grid-cols-3 gap-1.5 text-center font-mono">
+                            <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800/80">
+                              <span className="text-[9px] text-slate-400 block">Stabilimenti</span>
+                              <strong className="text-xs text-purple-300">{companyTenants.length}</strong>
+                            </div>
+                            <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800/80">
+                              <span className="text-[9px] text-slate-400 block">Macchine/Nodi</span>
+                              <strong className="text-xs text-cyan-300">{companyNodes || (companyTenants.length * 6)}</strong>
+                            </div>
+                            <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800/80">
+                              <span className="text-[9px] text-slate-400 block">Operatori</span>
+                              <strong className="text-xs text-emerald-300">{assignedUsers.length}</strong>
+                            </div>
+                          </div>
+
+                          {/* Plant Badges list */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-mono text-slate-500 block">
+                              Stabilimenti registrati:
+                            </span>
+                            <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
+                              {companyTenants.map(t => (
+                                <span
+                                  key={t.id}
+                                  className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 border border-slate-800 text-slate-300 flex items-center gap-1"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                                  <span className="truncate max-w-[150px]">#{t.numeroStabilimento || 1} {t.nome}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCompanyFilter(comp);
+                              setAdminSubView('stabilimenti');
+                            }}
+                            className="flex-1 py-1.5 px-2 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-mono font-bold flex items-center justify-center gap-1 transition-all cursor-pointer"
+                          >
+                            <Factory className="w-3 h-3" />
+                            <span>Vedi Stabilimenti ({companyTenants.length})</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleClearForm();
+                              setPlantAzienda(comp);
+                              setPlantNumeroStabilimento(companyTenants.length + 1);
+                              setAdminSubView('nuovo_stabilimento');
+                            }}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-purple-600/30 hover:border-purple-400/50 text-slate-300 hover:text-purple-200 border border-slate-700 text-[11px] font-mono transition-all cursor-pointer"
+                            title={`Aggiungi nuovo stabilimento per ${comp}`}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* SOTTO-VISTA 2: SOLO TUTTI GLI STABILIMENTI                                */}
+            {/* ========================================================================= */}
+            {adminSubView === 'stabilimenti' && (
+              <div className="space-y-4 pt-1 animate-in fade-in duration-150">
+                {/* Search & Company Filter Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-thin">
+                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider font-bold shrink-0 flex items-center gap-1">
+                      <Filter className="w-3 h-3 text-cyan-400" /> Filtra:
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCompanyFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5 ${
+                        selectedCompanyFilter === 'all'
+                          ? 'bg-cyan-600 text-white border-cyan-400 shadow-xs'
+                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>Tutte le Società</span>
+                      <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
+                        {tenants.length}
+                      </span>
+                    </button>
+
+                    {companies.map(comp => {
+                      const count = tenants.filter(t => (t.azienda || '').toLowerCase() === comp.toLowerCase()).length;
+                      const isSelected = selectedCompanyFilter.toLowerCase() === comp.toLowerCase();
+                      return (
+                        <button
+                          key={comp}
+                          type="button"
+                          onClick={() => setSelectedCompanyFilter(comp)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-purple-600 text-white border-purple-400 shadow-xs'
+                              : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                          }`}
+                        >
+                          <span>{comp}</span>
+                          <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Search input */}
+                  <div className="relative min-w-[200px]">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Cerca stabilimento o città..."
+                      value={plantSearchTerm}
+                      onChange={e => setPlantSearchTerm(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1 text-xs font-mono rounded-lg bg-slate-900 border border-slate-800 text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                {/* STABILIMENTO PRESENTE / ATTIVO BANNER CON PULSANTE OPERATORI */}
+                {(() => {
+                  const currentActive = tenants.find(t => t.id === activeTenant.id) || activeTenant;
+                  const activeOps = users.filter(u => 
+                    (currentActive.operatoriAssegnati || []).includes(u.id) || u.tenantId === currentActive.id
                   );
 
                   return (
-                    <div
-                      key={t.id}
-                      className={`p-3.5 rounded-xl transition-all border flex flex-col justify-between gap-3 ${
-                        isSelected
-                          ? 'bg-cyan-950/60 border-cyan-400 ring-1 ring-cyan-500/50 shadow-md'
-                          : isActive
-                          ? 'bg-slate-950/90 border-cyan-500/50 shadow-sm'
-                          : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="space-y-2">
-                        {/* Header: Company & Stabilimento # */}
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 truncate max-w-[170px]">
-                            {t.azienda || 'Azienda Industriale'}
+                    <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/60 via-slate-900 to-indigo-950/50 border border-cyan-500/40 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                            STABILIMENTO ATTIVO NEL PROGRAMMA
                           </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0">
-                            Stabilimento #{t.numeroStabilimento || 1}
-                          </span>
-                        </div>
-
-                        {/* Plant Name & Site */}
-                        <div>
-                          <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-sm text-white flex items-center gap-1.5">
                             <span 
-                              className="w-2.5 h-2.5 rounded-full shrink-0" 
-                              style={{ backgroundColor: t.logoColor || '#06b6d4' }}
+                              className="w-2.5 h-2.5 rounded-full" 
+                              style={{ backgroundColor: currentActive.logoColor || '#06b6d4' }}
                             />
-                            <h4 className="text-xs font-bold font-mono text-slate-100 truncate">
-                              {t.nome}
-                            </h4>
-                          </div>
-                          <p className="text-[11px] font-mono text-slate-400 mt-0.5 flex items-center gap-1">
-                            <Globe className="w-3 h-3 text-slate-500" />
-                            <span>{t.sito}</span>
-                          </p>
-                        </div>
-
-                        {/* Assigned Operators Badges */}
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-mono uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                            <Users className="w-2.5 h-2.5" /> Operatori Assegnati ({assignedOps.length}):
+                            {currentActive.nome}
                           </span>
-                          <div className="flex flex-wrap gap-1">
-                            {assignedOps.length > 0 ? (
-                              assignedOps.slice(0, 3).map((op, oIdx) => (
-                                <span 
-                                  key={`${op.id || 'op'}-${oIdx}`}
-                                  className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-mono text-cyan-300 truncate max-w-[120px]"
-                                  title={`${op.nomeCompleto} (@${op.username})`}
-                                >
-                                  {op.nomeCompleto.split(' ')[0]} (@{op.username})
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-[10px] font-mono text-slate-500 italic">
-                                Nessun operatore assegnato
-                              </span>
-                            )}
-                            {assignedOps.length > 3 && (
-                              <span className="px-1 py-0.5 text-[9px] font-mono text-slate-400">
-                                +{assignedOps.length - 3} altri
-                              </span>
-                            )}
-                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            {currentActive.azienda || 'Azienda'} #{currentActive.numeroStabilimento || 1}
+                          </span>
                         </div>
-
-                        {/* Gateway info */}
-                        <div className="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-x-2">
-                          <span>GW: <code className="text-slate-300 truncate max-w-[130px] inline-block align-bottom">{t.endpoint}</code></span>
+                        <div className="text-[11px] font-mono text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span>Sito: <strong className="text-slate-200">{currentActive.sito}</strong></span>
                           <span>•</span>
-                          <span>{t.protocol || 'REST_HTTPS'}</span>
+                          <span>Gateway: <code className="text-cyan-300">{currentActive.endpoint}</code></span>
+                          <span>•</span>
+                          <span>Protocollo: <strong className="text-slate-200">{currentActive.protocol || 'REST_HTTPS'}</strong></span>
                         </div>
                       </div>
 
-                      {/* Action buttons */}
-                      <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-800/80">
-                        <div className="flex items-center gap-1">
-                          {/* PULSANTE MODIFICA (PENCIL) */}
-                          <button
-                            type="button"
-                            onClick={() => handleEditTenant(t)}
-                            className="px-2.5 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer"
-                            title="Modifica stabilimento, parametri e operatori assegnati"
-                          >
-                            <Pencil className="w-3 h-3 text-cyan-300" />
-                            <span>Modifica</span>
-                          </button>
+                      {/* Bottoni sullo stabilimento presente: OPERATORI & CARICA CSV */}
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {/* IL PULSANTE OPERATORI SULLO STABILIMENTO PRESENTE */}
+                        <button
+                          type="button"
+                          onClick={() => setPlantForOperatorsModal(currentActive)}
+                          className="px-3 py-1.5 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-400/50 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-cyan-600/20"
+                          title="Visualizza e gestisci gli operatori per lo stabilimento attivo"
+                        >
+                          <Users className="w-3.5 h-3.5 text-cyan-300" />
+                          <span>Operatori dello Stabilimento</span>
+                          <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
+                            {activeOps.length}
+                          </span>
+                        </button>
 
-                          {/* Quick resync */}
-                          <button
-                            type="button"
-                            onClick={() => handleResync(t)}
-                            disabled={isSyncing === t.id}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-                            title="Risincronizza telemetria"
-                          >
-                            <RefreshCw className={`w-3 h-3 ${isSyncing === t.id ? 'animate-spin text-cyan-400' : ''}`} />
-                          </button>
-                        </div>
+                        {/* CARICA CSV MANUALE PER QUESTO STABILIMENTO */}
+                        <button
+                          type="button"
+                          onClick={() => onOpenCsvModalForPlant ? onOpenCsvModalForPlant(currentActive) : null}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          title="Carica manualmente un file CSV di telemetria per questo stabilimento"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Carica CSV</span>
+                        </button>
 
-                        <div className="flex items-center gap-1">
-                          {!isActive ? (
-                            <button
-                              type="button"
-                              onClick={() => onSelectTenant(t)}
-                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-[11px] font-mono border border-slate-700 transition-all cursor-pointer"
-                            >
-                              Attiva
-                            </button>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-                              <CheckCircle2 className="w-2.5 h-2.5" /> In Uso
-                            </span>
-                          )}
-
-                          {t.id !== 'local' && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteTenant(t.id, t.nome)}
-                              className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                              title="Elimina stabilimento"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
+                        {/* MODIFICA */}
+                        <button
+                          type="button"
+                          onClick={() => handleEditTenant(currentActive)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono font-bold flex items-center gap-1 transition-all cursor-pointer border border-slate-700"
+                          title="Modifica parametri dello stabilimento"
+                        >
+                          <Pencil className="w-3 h-3 text-cyan-300" />
+                          <span>Modifica</span>
+                        </button>
                       </div>
                     </div>
                   );
-                })}
+                })()}
+
+                {/* ELENCO DEGLI STABILIMENTI */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {displayedTenants
+                    .filter(t => {
+                      if (!plantSearchTerm.trim()) return true;
+                      const term = plantSearchTerm.toLowerCase();
+                      return (
+                        t.nome.toLowerCase().includes(term) ||
+                        (t.azienda || '').toLowerCase().includes(term) ||
+                        (t.sito || '').toLowerCase().includes(term) ||
+                        t.endpoint.toLowerCase().includes(term)
+                      );
+                    })
+                    .map(t => {
+                      const isSelected = selectedExistingTenantId === t.id;
+                      const isActive = activeTenant.id === t.id;
+                      const assignedOps = users.filter(u => 
+                        (t.operatoriAssegnati && t.operatoriAssegnati.includes(u.id)) || u.tenantId === t.id
+                      );
+                      const nodeCount = t.plantTopology?.macchinari?.length || 0;
+
+                      return (
+                        <div
+                          key={t.id}
+                          className={`p-3.5 rounded-xl transition-all border flex flex-col justify-between gap-3 ${
+                            isSelected
+                              ? 'bg-cyan-950/60 border-cyan-400 ring-1 ring-cyan-500/50 shadow-md'
+                              : isActive
+                              ? 'bg-slate-950/90 border-cyan-500/50 shadow-sm'
+                              : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            {/* Header: Company & Stabilimento # */}
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 truncate max-w-[170px]">
+                                {t.azienda || 'Azienda Industriale'}
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0">
+                                Stabilimento #{t.numeroStabilimento || 1}
+                              </span>
+                            </div>
+
+                            {/* Plant Name & Site */}
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span 
+                                  className="w-2.5 h-2.5 rounded-full shrink-0" 
+                                  style={{ backgroundColor: t.logoColor || '#06b6d4' }}
+                                />
+                                <h4 className="text-xs font-bold font-mono text-slate-100 truncate">
+                                  {t.nome}
+                                </h4>
+                              </div>
+                              <p className="text-[11px] font-mono text-slate-400 mt-0.5 flex items-center gap-1">
+                                <Globe className="w-3 h-3 text-slate-500" />
+                                <span>{t.sito}</span>
+                                {nodeCount > 0 && (
+                                  <span className="ml-1 text-cyan-400">
+                                    • {nodeCount} Nodi/Macchine
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+
+                            {/* Assigned Operators Badges */}
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-mono uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                  <Users className="w-2.5 h-2.5" /> Operatori Assegnati ({assignedOps.length}):
+                                </span>
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {assignedOps.length > 0 ? (
+                                  assignedOps.slice(0, 3).map((op, oIdx) => (
+                                    <span 
+                                      key={`${op.id || 'op'}-${oIdx}`}
+                                      className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-mono text-cyan-300 truncate max-w-[120px]"
+                                      title={`${op.nomeCompleto} (@${op.username})`}
+                                    >
+                                      {op.nomeCompleto.split(' ')[0]} (@{op.username})
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] font-mono text-slate-500 italic">
+                                    Nessun operatore assegnato
+                                  </span>
+                                )}
+                                {assignedOps.length > 3 && (
+                                  <span className="px-1 py-0.5 text-[9px] font-mono text-slate-400">
+                                    +{assignedOps.length - 3} altri
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Gateway info */}
+                            <div className="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-x-2">
+                              <span>GW: <code className="text-slate-300 truncate max-w-[130px] inline-block align-bottom">{t.endpoint}</code></span>
+                              <span>•</span>
+                              <span>{t.protocol || 'REST_HTTPS'}</span>
+                            </div>
+                          </div>
+
+                          {/* Action buttons: Operatori, CSV, Modifica, Attiva, Elimina */}
+                          <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-800/80 flex-wrap">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {/* IL PULSANTE OPERATORI PER OGNI SINGOLO STABILIMENTO */}
+                              <button
+                                type="button"
+                                onClick={() => setPlantForOperatorsModal(t)}
+                                className="px-2 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer"
+                                title="Visualizza e gestisci gli operatori assegnati a questo stabilimento"
+                              >
+                                <Users className="w-3 h-3 text-cyan-300" />
+                                <span>Operatori</span>
+                              </button>
+
+                              {/* CARICA CSV PER QUESTO STABILIMENTO */}
+                              <button
+                                type="button"
+                                onClick={() => onOpenCsvModalForPlant ? onOpenCsvModalForPlant(t) : null}
+                                className="px-2 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer"
+                                title="Carica manualmente file CSV telemetria per questo stabilimento"
+                              >
+                                <UploadCloud className="w-3 h-3 text-emerald-400" />
+                                <span>CSV</span>
+                              </button>
+
+                              {/* MODIFICA */}
+                              <button
+                                type="button"
+                                onClick={() => handleEditTenant(t)}
+                                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer"
+                                title="Modifica stabilimento nel modulo"
+                              >
+                                <Pencil className="w-3 h-3 text-cyan-300" />
+                                <span>Modifica</span>
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              {!isActive ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onSelectTenant(t)}
+                                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-[11px] font-mono border border-slate-700 transition-all cursor-pointer"
+                                >
+                                  Attiva
+                                </button>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                                  <CheckCircle2 className="w-2.5 h-2.5" /> In Uso
+                                </span>
+                              )}
+
+                              {t.id !== 'local' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTenant(t.id, t.nome)}
+                                  className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                  title="Elimina stabilimento"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Grid: Form on Left, Discovered Result / Plant List on Right */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* SOTTO-VISTA 3: SOLO NUOVO STABILIMENTO (MODULO CREAZIONE / MODIFICA) */}
+          {adminSubView === 'nuovo_stabilimento' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in duration-150">
             
             {/* Left: Complete Data Input & Edit Form */}
-            <div id="plant-form-section" className="lg:col-span-6 p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+            <div id="plant-form-section" className="lg:col-span-7 p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
               <div className="border-b border-slate-800 pb-3 flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-bold font-mono text-white flex items-center gap-2">
@@ -1182,7 +1533,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                       </>
                     ) : (
                       <>
-                        <Plus className="w-4 h-4 text-purple-400" />
+                        <Plus className="w-4 h-4 text-emerald-400" />
                         <span>Nuovo Stabilimento per Società</span>
                       </>
                     )}
@@ -1194,16 +1545,41 @@ export const AdminControlPanel: React.FC<Props> = ({
                   </p>
                 </div>
 
-                {selectedExistingTenantId && (
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* IL PULSANTE OPERATORI SUL NUOVO STABILIMENTO */}
                   <button
                     type="button"
-                    onClick={handleClearForm}
-                    className="text-[11px] font-mono text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors shrink-0"
-                    title="Pulisci modulo per inserire un nuovo stabilimento"
+                    onClick={() => {
+                      if (selectedExistingTenantId) {
+                        const currentT = tenants.find(t => t.id === selectedExistingTenantId);
+                        if (currentT) {
+                          setPlantForOperatorsModal(currentT);
+                          return;
+                        }
+                      }
+                      setActiveTab('operators');
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    title="Visualizza e gestisci gli operatori per questo stabilimento"
                   >
-                    + Nuovo Stabilimento
+                    <Users className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Operatori</span>
+                    <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-[10px]">
+                      {selectedOperatorIds.length}
+                    </span>
                   </button>
-                )}
+
+                  {selectedExistingTenantId && (
+                    <button
+                      type="button"
+                      onClick={handleClearForm}
+                      className="text-[11px] font-mono text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors shrink-0 border border-slate-700 cursor-pointer"
+                      title="Pulisci modulo per inserire un nuovo stabilimento"
+                    >
+                      + Nuovo Stabilimento
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Banner Successo Salvataggio */}
@@ -1612,282 +1988,94 @@ export const AdminControlPanel: React.FC<Props> = ({
                 </div>
               )}
 
-              {/* Stabilimento Connesso Card (Single Plant View by default) */}
-              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div>
-                    <h3 className="text-sm font-bold font-mono text-white flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-cyan-400" />
-                      {showAllPlants ? `Stabilimenti Connessi (${tenants.length})` : 'Stabilimento Connesso'}
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5 font-mono">
-                      {showAllPlants 
-                        ? 'Elenco completo degli stabilimenti registrati nel sistema.' 
-                        : 'Visualizzazione dello stabilimento selezionato nel Banco di Prova SM.I.LE80.'}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAllPlants(!showAllPlants)}
-                    className="text-[10px] font-mono text-slate-400 hover:text-cyan-300 underline transition-colors cursor-pointer shrink-0"
-                  >
-                    {showAllPlants ? '← Mostra solo stabilimento selezionato' : `Mostra tutti (${tenants.length})`}
-                  </button>
-                </div>
-
-                {/* VISTA 1: STABILIMENTO SINGOLO SELEZIONATO (O ATTIVO) */}
-                {!showAllPlants && (() => {
-                  const targetTenant = (selectedExistingTenantId ? tenants.find(t => t.id === selectedExistingTenantId) : null) || tenants.find(t => t.id === activeTenant.id) || tenants[0];
-                  if (!targetTenant) return null;
-
-                  const isActive = targetTenant.id === activeTenant.id;
-                  const isLoadedInForm = selectedExistingTenantId === targetTenant.id;
-                  const topo = targetTenant.plantTopology;
-
-                  return (
-                    <div
-                      className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                        isLoadedInForm
-                          ? 'bg-cyan-950/40 border-cyan-400 ring-1 ring-cyan-500/40 shadow-sm'
-                          : isActive
-                          ? 'bg-cyan-500/10 border-cyan-500/40 shadow-sm shadow-cyan-500/10'
-                          : 'bg-slate-950/60 border-slate-800'
-                      }`}
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span 
-                            className="w-3 h-3 rounded-full shrink-0" 
-                            style={{ backgroundColor: targetTenant.logoColor || '#06b6d4' }}
-                          />
-                          <span className="font-mono font-bold text-xs text-slate-100">
-                            {targetTenant.nome}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                            {targetTenant.azienda || 'Azienda'} #{targetTenant.numeroStabilimento || 1}
-                          </span>
-                          {isActive && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                              ATTIVO
-                            </span>
-                          )}
-                          {isLoadedInForm && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                              NEL MODULO
-                            </span>
-                          )}
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-emerald-400 border border-slate-700 flex items-center gap-1">
-                            <Wifi className="w-2.5 h-2.5" />
-                            {targetTenant.connectionStatus || 'CONNESSO'}
-                          </span>
-                        </div>
-
-                        <div className="text-[11px] font-mono text-slate-400">
-                          Sito: <span className="text-slate-300">{targetTenant.sito}</span>
-                          {topo && (
-                            <span className="ml-2 text-cyan-400/80">
-                              ({topo.macchinari.length} Macchine, {topo.flottaAgv.length} LGV, QPU {topo.qubitCapacity} Qubits)
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <span>GW: <code className="text-cyan-400">{targetTenant.endpoint}</code></span>
-                          {targetTenant.protocol && <span>Prot: <span className="text-slate-300">{targetTenant.protocol}</span></span>}
-                          {targetTenant.plcIp && <span>PLC: <span className="text-slate-300">{targetTenant.plcIp}</span></span>}
-                        </div>
+              {/* Informative / Plant Context Card when not actively running discovery */}
+              {!discoveryResult && !isDiscovering && (
+                <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+                        <Cpu className="w-4 h-4 text-emerald-400" />
                       </div>
-
-                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
-                        {/* Edit Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleEditTenant(targetTenant)}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 flex items-center gap-1 cursor-pointer transition-all"
-                          title="Modifica stabilimento e operatori"
-                        >
-                          <Pencil className="w-3 h-3 text-cyan-300" />
-                          <span>Modifica</span>
-                        </button>
-
-                        {/* Load into Form & Test Button */}
-                        <button
-                          onClick={() => handleSelectExistingTenant(targetTenant)}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-mono border transition-all flex items-center gap-1 cursor-pointer ${
-                            isLoadedInForm
-                              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
-                          }`}
-                          title="Carica dati nel modulo per testare riconnessione e nuovi macchinari"
-                        >
-                          <Zap className="w-3 h-3 text-amber-400" />
-                          <span>{isLoadedInForm ? 'Dati nel Modulo' : 'Carica Dati'}</span>
-                        </button>
-
-                        {/* Re-sync Telemetry Button */}
-                        <button
-                          onClick={() => handleResync(targetTenant)}
-                          disabled={isSyncing === targetTenant.id}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
-                          title="Risincronizza telemetria da SM.I.LE80"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing === targetTenant.id ? 'animate-spin text-cyan-400' : ''}`} />
-                        </button>
-
-                        {!isActive ? (
-                          <button
-                            onClick={() => onSelectTenant(targetTenant)}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-xs font-mono border border-slate-700 transition-colors cursor-pointer"
-                          >
-                            Connetti
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-xs font-mono text-cyan-300 px-3 py-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
-                            <span>In Uso</span>
-                          </div>
-                        )}
-
-                        {targetTenant.id !== 'local' && (
-                          <button
-                            onClick={() => handleDeleteTenant(targetTenant.id, targetTenant.nome)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                            title="Rimuovi ambiente"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                      <div>
+                        <h4 className="text-xs font-mono font-bold text-white">
+                          Architettura & Nodi Elettric80
+                        </h4>
+                        <p className="text-[11px] font-mono text-slate-400">
+                          {isEditingMode ? `Modifica topologia per: ${plantNome}` : "Configurazione nuovo impianto"}
+                        </p>
                       </div>
                     </div>
-                  );
-                })()}
-
-                {/* VISTA 3: TUTTI GLI STABILIMENTI (SOLO SE L'UTENTE CLICCA 'MOSTRA TUTTI') */}
-                {showAllPlants && (
-                  <div className="space-y-3">
-                    {tenants.map(t => {
-                      const isActive = t.id === activeTenant.id;
-                      const isLoadedInForm = selectedExistingTenantId === t.id;
-                      const topo = t.plantTopology;
-                      return (
-                        <div
-                          key={t.id}
-                          className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                            isLoadedInForm
-                              ? 'bg-cyan-950/40 border-cyan-400 ring-1 ring-cyan-500/40 shadow-sm'
-                              : isActive
-                              ? 'bg-cyan-500/10 border-cyan-500/40 shadow-sm shadow-cyan-500/10'
-                              : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                          }`}
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span 
-                                className="w-3 h-3 rounded-full shrink-0" 
-                                style={{ backgroundColor: t.logoColor || '#06b6d4' }}
-                              />
-                              <span className="font-mono font-bold text-xs text-slate-100">
-                                {t.nome}
-                              </span>
-                              {isActive && (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                                  ATTIVO
-                                </span>
-                              )}
-                              {isLoadedInForm && (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                                  NEL MODULO
-                                </span>
-                              )}
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-emerald-400 border border-slate-700 flex items-center gap-1">
-                                <Wifi className="w-2.5 h-2.5" />
-                                {t.connectionStatus || 'CONNESSO'}
-                              </span>
-                            </div>
-
-                            <div className="text-[11px] font-mono text-slate-400">
-                              Sito: <span className="text-slate-300">{t.sito}</span>
-                              {topo && (
-                                <span className="ml-2 text-cyan-400/80">
-                                  ({topo.macchinari.length} Macchine, {topo.flottaAgv.length} LGV, QPU {topo.qubitCapacity} Qubits)
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1">
-                              <span>GW: <code className="text-cyan-400">{t.endpoint}</code></span>
-                              {t.protocol && <span>Prot: <span className="text-slate-300">{t.protocol}</span></span>}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
-                            <button
-                              type="button"
-                              onClick={() => handleEditTenant(t)}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 flex items-center gap-1 cursor-pointer transition-all"
-                              title="Modifica stabilimento e operatori"
-                            >
-                              <Pencil className="w-3 h-3 text-cyan-300" />
-                              <span>Modifica</span>
-                            </button>
-
-                            <button
-                              onClick={() => handleSelectExistingTenant(t)}
-                              className={`px-2.5 py-1.5 rounded-lg text-xs font-mono border transition-all flex items-center gap-1 cursor-pointer ${
-                                isLoadedInForm
-                                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
-                              }`}
-                              title="Carica dati nel modulo per testare riconnessione e nuovi macchinari"
-                            >
-                              <Zap className="w-3 h-3 text-amber-400" />
-                              <span>Carica Dati</span>
-                            </button>
-
-                            <button
-                              onClick={() => handleResync(t)}
-                              disabled={isSyncing === t.id}
-                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
-                              title="Risincronizza telemetria da SM.I.LE80"
-                            >
-                              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing === t.id ? 'animate-spin text-cyan-400' : ''}`} />
-                            </button>
-
-                            {!isActive ? (
-                              <button
-                                onClick={() => onSelectTenant(t)}
-                                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-xs font-mono border border-slate-700 transition-colors cursor-pointer"
-                              >
-                                Connetti
-                              </button>
-                            ) : (
-                              <div className="flex items-center gap-1.5 text-xs font-mono text-cyan-300 px-3 py-1.5">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
-                                <span>In Uso</span>
-                              </div>
-                            )}
-
-                            {t.id !== 'local' && (
-                              <button
-                                onClick={() => handleDeleteTenant(t.id, t.nome)}
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                title="Rimuovi ambiente"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
-                )}
-              </div>
+
+                  <div className="text-xs font-mono text-slate-300 space-y-2 leading-relaxed">
+                    <p>
+                      Ogni azienda possiede i propri stabilimenti industriali. In ciascuno stabilimento, SM.I.LE80 gestisce la topologia dei <strong className="text-cyan-300">nodi hardware</strong>:
+                    </p>
+                    <ul className="space-y-1.5 pl-2 text-[11px] text-slate-400 border-l border-slate-800">
+                      <li>• <strong className="text-slate-200">Veicoli a guida laser (LGV/AGV)</strong>: Navette pallet e stoccaggio.</li>
+                      <li>• <strong className="text-slate-200">Fasciatori Bema Silkworm</strong>: Avvolgimento stretch ad alta velocità.</li>
+                      <li>• <strong className="text-slate-200">Magazzini automatici SmartStore</strong>: Corsie multipiano e trasloelevatori.</li>
+                      <li>• <strong className="text-slate-200">Baie di Carico</strong>: Banchine robotizzate per carico camion.</li>
+                    </ul>
+                    <div className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 text-[11px] text-cyan-200 mt-2">
+                      💡 <strong>Filtro Dinamico 21 Calcoli:</strong> Il Catalogo Quantistico e il Chat Terminal mostrano esclusivamente i calcoli supportati dai nodi presenti nello stabilimento attivo.
+                    </div>
+                  </div>
+
+                  {/* Operatori assegnati a questo stabilimento */}
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-cyan-400" />
+                        Operatori abilitati:
+                      </span>
+                      <span className="font-bold text-cyan-300">
+                        {selectedOperatorIds.length} {selectedOperatorIds.length === 1 ? "operatore" : "operatori"}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedExistingTenantId) {
+                          const currentT = tenants.find(t => t.id === selectedExistingTenantId);
+                          if (currentT) {
+                            setPlantForOperatorsModal(currentT);
+                            return;
+                          }
+                        }
+                        setActiveTab("operators");
+                      }}
+                      className="w-full py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>Gestisci Operatori per Questo Stabilimento</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setAdminSubView("stabilimenti")}
+                      className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-mono transition-all text-center cursor-pointer border border-slate-700"
+                    >
+                      ← Vedi tutti gli stabilimenti
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdminSubView("aziende")}
+                      className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-mono transition-all text-center cursor-pointer border border-slate-700"
+                    >
+                      ← Vedi tutte le aziende
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    )}
 
       {/* TAB 2: DIGITAL TWIN & MACCHINE DELLO STABILIMENTO ATTIVO */}
       {activeTab === 'topology' && (
@@ -2931,6 +3119,221 @@ export const AdminControlPanel: React.FC<Props> = ({
               .catch(() => {});
           }}
         />
+      )}
+
+      {/* MODAL GESTIONE OPERATORI DELLO STABILIMENTO SELEZIONATO */}
+      {plantForOperatorsModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-cyan-500/50 rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3 gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-600/20 text-cyan-400 border border-cyan-500/40 flex items-center justify-center shrink-0">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-mono text-white flex items-center gap-2">
+                    Operatori dello Stabilimento: {plantForOperatorsModal.nome}
+                    <span className="px-2 py-0.5 text-xs rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                      #{plantForOperatorsModal.numeroStabilimento}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">
+                    Società: <span className="text-slate-200">{plantForOperatorsModal.azienda}</span> | Sito: <span className="text-slate-200">{plantForOperatorsModal.sito}</span> | GW: <code className="text-cyan-400">{plantForOperatorsModal.endpoint}</code>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPlantForOperatorsModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Operatori Assegnati a Questo Stabilimento */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-mono font-bold text-slate-300">
+                <span className="flex items-center gap-1.5 text-cyan-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Operatori Attualmente Abilitati ({(plantForOperatorsModal.operatoriAssegnati || []).length}):
+                </span>
+                <span className="text-[11px] text-slate-500 font-normal">
+                  Gli operatori abilitati possono effettuare il login in questo stabilimento
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {(plantForOperatorsModal.operatoriAssegnati || []).length === 0 ? (
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs font-mono text-slate-500">
+                    Nessun operatore ancora assegnato a questo stabilimento. Aggiungine uno qui sotto.
+                  </div>
+                ) : (
+                  (plantForOperatorsModal.operatoriAssegnati || []).map((opUsernameOrId) => {
+                    const op = users.find(u => u.username === opUsernameOrId || u.id === opUsernameOrId);
+                    return (
+                      <div
+                        key={opUsernameOrId}
+                        className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3 text-xs font-mono"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-800 flex items-center justify-center font-bold text-[11px]">
+                            {(op?.nomeCompleto || opUsernameOrId).substring(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-white font-bold">{op?.nomeCompleto || opUsernameOrId}</div>
+                            <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                              <span>Username: <code className="text-cyan-400">@{op?.username || opUsernameOrId}</code></span>
+                              {op?.lineaAssegnata && (
+                                <>
+                                  <span>•</span>
+                                  <span>{op.lineaAssegnata}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleOperatorForTenant(plantForOperatorsModal, op?.username || opUsernameOrId)}
+                          className="px-2.5 py-1 rounded-lg text-rose-300 hover:text-rose-200 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-[11px] font-mono transition-all cursor-pointer"
+                        >
+                          Disabilita
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Assegna Altri Operatori Esistenti */}
+            {(() => {
+              const currentOps = plantForOperatorsModal.operatoriAssegnati || [];
+              const availableOtherOps = users.filter(u => u.ruolo !== 'Amministratore' && !currentOps.includes(u.username) && !currentOps.includes(u.id));
+              if (availableOtherOps.length === 0) return null;
+
+              return (
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1.5">
+                    <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                    Assegna Altri Operatori Registrati ({availableOtherOps.length}):
+                  </span>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                    {availableOtherOps.map(op => (
+                      <button
+                        key={op.id}
+                        type="button"
+                        onClick={() => handleToggleOperatorForTenant(plantForOperatorsModal, op.username)}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 text-slate-300 hover:text-white text-xs font-mono flex items-center gap-2 transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3 text-emerald-400" />
+                        <span>{op.nomeCompleto} (@{op.username})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Creazione Rapida Operatore per Questo Stabilimento */}
+            <div className="p-4 rounded-xl bg-slate-950/90 border border-cyan-500/30 space-y-3 pt-3">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Crea Nuovo Operatore per {plantForOperatorsModal.nome}
+                </span>
+                <span className="text-[10px] text-slate-500">Credenziali immediate</span>
+              </div>
+
+              {quickOpFeedback && (
+                <div className="p-2 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-mono">
+                  {quickOpFeedback}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs font-mono">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">Nome e Cognome</label>
+                  <input
+                    type="text"
+                    placeholder="es. Mario Rossi"
+                    value={quickOpNome}
+                    onChange={e => setQuickOpNome(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">Username Login</label>
+                  <input
+                    type="text"
+                    placeholder="es. mario.rossi"
+                    value={quickOpUsername}
+                    onChange={e => setQuickOpUsername(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">Password</label>
+                  <input
+                    type="text"
+                    placeholder="Password di linea"
+                    value={quickOpPassword}
+                    onChange={e => setQuickOpPassword(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">Linea / Postazione</label>
+                  <input
+                    type="text"
+                    placeholder={`Linea 1 - ${plantForOperatorsModal.nome}`}
+                    value={quickOpLinea}
+                    onChange={e => setQuickOpLinea(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleCreateQuickOperatorForPlant(plantForOperatorsModal)}
+                disabled={!quickOpNome.trim() || !quickOpUsername.trim() || !quickOpPassword.trim()}
+                className="w-full py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-md"
+              >
+                + Salva & Abilita Operatore su {plantForOperatorsModal.nome}
+              </button>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between border-t border-slate-800 pt-3 gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewOpTenantId(plantForOperatorsModal.id);
+                  setOperatorFilterTenant(plantForOperatorsModal.id);
+                  setActiveTab('operators');
+                  setPlantForOperatorsModal(null);
+                }}
+                className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700"
+              >
+                <Users className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Apri Gestione Globale Operatori</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPlantForOperatorsModal(null)}
+                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-xs font-mono transition-colors cursor-pointer"
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

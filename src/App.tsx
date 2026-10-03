@@ -7,11 +7,10 @@ import { CompanyPlantSelectorModal } from './components/CompanyPlantSelectorModa
 import { CircuitVisualizerModal } from './components/CircuitVisualizerModal';
 import { LoginModal } from './components/LoginModal';
 import { AdminControlPanel } from './components/AdminControlPanel';
-import { MicrophoneAccessModal } from './components/MicrophoneAccessModal';
+import { PlantCsvUploadModal } from './components/PlantCsvUploadModal';
 import { FactoryTenant, QuantumCalculationMeta, UserAccount } from './types/quantum';
 import { AuthStorage } from './services/authStorage';
 import { PlantTelemetryScanner, AutoScanSummary } from './services/plantTelemetryScanner';
-import { GeminiLiveVoice } from './components/GeminiLiveVoice';
 import { Terminal, LayoutGrid, Bell, Sliders } from 'lucide-react';
 
 export default function App() {
@@ -29,6 +28,8 @@ export default function App() {
 
   const [activeView, setActiveView] = useState<'chat' | 'catalog' | 'notifications' | 'admin'>('chat');
   const [isCompanyPlantSelectorOpen, setIsCompanyPlantSelectorOpen] = useState<boolean>(false);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState<boolean>(false);
+  const [importedCsvInputs, setImportedCsvInputs] = useState<Record<string, any>>({});
 
   // Automatic plant telemetry scan state
   const [scanSummary, setScanSummary] = useState<AutoScanSummary | null>(() => {
@@ -42,28 +43,9 @@ export default function App() {
   const [selectedCircuitCalc, setSelectedCircuitCalc] = useState<QuantumCalculationMeta | null>(null);
   const [selectedCircuitState, setSelectedCircuitState] = useState<string | undefined>(undefined);
 
-  // Voice command execution state dispatched from GeminiLiveVoice
   const [voiceQueryToExecute, setVoiceQueryToExecute] = useState<string | null>(null);
   const [targetInspectCalcId, setTargetInspectCalcId] = useState<number | null>(null);
   const [openScenariTrigger, setOpenScenariTrigger] = useState<number>(0);
-  const [isMicModalOpen, setIsMicModalOpen] = useState<boolean>(false);
-  const [autoStartVoiceTrigger, setAutoStartVoiceTrigger] = useState<number>(0);
-
-  // Automatically manage microphone authorization and auto-start voice assistant
-  useEffect(() => {
-    if (!currentUser) return;
-
-    if (localStorage.getItem('joker_mic_permitted') === 'true') {
-      // Auto-start voice in listening mode immediately
-      setAutoStartVoiceTrigger(Date.now());
-      return;
-    }
-
-    // If not yet granted and not explicitly dismissed in this session, open modal
-    if (!sessionStorage.getItem('joker_mic_modal_dismissed')) {
-      setIsMicModalOpen(true);
-    }
-  }, [currentUser]);
 
   // Function to execute the auto-upload of plant data and run all 21 quantum calculations
   const runAutoTelemetryScan = useCallback(async (tenant: FactoryTenant) => {
@@ -113,7 +95,7 @@ export default function App() {
     }
   }, [currentUser]);
 
-  const handleLoginSuccess = (user: UserAccount, startVoiceImmediately: boolean = true) => {
+  const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
     const allTenants = AuthStorage.getTenants();
     setTenants(allTenants);
@@ -129,20 +111,12 @@ export default function App() {
       runAutoTelemetryScan(allTenants[0]);
     }
     setActiveView('chat');
-
-    // Automatically launch voice assistant in listening mode immediately upon login
-    if (startVoiceImmediately) {
-      setAutoStartVoiceTrigger(Date.now());
-    }
   };
 
   const handleLogout = () => {
     AuthStorage.logout();
     setCurrentUser(null);
     setActiveView('chat');
-    // Ensure that subsequent login prompts for microphone authorization fresh
-    localStorage.removeItem('joker_mic_permitted');
-    localStorage.removeItem('joker_mic_prompted');
   };
 
   const handleOpenCircuit = (calc: QuantumCalculationMeta, state?: string) => {
@@ -187,6 +161,7 @@ export default function App() {
         anomaliesCount={scanSummary && scanSummary.stabilimentoId === activeTenant.id ? scanSummary.anomalieTrovate : 0}
         isScanning={isScanning}
         onOpenCompanyPlantSelector={() => setIsCompanyPlantSelectorOpen(true)}
+        onOpenCsvUpload={() => setIsCsvModalOpen(true)}
       />
 
       {/* Main Content View */}
@@ -214,6 +189,9 @@ export default function App() {
               allowPlcWrite={false}
               targetInspectCalcId={targetInspectCalcId}
               onClearInspectTarget={() => setTargetInspectCalcId(null)}
+              activeTenant={activeTenant}
+              onOpenCsvUpload={() => setIsCsvModalOpen(true)}
+              importedInputs={importedCsvInputs}
             />
           </div>
         )}
@@ -236,56 +214,14 @@ export default function App() {
               activeTenant={activeTenant}
               onSelectTenant={handleSelectTenant}
               currentUser={currentUser}
+              onOpenCsvModalForPlant={(t) => {
+                setActiveTenant(t);
+                setIsCsvModalOpen(true);
+              }}
             />
           </div>
         )}
       </main>
-
-      {/* Gemini 3.8 Live with Voice Assistance - Voce Live in basso a destra */}
-      <GeminiLiveVoice
-        activeTenant={activeTenant}
-        tenants={tenants}
-        userRole={currentUser.ruolo}
-        allowPlcWrite={false}
-        onChangeView={setActiveView}
-        onOpenCompanyPlantSelector={() => setIsCompanyPlantSelectorOpen(true)}
-        onCloseAllModals={handleCloseAllModals}
-        onSelectTenant={handleSelectTenant}
-        onExecuteVoiceQuery={(query) => {
-          setActiveView('chat');
-          setVoiceQueryToExecute(query);
-        }}
-        onOpenCircuit={handleOpenCircuit}
-        onInspectCalculation={(calc) => {
-          setActiveView('catalog');
-          setTargetInspectCalcId(calc.id);
-        }}
-        onOpenScenari={() => {
-          setActiveView('chat');
-          setOpenScenariTrigger(Date.now());
-        }}
-        onRefreshScan={() => runAutoTelemetryScan(activeTenant)}
-        onOpenMicModal={() => setIsMicModalOpen(true)}
-        autoStartVoiceTrigger={autoStartVoiceTrigger}
-      />
-
-      {/* Microphone Access & Browser Permission Request Modal */}
-      <MicrophoneAccessModal
-        isOpen={isMicModalOpen}
-        onClose={() => {
-          sessionStorage.setItem('joker_mic_modal_dismissed', 'true');
-          setIsMicModalOpen(false);
-        }}
-        onAccessGranted={(stream) => {
-          setIsMicModalOpen(false);
-          setAutoStartVoiceTrigger(Date.now());
-        }}
-        onUseTextMode={() => {
-          sessionStorage.setItem('joker_mic_modal_dismissed', 'true');
-          setIsMicModalOpen(false);
-        }}
-        personaName="Laila"
-      />
 
       {/* Dedicated Company & Multi-Plant Selector Modal */}
       <CompanyPlantSelectorModal
@@ -294,6 +230,24 @@ export default function App() {
         tenants={tenants}
         activeTenant={activeTenant}
         onSelectTenant={handleSelectTenant}
+      />
+
+      {/* Manual CSV Plant Telemetry Upload Modal */}
+      <PlantCsvUploadModal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        activeTenant={activeTenant}
+        onTenantUpdated={(updated) => {
+          setActiveTenant(updated);
+          setTenants(AuthStorage.getTenants());
+        }}
+        onApplyInputsToCatalog={(inputsMap) => {
+          setImportedCsvInputs(inputsMap);
+          try {
+            localStorage.setItem(`joker_custom_telemetry_${activeTenant.id}`, JSON.stringify(inputsMap));
+          } catch {}
+          runAutoTelemetryScan(activeTenant);
+        }}
       />
 
       {/* Mobile Bottom Navigation Bar (Visible only on smartphones < 640px) */}

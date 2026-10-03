@@ -13,7 +13,8 @@ import {
   Sliders,
   LogOut,
   User,
-  Bell
+  Bell,
+  UploadCloud
 } from 'lucide-react';
 import { FactoryTenant, UserAccount, UserRole } from '../types/quantum';
 
@@ -28,6 +29,7 @@ interface Props {
   anomaliesCount?: number;
   isScanning?: boolean;
   onOpenCompanyPlantSelector: () => void;
+  onOpenCsvUpload?: () => void;
 }
 
 export const Header: React.FC<Props> = ({
@@ -40,7 +42,8 @@ export const Header: React.FC<Props> = ({
   onChangeView,
   anomaliesCount = 0,
   isScanning = false,
-  onOpenCompanyPlantSelector
+  onOpenCompanyPlantSelector,
+  onOpenCsvUpload
 }) => {
   const isAdmin = currentUser.ruolo === 'Amministratore';
 
@@ -91,6 +94,19 @@ export const Header: React.FC<Props> = ({
               Cambia
             </span>
           </button>
+
+          {/* Quick CSV Upload Button */}
+          {onOpenCsvUpload && (
+            <button
+              type="button"
+              onClick={onOpenCsvUpload}
+              className="flex items-center space-x-1.5 px-2 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 hover:text-white text-[11px] font-mono shadow-sm transition-all cursor-pointer"
+              title={`Carica file CSV per lo stabilimento attivo (${activeTenant.nome})`}
+            >
+              <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline font-bold">Carica CSV</span>
+            </button>
+          )}
 
           {/* Current User Badge with Role indicator */}
           <div className="flex items-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] sm:text-[11px] font-mono">
@@ -190,6 +206,19 @@ export const Header: React.FC<Props> = ({
               ({activeTenant.sito.split(',')[0]})
             </span>
           </button>
+
+          {/* Carica CSV Stabilimento tab */}
+          {onOpenCsvUpload && (
+            <button
+              type="button"
+              onClick={onOpenCsvUpload}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer shrink-0 bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 hover:border-emerald-400 min-h-[34px]"
+              title="Carica manualmente file CSV per aggiornare i sensori e i nodi dello stabilimento attivo"
+            >
+              <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Carica CSV</span>
+            </button>
+          )}
 
           {/* Admin Control Panel Tab */}
           {isAdmin && (
