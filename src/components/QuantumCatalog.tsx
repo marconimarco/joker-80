@@ -243,61 +243,82 @@ export const QuantumCatalog: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Active Plant Nodes Filter Bar */}
+      {/* Active Plant Nodes & Calculations Banner with Carica CSV */}
       {activeTenant && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3 font-mono text-xs">
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-cyan-950/30 to-slate-900 border border-cyan-500/40 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 font-mono text-xs">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="p-3 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/40 shrink-0 shadow-sm shadow-cyan-500/20">
               <Cpu className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-white text-sm">
-                  Stabilimento: {activeTenant.nome}
+                <span className="font-bold text-white text-sm sm:text-base">
+                  Calcoli dello Stabilimento: {activeTenant.nome}
                 </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
-                  {plantSupportedCalcs.length} nodi/calcoli attivi su 21
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  {plantSupportedCalcs.length} calcoli operativi su 21 abilitati
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  {activeTenant.azienda || 'Azienda'} #{activeTenant.numeroStabilimento || 1}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+              <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
                 {filterOnlyPlantNodes
-                  ? `Mostrando esclusivamente i calcoli compatibili con i macchinari e i nodi presenti in "${activeTenant.nome}".`
+                  ? `Mostrando esclusivamente i calcoli compatibili con i macchinari e i nodi fisici installati in "${activeTenant.nome}" (${activeTenant.sito}).`
                   : `Visualizzazione estesa a tutti i 21 nodi dell'infrastruttura Elettric80.`}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
-            <button
-              type="button"
-              onClick={() => setFilterOnlyPlantNodes(!filterOnlyPlantNodes)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-sm ${
-                filterOnlyPlantNodes
-                  ? 'bg-cyan-600 text-white border-cyan-400'
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span>{filterOnlyPlantNodes ? `Filtro Nodi Attivo (${plantSupportedCalcs.length}/21)` : 'Mostra Tutti i 21 Nodi'}</span>
-            </button>
-
+          <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+            {/* PULSANTE CARICA CSV DELLO STABILIMENTO (Accessibile sia come Admin che come Utente) */}
             {onOpenCsvUpload && (
               <button
                 type="button"
                 onClick={onOpenCsvUpload}
-                className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Carica un file CSV per aggiornare i sensori e i parametri di fabbrica per questo stabilimento"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/50 text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-950/40 hover:scale-[1.02] active:scale-[0.98]"
+                title={`Carica file CSV telemetria per lo stabilimento attivo (${activeTenant.nome})`}
               >
-                <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
+                <UploadCloud className="w-4 h-4 text-emerald-200" />
                 <span>Carica CSV Stabilimento</span>
               </button>
             )}
+
+            {/* FILTRO NODI ATTIVO */}
+            <button
+              type="button"
+              onClick={() => setFilterOnlyPlantNodes(!filterOnlyPlantNodes)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-sm ${
+                filterOnlyPlantNodes
+                  ? 'bg-cyan-600/30 text-cyan-200 border-cyan-400/60 hover:bg-cyan-600/40'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+              title="Attiva/Disattiva il filtro per mostrare solo i calcoli che lo stabilimento può effettuare"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>{filterOnlyPlantNodes ? `Filtro Stabilimento Attivo (${plantSupportedCalcs.length}/21)` : 'Mostra Tutti i 21 Nodi'}</span>
+            </button>
           </div>
         </div>
       )}
 
       {/* Category Tabs: Smooth touch-scroll on smartphones */}
       <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar touch-pan-x flex-nowrap sm:flex-wrap">
+        {/* Tab "TUTTI I CALCOLI" per vedere l'insieme completo dei calcoli dello stabilimento */}
+        <button
+          onClick={() => setSelectedCategory('ALL')}
+          className={`shrink-0 sm:flex-1 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs font-mono font-semibold whitespace-nowrap min-h-[38px] transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+            selectedCategory === 'ALL'
+              ? 'bg-cyan-600 text-white shadow-md'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+        >
+          <span>TUTTI I CALCOLI</span>
+          <span className={`px-1.5 py-0.2 rounded text-[10px] ${selectedCategory === 'ALL' ? 'bg-black/30 text-cyan-200' : 'bg-slate-800 text-slate-400'}`}>
+            {(filterOnlyPlantNodes && activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).length}
+          </span>
+        </button>
+
         {CATEGORIES.map((cat) => {
           const isSelected = selectedCategory === cat;
           const countInCat = (filterOnlyPlantNodes && activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).filter(c => c.category === cat).length;
@@ -1165,51 +1186,86 @@ export const QuantumCatalog: React.FC<Props> = ({
                     </div>
                   </div>
 
+                  {/* Primary Metric Banner */}
+                  {result.metrica_principale_valore && (
+                    <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/80 via-slate-900 to-blue-950/80 border border-cyan-500/50 shadow-md flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold block">
+                          {result.metrica_principale_etichetta || 'Risultato Calcolo Quantistico'}
+                        </span>
+                        <span className="text-2xl font-black text-white tracking-tight font-mono">
+                          {result.metrica_principale_valore}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold">
+                          CALCOLO REALE
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Detailed Recalculated KPIs Grid */}
+                  {result.metriche_dettagliate && Object.keys(result.metriche_dettagliate).length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {Object.entries(result.metriche_dettagliate).map(([key, val]) => (
+                        <div key={key} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono">
+                          <span className="text-slate-400 text-[10px] block truncate">{key}:</span>
+                          <span className="font-bold text-cyan-300 text-sm block mt-0.5 truncate">{String(val)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Human-readable diagnostic summary */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
-                    {(result.indice_rischio_blocco || result.livello_rischio) && (
+                    {(result.indice_rischio_blocco || result.livello_rischio || result.rischio_stocastico || result.validazione_qualita || result.diagnosi || result.diagnostica_pallettizzatore || result.stato_ricarica) && (
                       <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
                         <span className="text-slate-400 text-[10px] block">Diagnosi / Rischio:</span>
                         <span className="font-bold text-amber-300">
-                          {result.indice_rischio_blocco || result.livello_rischio}
+                          {result.indice_rischio_blocco || result.livello_rischio || result.rischio_stocastico || result.validazione_qualita || result.diagnosi || result.diagnostica_pallettizzatore || result.stato_ricarica}
                         </span>
                       </div>
                     )}
 
-                    {(result.azione_correttiva_suggerita || result.piano_azione || result.azione_immediata) && (
+                    {(result.azione_correttiva_suggerita || result.piano_azione || result.azione_immediata || result.azione_logistica_immediata || result.azione_misure_sicurezza || result.azione_suggerita) && (
                       <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
                         <span className="text-slate-400 text-[10px] block">Azione Suggerita:</span>
                         <span className="font-bold text-cyan-300">
-                          {result.azione_correttiva_suggerita || result.piano_azione || result.azione_immediata}
+                          {result.azione_correttiva_suggerita || result.piano_azione || result.azione_immediata || result.azione_logistica_immediata || result.azione_misure_sicurezza || result.azione_suggerita}
                         </span>
                       </div>
                     )}
 
-                    {(result.stato_qubit_dominante || result.stato_qubit_rilevato) && (
+                    {(result.stato_qubit_dominante || result.stato_qubit_rilevato || result.stato_qubit_ottimale || result.stato_qubit_cluster || result.cluster_qubit_estratto || result.stato_qubit_robot || result.stato_qubit_ricarica || result.stato_qubit_zkp) && (
                       <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 sm:col-span-2 flex items-center justify-between">
                         <span className="text-slate-400 text-[10px]">Stato Qubit Collassato:</span>
                         <span className="px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 font-bold border border-purple-800/80">
-                          |{result.stato_qubit_dominante || result.stato_qubit_rilevato}⟩
+                          |{result.stato_qubit_dominante || result.stato_qubit_rilevato || result.stato_qubit_ottimale || result.stato_qubit_cluster || result.cluster_qubit_estratto || result.stato_qubit_robot || result.stato_qubit_ricarica || result.stato_qubit_zkp}⟩
                         </span>
                       </div>
                     )}
                   </div>
 
                   {/* Parameters Echo */}
-                  {result.parametri_elaborati && Object.keys(result.parametri_elaborati).length > 0 && (
-                    <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80">
-                      <span className="text-slate-400 text-[10px] block font-mono mb-1">
-                        Parametri di Fabbrica Elaborati (Input Utente):
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {Object.entries(result.parametri_elaborati).map(([k, v]) => (
-                          <span key={k} className="px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-[10px] font-mono text-slate-200">
-                            <strong className="text-cyan-400">{k}:</strong> {typeof v === 'object' ? JSON.stringify(v) : String(v)}
-                          </span>
-                        ))}
+                  {(() => {
+                    const paramsObj = result.parametri_elaborati || result.dati_elaborati;
+                    if (!paramsObj || Object.keys(paramsObj).length === 0) return null;
+                    return (
+                      <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80">
+                        <span className="text-slate-400 text-[10px] block font-mono mb-1">
+                          Parametri di Fabbrica Elaborati (Input Utente Ricalcolati):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(paramsObj).map(([k, v]) => (
+                            <span key={k} className="px-2 py-0.5 rounded bg-slate-950 border border-cyan-500/30 text-[10px] font-mono text-slate-200">
+                              <strong className="text-cyan-400">{k}:</strong> {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Raw JSON */}
                   <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-cyan-300 overflow-x-auto max-h-48 leading-relaxed">

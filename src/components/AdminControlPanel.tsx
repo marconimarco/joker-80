@@ -38,6 +38,7 @@ import {
   Lock,
   FileCode,
   UploadCloud,
+  FileText,
   Eye,
   EyeOff,
   Shield,
@@ -965,46 +966,6 @@ export const AdminControlPanel: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* QUICK BANNER: STATO mTLS & LINK DI CARICAMENTO .PFX & FREQUENZA */}
-      <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-3 font-mono text-xs shadow-md">
-        <div className="flex items-center gap-2.5">
-          <div className={`p-2 rounded-xl ${mtlsStatus?.configured ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}`}>
-            <Shield className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-bold text-white">Canale di Comunicazione mTLS (TLS 1.3 / Direttiva NIS2):</span>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${mtlsStatus?.configured ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}`}>
-                {mtlsStatus?.configured ? 'ATTIVO & SICURO' : 'IN ATTESA DI BUNDLE .PFX'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {mtlsStatus?.details || 'Carica il file .pfx generato con OpenSSL dal tuo Desktop per stabilire il collegamento sicuro con i server Google.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setActiveTab('daemon_frequency')}
-            className="px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>Frequenza & Script PC</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('mtls')}
-            className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span>{mtlsStatus?.configured ? 'Gestisci File .PFX' : 'Carica File .PFX dal Desktop'}</span>
-          </button>
-        </div>
-      </div>
-
       {/* TAB 1: CONNESSIONE RAPIDA, AUTO-DISCOVERY & SEDI */}
       {activeTab === 'discovery' && (
         <div className="space-y-6">
@@ -1265,7 +1226,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* STABILIMENTO PRESENTE / ATTIVO BANNER CON PULSANTE OPERATORI */}
+                {/* MODULO CANALE DI COMUNICAZIONE MQTLS / mTLS "METTIAMOCI IN CONTATTO" SPECIFICO DELLO STABILIMENTO ATTIVO */}
                 {(() => {
                   const currentActive = tenants.find(t => t.id === activeTenant.id) || activeTenant;
                   const activeOps = users.filter(u => 
@@ -1273,69 +1234,101 @@ export const AdminControlPanel: React.FC<Props> = ({
                   );
 
                   return (
-                    <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/60 via-slate-900 to-indigo-950/50 border border-cyan-500/40 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                            STABILIMENTO ATTIVO NEL PROGRAMMA
-                          </span>
-                          <span className="font-mono font-bold text-sm text-white flex items-center gap-1.5">
-                            <span 
-                              className="w-2.5 h-2.5 rounded-full" 
-                              style={{ backgroundColor: currentActive.logoColor || '#06b6d4' }}
-                            />
-                            {currentActive.nome}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                            {currentActive.azienda || 'Azienda'} #{currentActive.numeroStabilimento || 1}
-                          </span>
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 border border-cyan-500/50 shadow-xl space-y-3.5">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+                        <div className="flex items-start sm:items-center gap-3">
+                          <div className={`p-2.5 rounded-xl shrink-0 ${
+                            mtlsStatus?.configured 
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/10' 
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-500/10'
+                          }`}>
+                            <Shield className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono font-bold text-sm text-white">
+                                Canale di Comunicazione MQTLS (Mettiamoci in Contatto)
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                                Stabilimento Attivo: {currentActive.nome}
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                {currentActive.azienda || 'Azienda'} #{currentActive.numeroStabilimento || 1}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                mtlsStatus?.configured 
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              }`}>
+                                {mtlsStatus?.configured ? 'MQTLS ATTIVO & SICURO' : 'IN ATTESA DI BUNDLE .PFX'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] font-mono text-slate-400 mt-1">
+                              Canale crittografato mTLS TLS 1.3 per <strong>{currentActive.nome}</strong> • Gateway: <code className="text-cyan-300">{currentActive.endpoint}</code> • Protocollo: <strong className="text-slate-200">{currentActive.protocol || 'REST_HTTPS'}</strong> • Sito: <span className="text-slate-300">{currentActive.sito}</span>
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-[11px] font-mono text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <span>Sito: <strong className="text-slate-200">{currentActive.sito}</strong></span>
-                          <span>•</span>
-                          <span>Gateway: <code className="text-cyan-300">{currentActive.endpoint}</code></span>
-                          <span>•</span>
-                          <span>Protocollo: <strong className="text-slate-200">{currentActive.protocol || 'REST_HTTPS'}</strong></span>
+
+                        {/* Controlli specifici per questo stabilimento: Frequenza, Carica PFX, Carica CSV affiancati */}
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                          {/* 1. FREQUENZA & SCRIPT PC */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('daemon_frequency')}
+                            className="px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
+                            title="Configura frequenza di campionamento e script PC/Python per questo stabilimento"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Frequenza & Script PC</span>
+                          </button>
+
+                          {/* 2. CARICA FILE PFX */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('mtls')}
+                            className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
+                            title="Carica file .pfx dal Desktop per questo stabilimento"
+                          >
+                            <UploadCloud className="w-3.5 h-3.5" />
+                            <span>{mtlsStatus?.configured ? 'Gestisci File .PFX' : 'Carica File .PFX'}</span>
+                          </button>
+
+                          {/* 3. CARICA CSV (DI FIANCO A PFX E SCRIPT) */}
+                          <button
+                            type="button"
+                            onClick={() => onOpenCsvModalForPlant ? onOpenCsvModalForPlant(currentActive) : null}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
+                            title="Carica manualmente file CSV di telemetria per questo stabilimento"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Carica CSV</span>
+                          </button>
+
+                          {/* 4. OPERATORI DELLO STABILIMENTO */}
+                          <button
+                            type="button"
+                            onClick={() => setPlantForOperatorsModal(currentActive)}
+                            className="px-3 py-1.5 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-400/50 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
+                            title="Visualizza e gestisci gli operatori per questo stabilimento"
+                          >
+                            <Users className="w-3.5 h-3.5 text-cyan-300" />
+                            <span>Operatori</span>
+                            <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
+                              {activeOps.length}
+                            </span>
+                          </button>
+
+                          {/* 5. MODIFICA */}
+                          <button
+                            type="button"
+                            onClick={() => handleEditTenant(currentActive)}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono font-bold flex items-center gap-1 transition-all cursor-pointer border border-slate-700 min-h-[36px]"
+                            title="Modifica parametri dello stabilimento"
+                          >
+                            <Pencil className="w-3 h-3 text-cyan-300" />
+                            <span>Modifica</span>
+                          </button>
                         </div>
-                      </div>
-
-                      {/* Bottoni sullo stabilimento presente: OPERATORI & CARICA CSV */}
-                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                        {/* IL PULSANTE OPERATORI SULLO STABILIMENTO PRESENTE */}
-                        <button
-                          type="button"
-                          onClick={() => setPlantForOperatorsModal(currentActive)}
-                          className="px-3 py-1.5 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-400/50 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-cyan-600/20"
-                          title="Visualizza e gestisci gli operatori per lo stabilimento attivo"
-                        >
-                          <Users className="w-3.5 h-3.5 text-cyan-300" />
-                          <span>Operatori dello Stabilimento</span>
-                          <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
-                            {activeOps.length}
-                          </span>
-                        </button>
-
-                        {/* CARICA CSV MANUALE PER QUESTO STABILIMENTO */}
-                        <button
-                          type="button"
-                          onClick={() => onOpenCsvModalForPlant ? onOpenCsvModalForPlant(currentActive) : null}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                          title="Carica manualmente un file CSV di telemetria per questo stabilimento"
-                        >
-                          <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Carica CSV</span>
-                        </button>
-
-                        {/* MODIFICA */}
-                        <button
-                          type="button"
-                          onClick={() => handleEditTenant(currentActive)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono font-bold flex items-center gap-1 transition-all cursor-pointer border border-slate-700"
-                          title="Modifica parametri dello stabilimento"
-                        >
-                          <Pencil className="w-3 h-3 text-cyan-300" />
-                          <span>Modifica</span>
-                        </button>
                       </div>
                     </div>
                   );
@@ -1443,9 +1436,58 @@ export const AdminControlPanel: React.FC<Props> = ({
                               <span>•</span>
                               <span>{t.protocol || 'REST_HTTPS'}</span>
                             </div>
+
+                            {/* CANALE DI COMUNICAZIONE MQTLS "METTIAMOCI IN CONTATTO" DELLO STABILIMENTO */}
+                            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+                              <div className="flex items-center justify-between gap-1 text-[10px] font-mono">
+                                <span className="flex items-center gap-1.5 font-bold text-slate-300">
+                                  <Shield className="w-3 h-3 text-cyan-400" />
+                                  Canale MQTLS Stabilimento:
+                                </span>
+                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                  mtlsStatus?.configured
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                }`}>
+                                  {mtlsStatus?.configured ? 'MQTLS ATTIVO' : 'IN ATTESA PFX'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTab('daemon_frequency')}
+                                  className="px-2 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-[10px] font-mono font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                                  title={`Frequenza di scansione e script PC per ${t.nome}`}
+                                >
+                                  <Clock className="w-2.5 h-2.5" />
+                                  <span>Frequenza & Script PC</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTab('mtls')}
+                                  className="px-2 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                                  title={`Carica certificato .pfx per ${t.nome}`}
+                                >
+                                  <UploadCloud className="w-2.5 h-2.5" />
+                                  <span>Carica .PFX</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenCsvModalForPlant ? onOpenCsvModalForPlant(t) : null}
+                                  className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                                  title={`Carica file CSV per ${t.nome}`}
+                                >
+                                  <FileText className="w-2.5 h-2.5" />
+                                  <span>Carica CSV</span>
+                                </button>
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Action buttons: Operatori, CSV, Modifica, Attiva, Elimina */}
+                          {/* Action buttons: Operatori, Modifica, Attiva, Elimina */}
                           <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-800/80 flex-wrap">
                             <div className="flex items-center gap-1 flex-wrap">
                               {/* IL PULSANTE OPERATORI PER OGNI SINGOLO STABILIMENTO */}
@@ -1457,17 +1499,9 @@ export const AdminControlPanel: React.FC<Props> = ({
                               >
                                 <Users className="w-3 h-3 text-cyan-300" />
                                 <span>Operatori</span>
-                              </button>
-
-                              {/* CARICA CSV PER QUESTO STABILIMENTO */}
-                              <button
-                                type="button"
-                                onClick={() => onOpenCsvModalForPlant ? onOpenCsvModalForPlant(t) : null}
-                                className="px-2 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer"
-                                title="Carica manualmente file CSV telemetria per questo stabilimento"
-                              >
-                                <UploadCloud className="w-3 h-3 text-emerald-400" />
-                                <span>CSV</span>
+                                <span className="px-1 py-0.2 rounded bg-black/40 text-[9px] text-cyan-200">
+                                  {assignedOps.length}
+                                </span>
                               </button>
 
                               {/* MODIFICA */}
@@ -2051,6 +2085,53 @@ export const AdminControlPanel: React.FC<Props> = ({
                       <Users className="w-3.5 h-3.5" />
                       <span>Gestisci Operatori per Questo Stabilimento</span>
                     </button>
+                  </div>
+
+                  {/* CANALE DI COMUNICAZIONE MQTLS DELLO STABILIMENTO */}
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 font-mono text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-300 font-bold flex items-center gap-1.5">
+                        <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                        Canale MQTLS Stabilimento:
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        mtlsStatus?.configured ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      }`}>
+                        {mtlsStatus?.configured ? 'MQTLS ATTIVO' : 'IN ATTESA PFX'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('daemon_frequency')}
+                        className="px-2.5 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                        title="Frequenza di campionamento e script PC per questo stabilimento"
+                      >
+                        <Clock className="w-3 h-3" />
+                        <span>Frequenza & Script PC</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('mtls')}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                        title="Carica certificato .PFX per questo stabilimento"
+                      >
+                        <UploadCloud className="w-3 h-3" />
+                        <span>Carica .PFX</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = (selectedExistingTenantId && tenants.find(t => t.id === selectedExistingTenantId)) || activeTenant;
+                          onOpenCsvModalForPlant ? onOpenCsvModalForPlant(target) : null;
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                        title="Carica file CSV per questo stabilimento"
+                      >
+                        <FileText className="w-3 h-3 text-emerald-400" />
+                        <span>Carica CSV</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
