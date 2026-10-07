@@ -161,7 +161,6 @@ export default function App() {
         anomaliesCount={scanSummary && scanSummary.stabilimentoId === activeTenant.id ? scanSummary.anomalieTrovate : 0}
         isScanning={isScanning}
         onOpenCompanyPlantSelector={() => setIsCompanyPlantSelectorOpen(true)}
-        onOpenCsvUpload={() => setIsCsvModalOpen(true)}
       />
 
       {/* Main Content View */}

@@ -8,7 +8,6 @@ import {
   Activity, 
   Cpu, 
   Server, 
-  ExternalLink,
   ChevronRight,
   Filter,
   Flame,
@@ -372,34 +371,6 @@ export const NotificationsView: React.FC<Props> = ({
                     ))}
                   </div>
                 </div>
-
-                {/* Full Quantum JSON Payload Output */}
-                <div className="mt-3">
-                  <span className="text-[10px] font-mono uppercase font-bold text-slate-400 block mb-1.5">
-                    Payload di Risoluzione Quantistica CUDA-Q:
-                  </span>
-                  <pre className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono text-[11px] text-cyan-200 overflow-x-auto max-h-40">
-                    {JSON.stringify(selectedNotif.risultatoPayload, null, 2)}
-                  </pre>
-                </div>
-              </div>
-
-              {/* Action Button: Open Circuit Schema */}
-              <div className="pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const calc = QUANTUM_CALCULATIONS.find(c => c.id === selectedNotif.calcoloId);
-                    if (calc) {
-                      onOpenCircuit(calc, selectedNotif.risultatoPayload.stato_collassato);
-                    }
-                  }}
-                  className="w-full py-2 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
-                >
-                  <Cpu className="w-3.5 h-3.5" />
-                  <span>Ispeziona Circuito Quantistico (Qubits & Gates)</span>
-                  <ExternalLink className="w-3 h-3" />
-                </button>
               </div>
             </div>
           ) : (

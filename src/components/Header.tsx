@@ -26,7 +26,6 @@ interface Props {
   anomaliesCount?: number;
   isScanning?: boolean;
   onOpenCompanyPlantSelector: () => void;
-  onOpenCsvUpload?: () => void;
 }
 
 export const Header: React.FC<Props> = ({

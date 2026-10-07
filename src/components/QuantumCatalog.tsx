@@ -5,6 +5,7 @@ import {
 import { QuantumCalculationMeta, MacroCategory, FactoryTenant } from '../types/quantum';
 import { QuantumEngine } from '../services/quantumEngine';
 import { isCalculationSupportedByPlant, PLANT_NODE_REQUIREMENTS } from '../data/plantNodeCalculations';
+import { ALL_21_CALCULATIONS_LOGIC_DOCUMENTATION } from '../data/quantumLogicDocumentation';
 import { 
   Cpu, 
   Lock, 
@@ -24,7 +25,13 @@ import {
   UploadCloud,
   Filter,
   Sparkles,
-  Zap
+  Zap,
+  Focus,
+  Eye,
+  Maximize2,
+  FileText,
+  Download,
+  BookOpen
 } from 'lucide-react';
 
 interface Props {
@@ -56,6 +63,7 @@ export const QuantumCatalog: React.FC<Props> = ({
   const [selectedCategory, setSelectedCategory] = useState<MacroCategory | 'ALL'>('1. Inbound & Materie Prime');
   const [filterOnlyPlantNodes, setFilterOnlyPlantNodes] = useState<boolean>(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isLogicDocModalOpen, setIsLogicDocModalOpen] = useState<boolean>(false);
 
   const [formInputs, setFormInputs] = useState<Record<number, Record<string, any>>>(() => {
     const initial: Record<number, Record<string, any>> = {};
@@ -182,6 +190,26 @@ export const QuantumCatalog: React.FC<Props> = ({
     return pool.filter(c => c.category === selectedCategory);
   }, [filterOnlyPlantNodes, activeTenant, plantSupportedCalcs, selectedCategory]);
 
+  // ID del calcolo attualmente selezionato per lavorarci (quando attivo, gli altri si nascondono a scomparsa)
+  const [focusedCalcId, setFocusedCalcId] = useState<number | null>(null);
+
+  // Calcolo attivo in focus
+  const focusedCalcMeta = useMemo(() => {
+    if (focusedCalcId === null) return null;
+    return QUANTUM_CALCULATIONS.find(c => c.id === focusedCalcId) || null;
+  }, [focusedCalcId]);
+
+  // Elenco effettivo visualizzato: se focusedCalcId è impostato, mostra solo quel calcolo e nasconde tutti gli altri
+  const visibleCalculations = useMemo(() => {
+    if (focusedCalcId !== null) {
+      const match = (filterOnlyPlantNodes && activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).find(c => c.id === focusedCalcId);
+      if (match) return [match];
+      const fallback = QUANTUM_CALCULATIONS.find(c => c.id === focusedCalcId);
+      return fallback ? [fallback] : displayedCalculations;
+    }
+    return displayedCalculations;
+  }, [focusedCalcId, displayedCalculations, filterOnlyPlantNodes, activeTenant, plantSupportedCalcs]);
+
   const handleInputChange = (calcId: number, field: string, value: any) => {
     const meta = QUANTUM_CALCULATIONS.find(c => c.id === calcId);
     setFormInputs(prev => ({
@@ -298,6 +326,17 @@ export const QuantumCatalog: React.FC<Props> = ({
               <Filter className="w-3.5 h-3.5" />
               <span>{filterOnlyPlantNodes ? `Filtro Stabilimento Attivo (${plantSupportedCalcs.length}/21)` : 'Mostra Tutti i 21 Nodi'}</span>
             </button>
+
+            {/* DOCUMENTAZIONE LOGICA DEI 21 CALCOLI (Copia & Scarica) */}
+            <button
+              type="button"
+              onClick={() => setIsLogicDocModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border border-cyan-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              title="Apri casella di testo con tutta la logica quantistica e classica dei 21 calcoli per copiarla o scaricarla"
+            >
+              <FileText className="w-4 h-4 text-cyan-400" />
+              <span>Logica 21 Calcoli (Copia & Scarica)</span>
+            </button>
           </div>
         </div>
       )}
@@ -342,9 +381,76 @@ export const QuantumCatalog: React.FC<Props> = ({
         })}
       </div>
 
+      {/* Barra di Selezione Rapida Calcolo (Modalità Singolo Calcolo) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl font-mono text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Focus className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="text-slate-300 font-bold">Lavora su un Calcolo Specifico:</span>
+          <select
+            value={focusedCalcId ?? ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              setFocusedCalcId(val === '' ? null : Number(val));
+            }}
+            className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-cyan-300 font-bold text-xs focus:outline-none focus:border-cyan-400 cursor-pointer max-w-full sm:max-w-md"
+          >
+            <option value="">Tutti i calcoli abilitati ({displayedCalculations.length})</option>
+            {displayedCalculations.map((c) => (
+              <option key={c.id} value={c.id}>
+                [{c.id}] {c.name} ({c.technicalModule})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {focusedCalcId !== null && (
+          <button
+            type="button"
+            onClick={() => setFocusedCalcId(null)}
+            className="px-3 py-1.5 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-500/50 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer self-start sm:self-auto shrink-0 shadow-xs"
+          >
+            <Eye className="w-3.5 h-3.5 text-cyan-300" />
+            <span>Mostra tutti i calcoli ({displayedCalculations.length})</span>
+          </button>
+        )}
+      </div>
+
+      {/* Banner Modalità Focalizzata quando un calcolo è attivo ed isolato */}
+      {focusedCalcId !== null && focusedCalcMeta && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-cyan-950/80 border border-cyan-500/50 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0">
+              <Focus className="w-4 h-4 text-cyan-400 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-white text-sm">
+                  Calcolo [{focusedCalcId}] Selezionato in Modalità Focalizzata
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                  Gli altri {displayedCalculations.length > 1 ? displayedCalculations.length - 1 : 0} calcoli sono temporaneamente nascosti
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Stai lavorando ed inserendo manualmente i parametri per questo specifico calcolo quantistico.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFocusedCalcId(null)}
+            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-white border border-cyan-500/40 font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md shrink-0 self-start sm:self-auto"
+            title="Fai ricomparire tutti i calcoli dell'elenco"
+          >
+            <Eye className="w-4 h-4 text-cyan-400" />
+            <span>Mostra Tutti i Calcoli ({displayedCalculations.length})</span>
+          </button>
+        </div>
+      )}
+
       {/* Calculations Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {displayedCalculations.length === 0 ? (
+      <div className={focusedCalcId !== null ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6"}>
+        {visibleCalculations.length === 0 ? (
           <div className="col-span-full p-8 text-center bg-slate-900/60 border border-slate-800 rounded-2xl font-mono text-slate-400 space-y-2">
             <AlertCircle className="w-8 h-8 mx-auto text-amber-400" />
             <p className="text-sm font-bold text-slate-200">
@@ -355,7 +461,7 @@ export const QuantumCatalog: React.FC<Props> = ({
             </p>
           </div>
         ) : (
-          displayedCalculations.map((calc) => {
+          visibleCalculations.map((calc) => {
             const isLocked = calc.entanglement === 'OBBLIGATORIO';
             const inputs = formInputs[calc.id] || calc.defaultInputs;
             const result = results[calc.id];
@@ -476,18 +582,46 @@ export const QuantumCatalog: React.FC<Props> = ({
                   </div>
                 )}
 
-                <div>
-                  <h3 className="text-base font-bold text-slate-100 font-mono">
-                    {calc.name}
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    {calc.description}
-                  </p>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-100 font-mono">
+                      {calc.name}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                      {calc.description}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setFocusedCalcId(focusedCalcId === calc.id ? null : calc.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 border shadow-xs ${
+                      focusedCalcId === calc.id
+                        ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
+                        : 'bg-cyan-950/70 hover:bg-cyan-900/90 text-cyan-300 border-cyan-500/50 hover:border-cyan-400'
+                    }`}
+                    title={focusedCalcId === calc.id ? "Mostra di nuovo tutti i calcoli" : "Lavora solo su questo calcolo e nascondi momentaneamente tutti gli altri"}
+                  >
+                    {focusedCalcId === calc.id ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Mostra Tutti</span>
+                      </>
+                    ) : (
+                      <>
+                        <Focus className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Lavora solo su questo</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
               {/* Dynamic Parameter Controls */}
-              <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-4">
+              <div 
+                onFocusCapture={() => { if (focusedCalcId === null) setFocusedCalcId(calc.id); }}
+                className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-4"
+              >
                 <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-b border-slate-800 pb-2">
                   <span className="flex items-center gap-1.5">
                     <Sliders className="w-3.5 h-3.5 text-cyan-400" />
@@ -1115,19 +1249,11 @@ export const QuantumCatalog: React.FC<Props> = ({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    onClick={() => onOpenCircuit(calc, result?.stato_qubit_dominante || result?.stato_qubit_rilevato || result?.stato_qubit_ottimale || result?.stato_qubit_calcolato)}
-                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono font-medium border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Layers className="w-4 h-4 text-cyan-400" />
-                    <span>Circuito CUDA-Q</span>
-                  </button>
-
+                <div className="flex items-center justify-end gap-3">
                   <button
                     onClick={() => executeCalculation(calc)}
                     disabled={isBusy}
-                    className={`px-5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer ${
+                    className={`w-full sm:w-auto px-6 py-2.5 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer ${
                       isBusy
                         ? 'bg-slate-800 text-slate-500 cursor-wait'
                         : isLocked
@@ -1266,11 +1392,6 @@ export const QuantumCatalog: React.FC<Props> = ({
                       </div>
                     );
                   })()}
-
-                  {/* Raw JSON */}
-                  <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-cyan-300 overflow-x-auto max-h-48 leading-relaxed">
-                    {JSON.stringify(result, null, 2)}
-                  </pre>
                 </div>
               )}
             </div>
@@ -1408,6 +1529,111 @@ export const QuantumCatalog: React.FC<Props> = ({
               >
                 <Layers className="w-4 h-4" />
                 <span>Visualizza Circuito CUDA-Q</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Casella di Testo per Tutta la Logica Quantistica & Classica (Copia & Scarica) */}
+      {isLogicDocModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div 
+            className="w-full max-w-4xl max-h-[90vh] bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100 font-mono"
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    Logica Quantistica & Classica dei 21 Calcoli
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      SM.I.LE80 / CUDA-Q
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Trattazione matematica, circuitale e industriale completa per tutte le 4 categorie e scenari.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsLogicDocModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition-colors cursor-pointer"
+                title="Chiudi casella di testo"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Actions Bar */}
+            <div className="px-5 py-3 bg-slate-950/50 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs">
+              <span className="text-slate-400 text-[11px]">
+                Seleziona, copia il testo o scarica il file completo in formato Markdown (.md):
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(ALL_21_CALCULATIONS_LOGIC_DOCUMENTATION);
+                    setToastMessage('Tutta la logica dei 21 calcoli copiata negli appunti!');
+                    setTimeout(() => setToastMessage(null), 3000);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copia Tutto il Testo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const blob = new Blob([ALL_21_CALCULATIONS_LOGIC_DOCUMENTATION], { type: 'text/markdown;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'LOGICA_21_CALCOLI_QUANTISTICI_SM_I_LE80.md';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    setToastMessage('Download del file documentazione avviato!');
+                    setTimeout(() => setToastMessage(null), 3000);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Scarica File (.md)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Textarea Content */}
+            <div className="p-4 flex-1 min-h-0 flex flex-col">
+              <textarea
+                readOnly
+                value={ALL_21_CALCULATIONS_LOGIC_DOCUMENTATION}
+                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                className="w-full h-[55vh] p-4 rounded-xl bg-slate-950 border border-slate-800 text-cyan-200 text-xs font-mono leading-relaxed resize-none focus:outline-none focus:border-cyan-500/60 selection:bg-cyan-500/30 selection:text-white"
+                placeholder="Caricamento logica dei 21 calcoli..."
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between text-xs text-slate-400">
+              <span>{ALL_21_CALCULATIONS_LOGIC_DOCUMENTATION.length} caratteri • 21 algoritmi documentati</span>
+              <button
+                type="button"
+                onClick={() => setIsLogicDocModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+              >
+                Chiudi
               </button>
             </div>
           </div>
