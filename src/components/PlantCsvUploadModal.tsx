@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { FactoryTenant, MachineAsset } from '../types/quantum';
 import { AuthStorage } from '../services/authStorage';
+import { PlantTelemetryHistoryService } from '../services/plantTelemetryHistory';
 
 interface Props {
   isOpen: boolean;
@@ -325,6 +326,20 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
 
       onTenantUpdated?.(updatedTenant);
       onApplyInputsToCatalog?.(extractedInputs);
+
+      // Registra snapshot nella cronologia temporale dell'impianto
+      try {
+        PlantTelemetryHistoryService.recordNewSnapshot(
+          updatedTenant,
+          selectedFormat === 'TYPE_1_EVENTS_OEE' ? 'UPLOAD_CSV_EVENTI' : 'UPLOAD_CSV_TELEMETRIA',
+          undefined,
+          {
+            bemaVibrazione: extractedInputs.vibrazione_cuscinetti_bema_g,
+            lgvSoc: extractedInputs.stato_carica_medio_soc,
+            baieRitardo: extractedInputs.ritardo_stimato_minuti
+          }
+        );
+      } catch {}
 
       const unknownMsg = detectedNodes.unknown.length > 0 
         ? ` (${detectedNodes.unknown.length} nuovi nodi ausiliari censiti con successo)` 

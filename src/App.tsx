@@ -26,7 +26,11 @@ export default function App() {
     return all[0];
   });
 
-  const [activeView, setActiveView] = useState<'chat' | 'catalog' | 'notifications' | 'admin'>('chat');
+  const [activeView, setActiveView] = useState<'chat' | 'catalog' | 'notifications' | 'admin'>(() => {
+    const user = AuthStorage.getCurrentUser();
+    if (user && user.ruolo !== 'Amministratore') return 'catalog';
+    return 'chat';
+  });
   const [isCompanyPlantSelectorOpen, setIsCompanyPlantSelectorOpen] = useState<boolean>(false);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState<boolean>(false);
   const [importedCsvInputs, setImportedCsvInputs] = useState<Record<string, any>>({});
@@ -93,7 +97,13 @@ export default function App() {
       const match = currentTenants.find(t => t.id === currentUser.tenantId);
       if (match) setActiveTenant(match);
     }
-  }, [currentUser]);
+    // If logged-in user is not admin, prevent access to chat or admin view
+    if (currentUser && currentUser.ruolo !== 'Amministratore') {
+      if (activeView === 'chat' || activeView === 'admin') {
+        setActiveView('catalog');
+      }
+    }
+  }, [currentUser, activeView]);
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
@@ -110,13 +120,19 @@ export default function App() {
       setActiveTenant(allTenants[0]);
       runAutoTelemetryScan(allTenants[0]);
     }
-    setActiveView('chat');
+    
+    // Gli utenti normali (operatori) non hanno bisogno della Chat Terminal: vanno direttamente al Catalogo con i calcoli del proprio stabilimento
+    if (user.ruolo !== 'Amministratore') {
+      setActiveView('catalog');
+    } else {
+      setActiveView('chat');
+    }
   };
 
   const handleLogout = () => {
     AuthStorage.logout();
     setCurrentUser(null);
-    setActiveView('chat');
+    setActiveView('catalog');
   };
 
   const handleOpenCircuit = (calc: QuantumCalculationMeta, state?: string) => {
@@ -191,6 +207,9 @@ export default function App() {
               activeTenant={activeTenant}
               onOpenCsvUpload={() => setIsCsvModalOpen(true)}
               importedInputs={importedCsvInputs}
+              currentUser={currentUser}
+              tenants={tenants}
+              scanSummary={scanSummary && scanSummary.stabilimentoId === activeTenant.id ? scanSummary : null}
             />
           </div>
         )}
@@ -216,6 +235,15 @@ export default function App() {
               onOpenCsvModalForPlant={(t) => {
                 setActiveTenant(t);
                 setIsCsvModalOpen(true);
+              }}
+              onSwitchToOperator={(opUser) => {
+                setCurrentUser(opUser);
+                AuthStorage.setCurrentUser(opUser);
+                if (opUser.tenantId) {
+                  const t = tenants.find(item => item.id === opUser.tenantId);
+                  if (t) setActiveTenant(t);
+                }
+                setActiveView('catalog');
               }}
             />
           </div>
@@ -251,18 +279,20 @@ export default function App() {
 
       {/* Mobile Bottom Navigation Bar (Visible only on smartphones < 640px) */}
       <nav aria-label="Navigazione Mobile" className="sm:hidden border-t border-slate-800 bg-slate-950/95 backdrop-blur-md px-1 py-1 flex items-center justify-around shrink-0 pb-safe z-30 shadow-lg">
-        <button
-          type="button"
-          onClick={() => setActiveView('chat')}
-          className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer min-h-[44px] ${
-            activeView === 'chat'
-              ? 'text-cyan-400 font-bold bg-cyan-500/10'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Terminal className="w-4 h-4 mb-0.5" />
-          <span>Chat</span>
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveView('chat')}
+            className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer min-h-[44px] ${
+              activeView === 'chat'
+                ? 'text-cyan-400 font-bold bg-cyan-500/10'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Terminal className="w-4 h-4 mb-0.5" />
+            <span>Chat</span>
+          </button>
+        )}
 
         <button
           type="button"

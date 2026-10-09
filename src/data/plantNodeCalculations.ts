@@ -318,3 +318,143 @@ export function getSupportedCalculationsForPlant(tenant?: FactoryTenant): number
   }
   return supported;
 }
+
+export interface MachineryNodeDefinition {
+  key: string;
+  label: string;
+  desc: string;
+  calcIds: number[];
+  hardwareTags: string[];
+}
+
+export const PLANT_MACHINERY_NODES: MachineryNodeDefinition[] = [
+  {
+    key: 'BEMA_FASCIATORE',
+    label: 'Fasciatori Bema Silkworm (Braccio Rotante & Tensione Film)',
+    desc: 'Avvolgimento pallet, monitoraggio vibrazioni cuscinetti e trazione elastica film',
+    calcIds: [14, 15],
+    hardwareTags: ['Fasciatore Bema', 'Silkworm', 'Prestiro']
+  },
+  {
+    key: 'FLOTTA_LGV',
+    label: 'Flotta Navette a Guida Laser Elettric80 LGV/AGV',
+    desc: 'Navigazione laser, routing anticollisione e batterie BMS al litio',
+    calcIds: [16, 17, 19],
+    hardwareTags: ['LGV', 'AGV', 'Laser Guiding', 'Fast-Charge']
+  },
+  {
+    key: 'SMARTSTORE',
+    label: 'Magazzino Intensivo SmartStore 3D & ASRS',
+    desc: 'Trasloelevatori multilivello, shuttle di stoccaggio e corsie di picking',
+    calcIds: [6, 7, 8, 9],
+    hardwareTags: ['SmartStore', 'Trasloelevatore', 'Shuttle 3D', 'Picking']
+  },
+  {
+    key: 'BAIE_INBOUND_OUTBOUND',
+    label: 'Baie di Carico / Scarico & Gestione Piazzale (YMS/TMS)',
+    desc: 'Saturazione baie, ritardi fornitori, pesa a ponte e allocazione rimorchi',
+    calcIds: [1, 2, 3, 10, 12, 13],
+    hardwareTags: ['Baia 1', 'Baia Inbound', 'Baia Outbound', 'Piazzale']
+  },
+  {
+    key: 'ISOLA_ROBOT',
+    label: 'Isola Robotica di Pallettizzazione Antropomorfa',
+    desc: 'Robot 6 assi, vacuostati di presa sottovuoto e cinematica colli',
+    calcIds: [18],
+    hardwareTags: ['Robot Pallet', 'Antropomorfo', 'Ventose']
+  },
+  {
+    key: 'WOODPECKER',
+    label: 'Stazione Ispezione Pallet E80 Woodpecker',
+    desc: 'Controllo conformità pianale, deformazione pattini e umidità legno',
+    calcIds: [20],
+    hardwareTags: ['Woodpecker', 'Ispezione Pallet']
+  },
+  {
+    key: 'RAPTOR',
+    label: 'Etichettatrice Robotizzata E80 Raptor GS1/SSCC',
+    desc: 'Applicatore etichette, verifica ottica codice a barre e testina termica',
+    calcIds: [21],
+    hardwareTags: ['Raptor', 'Etichettatrice', 'GS1-128']
+  },
+  {
+    key: 'QUALITA_TRACCIABILITA',
+    label: 'Controllo Qualità & Tracciabilità Materiali (MIP / e-CMR)',
+    desc: 'Laboratorio campionamento, blockchain lotti e tracciabilità materie prime',
+    calcIds: [4, 5, 11],
+    hardwareTags: ['Qualità Lotti', 'WMS Tracciabilità', 'e-CMR']
+  }
+];
+
+/**
+ * Returns the permitted calculation IDs for a specific user and tenant.
+ * - Amministratore: can access all calculations supported by the plant
+ * - Operatore di Linea: restricted to their explicitly permitted machinery nodes or calculations
+ */
+export function getUserPermittedCalculations(
+  user: { ruolo: string; allowedCalcIds?: number[]; allowedMachineIds?: string[]; lineaAssegnata?: string } | null,
+  tenant?: FactoryTenant
+): number[] {
+  const plantSupported = getSupportedCalculationsForPlant(tenant);
+
+  if (!user || user.ruolo === 'Amministratore') {
+    return plantSupported;
+  }
+
+  // If specific calculation IDs are set
+  if (user.allowedCalcIds && user.allowedCalcIds.length > 0) {
+    const set = new Set(user.allowedCalcIds);
+    return plantSupported.filter(id => set.has(id));
+  }
+
+  // If specific machinery/node keys are assigned
+  if (user.allowedMachineIds && user.allowedMachineIds.length > 0) {
+    const allowedSet = new Set<number>();
+    for (const machineKey of user.allowedMachineIds) {
+      const nodeDef = PLANT_MACHINERY_NODES.find(n => n.key === machineKey);
+      if (nodeDef) {
+        nodeDef.calcIds.forEach(cid => allowedSet.add(cid));
+      }
+    }
+    if (allowedSet.size > 0) {
+      return plantSupported.filter(id => allowedSet.has(id));
+    }
+  }
+
+  // Infer from lineaAssegnata if specified
+  if (user.lineaAssegnata) {
+    const linea = user.lineaAssegnata.toLowerCase();
+    const inferred = new Set<number>();
+
+    if (linea.includes('bema') || linea.includes('fasciator')) {
+      inferred.add(14);
+      inferred.add(15);
+    }
+    if (linea.includes('lgv') || linea.includes('agv') || linea.includes('navett')) {
+      inferred.add(16);
+      inferred.add(17);
+      inferred.add(19);
+    }
+    if (linea.includes('smartstore') || linea.includes('magazzino')) {
+      inferred.add(6);
+      inferred.add(7);
+      inferred.add(8);
+      inferred.add(9);
+    }
+    if (linea.includes('inbound') || linea.includes('ricevimento') || linea.includes('baie')) {
+      inferred.add(1);
+      inferred.add(2);
+      inferred.add(3);
+      inferred.add(20);
+    }
+    if (linea.includes('robot') || linea.includes('pallett')) {
+      inferred.add(18);
+    }
+    if (inferred.size > 0) {
+      return plantSupported.filter(id => inferred.has(id));
+    }
+  }
+
+  // Fallback: default to plant supported
+  return plantSupported;
+}

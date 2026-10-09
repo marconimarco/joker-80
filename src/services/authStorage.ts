@@ -19,6 +19,9 @@ export const INITIAL_USERS: UserAccount[] = [
     password: 'barilla',
     lineaAssegnata: 'Linea 1 - Ricevimento Merci & SmartStore Pedrignano',
     tenantId: 'barilla',
+    azienda: 'Barilla G. e R. Fratelli',
+    allowedTenantIds: ['barilla', 'barilla-novara'],
+    allowedMachineIds: ['SMARTSTORE', 'BAIE_INBOUND_OUTBOUND'],
     attivo: true,
     createdAt: '2026-02-01'
   },
@@ -30,6 +33,9 @@ export const INITIAL_USERS: UserAccount[] = [
     password: 'nestle',
     lineaAssegnata: 'Linea 4 - Fasciatori Bema & AGV Assago',
     tenantId: 'nestle',
+    azienda: 'Nestlé Italiana',
+    allowedTenantIds: ['nestle'],
+    allowedMachineIds: ['BEMA_FASCIATORE', 'FLOTTA_LGV'],
     attivo: true,
     createdAt: '2026-02-15'
   },
@@ -41,6 +47,9 @@ export const INITIAL_USERS: UserAccount[] = [
     password: 'santanna',
     lineaAssegnata: 'Linea 2 - Evacuazione Fardelli Vinadio',
     tenantId: 'santanna',
+    azienda: 'Acqua Sant\'Anna',
+    allowedTenantIds: ['santanna', 'santanna-lanzo'],
+    allowedMachineIds: ['FLOTTA_LGV', 'ISOLA_ROBOT', 'RAPTOR'],
     attivo: true,
     createdAt: '2026-02-20'
   },
@@ -52,6 +61,9 @@ export const INITIAL_USERS: UserAccount[] = [
     password: 'linea',
     lineaAssegnata: 'Linea 1 - Ricevimento Merci & SmartStore',
     tenantId: 'barilla',
+    azienda: 'Barilla G. e R. Fratelli',
+    allowedTenantIds: ['barilla'],
+    allowedMachineIds: ['SMARTSTORE', 'BAIE_INBOUND_OUTBOUND'],
     attivo: true,
     createdAt: '2026-02-01'
   },
@@ -63,6 +75,9 @@ export const INITIAL_USERS: UserAccount[] = [
     password: 'linea',
     lineaAssegnata: 'Linea 4 - Fasciatori Bema & Flotta AGV',
     tenantId: 'nestle',
+    azienda: 'Nestlé Italiana',
+    allowedTenantIds: ['nestle'],
+    allowedMachineIds: ['BEMA_FASCIATORE', 'FLOTTA_LGV'],
     attivo: true,
     createdAt: '2026-02-15'
   },
@@ -74,6 +89,9 @@ export const INITIAL_USERS: UserAccount[] = [
     password: 'operatore',
     lineaAssegnata: 'Linea 1 - Inbound & WMS',
     tenantId: 'barilla',
+    azienda: 'Barilla G. e R. Fratelli',
+    allowedTenantIds: ['barilla'],
+    allowedMachineIds: ['SMARTSTORE', 'BAIE_INBOUND_OUTBOUND'],
     attivo: true,
     createdAt: '2026-02-01'
   }
@@ -335,6 +353,25 @@ export const AuthStorage = {
           }
         }
 
+        // Merge azienda and allowedMachineIds if missing
+        for (const user of parsed) {
+          const matchInit = INITIAL_USERS.find(iu => iu.username.toLowerCase() === user.username.toLowerCase());
+          if (matchInit) {
+            if (!user.azienda && matchInit.azienda) {
+              user.azienda = matchInit.azienda;
+              hasChanges = true;
+            }
+            if (!user.allowedMachineIds && matchInit.allowedMachineIds) {
+              user.allowedMachineIds = matchInit.allowedMachineIds;
+              hasChanges = true;
+            }
+            if (!user.allowedTenantIds && matchInit.allowedTenantIds) {
+              user.allowedTenantIds = matchInit.allowedTenantIds;
+              hasChanges = true;
+            }
+          }
+        }
+
         // Sanitize and ensure 100% unique IDs across all users
         const seenIds = new Set<string>();
         for (let i = 0; i < parsed.length; i++) {
@@ -362,6 +399,18 @@ export const AuthStorage = {
     } catch (e) {
       console.error(e);
     }
+  },
+
+  updateUser: (user: UserAccount): UserAccount => {
+    const users = AuthStorage.getUsers();
+    const updated = users.map(u => u.id === user.id ? user : u);
+    AuthStorage.saveUsers(updated);
+    // If current logged-in user is updated, update currentUser in storage too
+    const current = AuthStorage.getCurrentUser();
+    if (current && current.id === user.id) {
+      AuthStorage.setCurrentUser(user);
+    }
+    return user;
   },
 
   addUser: (user: Omit<UserAccount, 'id' | 'createdAt'>): UserAccount => {

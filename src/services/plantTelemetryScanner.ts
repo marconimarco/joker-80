@@ -1,6 +1,7 @@
 import { FactoryTenant, QuantumExecutionResult } from '../types/quantum';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
 import { QuantumEngine } from './quantumEngine';
+import { PlantTelemetryHistoryService } from './plantTelemetryHistory';
 
 export interface PlantNotification {
   id: string;
@@ -126,6 +127,20 @@ export class PlantTelemetryScanner {
 
     // Persist to local storage
     this.saveSummary(summary);
+
+    // Record time-series entry in historical telemetry trend service
+    try {
+      PlantTelemetryHistoryService.recordNewSnapshot(
+        tenant,
+        'DAEMON_PYTHON_MTLS',
+        notifications.map(n => ({
+          calcId: n.calcoloId,
+          calcNome: n.calcoloNome,
+          livelloAllarme: n.livelloAllarme,
+          res: n.risultatoPayload
+        }))
+      );
+    } catch {}
 
     return summary;
   }

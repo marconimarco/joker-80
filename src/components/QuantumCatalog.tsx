@@ -32,7 +32,16 @@ import {
   FileText,
   Download,
   BookOpen
+  ChevronDown,
+  ChevronUp,
+  TrendingUp,
+  AlertTriangle,
+  AlertOctagon
 } from 'lucide-react';
+import { PlantTelemetryTrendCharts } from './PlantTelemetryTrendCharts';
+import { isCalculationSupportedByPlant, PLANT_NODE_REQUIREMENTS, getUserPermittedCalculations, PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
+import { UserAccount } from '../types/quantum';
+import { AutoScanSummary } from '../services/plantTelemetryScanner';
 
 interface Props {
   onOpenCircuit: (calc: QuantumCalculationMeta, state?: string) => void;
@@ -42,6 +51,9 @@ interface Props {
   activeTenant?: FactoryTenant;
   onOpenCsvUpload?: () => void;
   importedInputs?: Record<string, any>;
+  currentUser?: UserAccount;
+  tenants?: FactoryTenant[];
+  scanSummary?: AutoScanSummary | null;
 }
 
 const CATEGORIES: MacroCategory[] = [
@@ -58,12 +70,17 @@ export const QuantumCatalog: React.FC<Props> = ({
   onClearInspectTarget,
   activeTenant,
   onOpenCsvUpload,
-  importedInputs
+  importedInputs,
+  currentUser,
+  tenants = [],
+  scanSummary
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<MacroCategory | 'ALL'>('1. Inbound & Materie Prime');
+  const [selectedCategory, setSelectedCategory] = useState<MacroCategory | 'ALL'>('ALL');
   const [filterOnlyPlantNodes, setFilterOnlyPlantNodes] = useState<boolean>(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isLogicDocModalOpen, setIsLogicDocModalOpen] = useState<boolean>(false);
+  const [showTrendCharts, setShowTrendCharts] = useState<boolean>(true);
+  const [expandedInputs, setExpandedInputs] = useState<Record<number, boolean>>({});
 
   const [formInputs, setFormInputs] = useState<Record<number, Record<string, any>>>(() => {
     const initial: Record<number, Record<string, any>> = {};
@@ -178,10 +195,66 @@ export const QuantumCatalog: React.FC<Props> = ({
     }
   }, [targetInspectCalcId, onClearInspectTarget]);
 
-  // Calculations supported by the active plant's hardware nodes
+  const isOperator = currentUser?.ruolo === 'Operatore di Linea';
+
+  // Allowed calculations for the user (filtered by their assigned machinery/nodes)
+  const userPermittedIds = useMemo(() => {
+    return getUserPermittedCalculations(currentUser || null, activeTenant);
+  }, [currentUser, activeTenant]);
+
+  // Calculations supported by the active plant's hardware nodes and operator machinery permissions
   const plantSupportedCalcs = useMemo(() => {
+    if (isOperator) {
+      return QUANTUM_CALCULATIONS.filter(c => userPermittedIds.includes(c.id));
+    }
     return QUANTUM_CALCULATIONS.filter(c => isCalculationSupportedByPlant(c.id, activeTenant));
-  }, [activeTenant]);
+  }, [isOperator, userPermittedIds, activeTenant]);
+
+  // Auto-populate / auto-compute calculation results on mount or activeTenant change so operator sees results without pressing Calcola
+  useEffect(() => {
+    let active = true;
+
+    // 1. Sync from scanSummary notifications if present
+    if (scanSummary?.notifiche && scanSummary.notifiche.length > 0) {
+      setResults(prev => {
+        const next = { ...prev };
+        for (const notif of scanSummary.notifiche) {
+          if (notif.risultatoPayload) {
+            next[notif.calcoloId] = notif.risultatoPayload;
+          }
+        }
+        return next;
+      });
+    }
+
+    // 2. Pre-calculate any missing results in the background
+    const computeMissing = async () => {
+      for (const calc of plantSupportedCalcs) {
+        if (!active) break;
+        if (!results[calc.id]) {
+          try {
+            const raw = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
+            const inputs: Record<string, any> = {};
+            for (const [k, v] of Object.entries(raw)) {
+              inputs[k] = parseFlexibleInput(v);
+            }
+            const res = await QuantumEngine.executeCalculation(calc.id, inputs);
+            if (active) {
+              setResults(prev => ({ ...prev, [calc.id]: res }));
+            }
+          } catch (e) {
+            console.error(`Auto-compute error for calc ${calc.id}`, e);
+          }
+        }
+      }
+    };
+
+    computeMissing();
+
+    return () => {
+      active = false;
+    };
+  }, [scanSummary, activeTenant?.id, plantSupportedCalcs]);
 
   // Calculations displayed after applying plant nodes filter and selected category
   const displayedCalculations = useMemo(() => {
@@ -338,6 +411,63 @@ export const QuantumCatalog: React.FC<Props> = ({
               <span>Logica 21 Calcoli (Copia & Scarica)</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Banner Restrizione Nodi per Operatore di Linea */}
+      {isOperator && currentUser && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-950/60 via-slate-900 to-slate-950 border border-purple-500/40 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
+              <Cpu className="w-4 h-4 text-purple-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-white text-xs sm:text-sm">
+                  Area Riservata Operatore: {currentUser.nomeCompleto}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                  {currentUser.azienda || activeTenant?.azienda || 'Azienda'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                Visualizzazione vincolata esclusivamente ai <strong>{plantSupportedCalcs.length} calcoli</strong> autorizzati per i tuoi nodi operativi ({currentUser.allowedMachineIds && currentUser.allowedMachineIds.length > 0 ? currentUser.allowedMachineIds.join(', ') : currentUser.lineaAssegnata || 'Tutti i nodi autorizzati'}). Non occorre premere calcola: i risultati sono precaricati e aggiornati automaticamente.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
+              ✓ Risultati Precalcolati Attivi
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* SEZIONE GRAFICO DEGLI ANDAMENTI TEMPORALI DEI DATI NEL TEMPO */}
+      {activeTenant && currentUser && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setShowTrendCharts(!showTrendCharts)}
+              className="text-xs font-mono font-bold text-cyan-300 hover:text-white flex items-center gap-2 cursor-pointer bg-slate-900/90 hover:bg-slate-850 px-3.5 py-2 rounded-xl border border-cyan-500/30 shadow-md transition-all"
+            >
+              <TrendingUp className="w-4 h-4 text-cyan-400" />
+              <span>{showTrendCharts ? 'Nascondi Grafico Andamenti Temporali' : 'Mostra Grafico Andamenti Temporali Dati & Risultati'}</span>
+              {showTrendCharts ? <ChevronUp className="w-3.5 h-3.5 text-cyan-400" /> : <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />}
+            </button>
+            <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">
+              Storico continuo da quando sono stati inseriti i primi dati (CSV o Daemon Python mTLS)
+            </span>
+          </div>
+
+          {showTrendCharts && (
+            <PlantTelemetryTrendCharts
+              activeTenant={activeTenant}
+              currentUser={currentUser}
+              tenants={tenants}
+            />
+          )}
         </div>
       )}
 

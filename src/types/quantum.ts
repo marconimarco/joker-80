@@ -377,6 +377,16 @@ export interface FactoryTenant {
 
 export type UserRole = 'Amministratore' | 'Operatore di Linea';
 
+export type PlantNodeType = 
+  | 'BEMA_FASCIATORE'
+  | 'FLOTTA_LGV'
+  | 'SMARTSTORE'
+  | 'BAIE_INBOUND_OUTBOUND'
+  | 'ISOLA_ROBOT'
+  | 'WOODPECKER'
+  | 'RAPTOR'
+  | 'QUALITA_TRACCIABILITA';
+
 export interface UserAccount {
   id: string;
   username: string;
@@ -384,7 +394,11 @@ export interface UserAccount {
   ruolo: UserRole;
   password?: string;
   lineaAssegnata?: string;
-  tenantId?: string;
+  tenantId?: string; // Stabilimento primario
+  azienda?: string; // Azienda / Società specifica (es. 'Barilla', 'Nestlé', 'Acqua Sant\'Anna', 'Ferrero')
+  allowedTenantIds?: string[]; // Elenco ID stabilimenti abilitati
+  allowedMachineIds?: string[]; // Nodi/macchinari abilitati (es. 'BEMA_FASCIATORE', 'FLOTTA_LGV')
+  allowedCalcIds?: number[]; // Calcoli numerici specifici consentiti
   attivo: boolean;
   createdAt: string;
 }
