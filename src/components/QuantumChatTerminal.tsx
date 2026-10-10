@@ -19,7 +19,7 @@ import {
   Search,
   X
 } from 'lucide-react';
-import { ChatMessage, QuantumCalculationMeta, FactoryTenant } from '../types/quantum';
+import { ChatMessage, QuantumCalculationMeta, FactoryTenant, UserRole } from '../types/quantum';
 import { QuantumRouterService } from '../services/quantumRouter';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
 import { isCalculationSupportedByPlant } from '../data/plantNodeCalculations';
@@ -29,7 +29,7 @@ interface Props {
   onOpenCircuit: (calc: QuantumCalculationMeta, state?: string) => void;
   allowPlcWrite: boolean;
   activeTenantEndpoint: string;
-  userRole?: 'Operatore di Linea' | 'Amministratore';
+  userRole?: UserRole;
   activeTenantName?: string;
   activeTenant?: FactoryTenant;
   anomaliesCount?: number;

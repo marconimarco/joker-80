@@ -14,7 +14,7 @@ import {
   Factory,
   Check
 } from 'lucide-react';
-import { FactoryTenant } from '../types/quantum';
+import { FactoryTenant, UserAccount } from '../types/quantum';
 
 interface Props {
   isOpen: boolean;
@@ -22,6 +22,7 @@ interface Props {
   tenants: FactoryTenant[];
   activeTenant: FactoryTenant;
   onSelectTenant: (tenant: FactoryTenant) => void;
+  currentUser?: UserAccount;
 }
 
 interface CompanyGroup {
@@ -37,16 +38,44 @@ export const CompanyPlantSelectorModal: React.FC<Props> = ({
   onClose,
   tenants,
   activeTenant,
-  onSelectTenant
+  onSelectTenant,
+  currentUser
 }) => {
   const [selectedCompanyName, setSelectedCompanyName] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Group tenants by company
+  const isAdmin = currentUser?.ruolo === 'Amministratore';
+
+  // Group tenants by company, filtering strictly by user permissions if not Admin
   const companyGroups = useMemo<CompanyGroup[]>(() => {
+    // 1. Determine permitted tenants for the current user
+    let accessibleTenants = tenants;
+
+    if (!isAdmin && currentUser) {
+      const userAzienda = (currentUser.azienda || activeTenant.azienda || '').toLowerCase().trim();
+      accessibleTenants = tenants.filter(t => {
+        const tenantAzienda = (t.azienda || '').toLowerCase().trim();
+        const sameCompany = userAzienda ? tenantAzienda === userAzienda : false;
+        if (!sameCompany) return false;
+        
+        // If user has explicit allowedTenantIds:
+        if (currentUser.allowedTenantIds && currentUser.allowedTenantIds.length > 0) {
+          return currentUser.allowedTenantIds.includes(t.id);
+        }
+
+        // If no explicit allowedTenantIds, can only see their primary tenant
+        return currentUser.tenantId ? t.id === currentUser.tenantId : true;
+      });
+
+      // Fallback: if somehow empty, ensure at least activeTenant is in
+      if (accessibleTenants.length === 0) {
+        accessibleTenants = [activeTenant];
+      }
+    }
+
     const map = new Map<string, FactoryTenant[]>();
     
-    tenants.forEach(t => {
+    accessibleTenants.forEach(t => {
       const comp = t.azienda || (t.nome.includes(' - ') ? t.nome.split(' - ')[0] : 'Altre Fabbriche');
       if (!map.has(comp)) {
         map.set(comp, []);
@@ -92,7 +121,14 @@ export const CompanyPlantSelectorModal: React.FC<Props> = ({
     });
 
     return groups;
-  }, [tenants]);
+  }, [tenants, isAdmin, currentUser, activeTenant]);
+
+  // If user is non-admin and has only 1 company, default directly into that company's plant list
+  React.useEffect(() => {
+    if (!isAdmin && companyGroups.length === 1) {
+      setSelectedCompanyName(companyGroups[0].name);
+    }
+  }, [isAdmin, companyGroups]);
 
   if (!isOpen) return null;
 
@@ -136,9 +172,16 @@ export const CompanyPlantSelectorModal: React.FC<Props> = ({
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hidden xs:inline">
                   SM.I.LE80 Gateway
                 </span>
+                {!isAdmin && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                    {currentUser?.ruolo === 'Responsabile di Stabilimento' ? 'RESPONSABILE' : 'OPERATORE'} • {currentUser?.azienda || activeTenant.azienda}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400">
-                Seleziona la società e lo stabilimento per caricare telemetria, notifiche e calcoli dedicati
+                {isAdmin
+                  ? 'Seleziona qualsiasi società e stabilimento per caricare telemetria e calcoli dedicati'
+                  : `Seleziona uno stabilimento della tua società (${currentUser?.azienda || activeTenant.azienda}) autorizzato per il tuo profilo`}
               </p>
             </div>
           </div>
@@ -183,7 +226,7 @@ export const CompanyPlantSelectorModal: React.FC<Props> = ({
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
               }`}
             >
-              1. Tutte le Aziende ({companyGroups.length})
+              {isAdmin ? `1. Tutte le Aziende (${companyGroups.length})` : `1. La Tua Azienda: ${companyGroups[0]?.name || ''}`}
             </button>
             {activeCompany && (
               <>

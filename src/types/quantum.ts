@@ -375,7 +375,7 @@ export interface FactoryTenant {
   operatoriAssegnati?: string[];
 }
 
-export type UserRole = 'Amministratore' | 'Operatore di Linea';
+export type UserRole = 'Amministratore' | 'Responsabile di Stabilimento' | 'Operatore di Linea';
 
 export type PlantNodeType = 
   | 'BEMA_FASCIATORE'

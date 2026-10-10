@@ -196,6 +196,7 @@ export const QuantumCatalog: React.FC<Props> = ({
   }, [targetInspectCalcId, onClearInspectTarget]);
 
   const isOperator = currentUser?.ruolo === 'Operatore di Linea';
+  const isResponsabile = currentUser?.ruolo === 'Responsabile di Stabilimento';
 
   // Allowed calculations for the user (filtered by their assigned machinery/nodes)
   const userPermittedIds = useMemo(() => {
@@ -207,6 +208,7 @@ export const QuantumCatalog: React.FC<Props> = ({
     if (isOperator) {
       return QUANTUM_CALCULATIONS.filter(c => userPermittedIds.includes(c.id));
     }
+    // Responsabile and Admin see all calculations of the plant they have selected
     return QUANTUM_CALCULATIONS.filter(c => isCalculationSupportedByPlant(c.id, activeTenant));
   }, [isOperator, userPermittedIds, activeTenant]);
 
@@ -607,6 +609,38 @@ export const QuantumCatalog: React.FC<Props> = ({
           <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
             <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
               ✓ Risultati Precalcolati Attivi
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Banner Coordinamento per Responsabile di Stabilimento */}
+      {isResponsabile && currentUser && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-950/50 via-slate-900 to-slate-950 border border-amber-500/40 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+              <Cpu className="w-4 h-4 text-amber-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-white text-xs sm:text-sm">
+                  Pannello Responsabile: {currentUser.nomeCompleto}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  {currentUser.azienda || activeTenant?.azienda || 'Azienda'}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  Stabilimento Attivo: {activeTenant?.nome}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                Supervisione tecnica di stabilimento: hai accesso a tutti i <strong>{plantSupportedCalcs.length} calcoli</strong> operativi di questo impianto e puoi selezionare altri stabilimenti del gruppo {currentUser.azienda || activeTenant?.azienda} dal selettore in alto.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
+              ★ Vista Responsabile Attiva
             </span>
           </div>
         </div>

@@ -97,9 +97,10 @@ export default function App() {
       const match = currentTenants.find(t => t.id === currentUser.tenantId);
       if (match) setActiveTenant(match);
     }
-    // If logged-in user is not admin, prevent access to chat or admin view
+    // If logged-in user is not admin, prevent access to chat terminal
+    // Responsabile di Stabilimento can access admin view for their company operators and node permissions
     if (currentUser && currentUser.ruolo !== 'Amministratore') {
-      if (activeView === 'chat' || activeView === 'admin') {
+      if (activeView === 'chat' || (activeView === 'admin' && currentUser.ruolo !== 'Responsabile di Stabilimento')) {
         setActiveView('catalog');
       }
     }
@@ -257,6 +258,7 @@ export default function App() {
         tenants={tenants}
         activeTenant={activeTenant}
         onSelectTenant={handleSelectTenant}
+        currentUser={currentUser}
       />
 
       {/* Manual CSV Plant Telemetry Upload Modal */}

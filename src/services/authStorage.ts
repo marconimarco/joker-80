@@ -1,5 +1,14 @@
 import { UserAccount, FactoryTenant } from '../types/quantum';
-import { TOPOLOGY_BARILLA, TOPOLOGY_NESTLE, TOPOLOGY_SANTANNA } from './plantAutoDiscovery';
+import { 
+  TOPOLOGY_BARILLA, 
+  TOPOLOGY_BARILLA_NOVARA,
+  TOPOLOGY_BARILLA_FOGGIA,
+  TOPOLOGY_NESTLE, 
+  TOPOLOGY_NESTLE_BENEVENTO,
+  TOPOLOGY_NESTLE_PERUGIA,
+  TOPOLOGY_SANTANNA,
+  TOPOLOGY_SANTANNA_LANZO
+} from './plantAutoDiscovery';
 
 export const INITIAL_USERS: UserAccount[] = [
   {
@@ -10,6 +19,34 @@ export const INITIAL_USERS: UserAccount[] = [
     password: 'admin',
     attivo: true,
     createdAt: '2026-01-10'
+  },
+  {
+    id: 'usr-resp-barilla',
+    username: 'resp_barilla',
+    nomeCompleto: 'Ing. Giovanni Barilla (Resp. Stabilimenti)',
+    ruolo: 'Responsabile di Stabilimento',
+    password: 'barilla',
+    lineaAssegnata: 'Coordinamento Impianti Barilla (Pedrignano & Novara)',
+    tenantId: 'barilla',
+    azienda: 'Barilla G. e R. Fratelli',
+    allowedTenantIds: ['barilla', 'barilla-novara', 'barilla-foggia'],
+    allowedMachineIds: ['BEMA_FASCIATORE', 'FLOTTA_LGV', 'SMARTSTORE', 'BAIE_INBOUND_OUTBOUND', 'ISOLA_ROBOT', 'WOODPECKER', 'RAPTOR', 'QUALITA_TRACCIABILITA'],
+    attivo: true,
+    createdAt: '2026-01-10'
+  },
+  {
+    id: 'usr-resp-nestle',
+    username: 'resp_nestle',
+    nomeCompleto: 'Dott.ssa Elena Conti (Resp. Stabilimenti)',
+    ruolo: 'Responsabile di Stabilimento',
+    password: 'nestle',
+    lineaAssegnata: 'Direzione Operativa Impianti Nestlé',
+    tenantId: 'nestle',
+    azienda: 'Nestlé Italiana',
+    allowedTenantIds: ['nestle', 'nestle-benevento', 'nestle-perugia'],
+    allowedMachineIds: ['BEMA_FASCIATORE', 'FLOTTA_LGV', 'SMARTSTORE', 'BAIE_INBOUND_OUTBOUND', 'ISOLA_ROBOT', 'RAPTOR'],
+    attivo: true,
+    createdAt: '2026-01-15'
   },
   {
     id: 'usr-op-barilla',
@@ -128,7 +165,7 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     qpuTarget: 'NVIDIA Grace Hopper GH200',
     logoColor: '#2563eb',
     plantTopology: {
-      ...TOPOLOGY_BARILLA,
+      ...TOPOLOGY_BARILLA_NOVARA,
       qubitCapacity: 64,
       lastSyncTimestamp: new Date().toISOString()
     },
@@ -148,7 +185,7 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     qpuTarget: 'Simulatore CUDA-Q TensorNet',
     logoColor: '#1d4ed8',
     plantTopology: {
-      ...TOPOLOGY_BARILLA,
+      ...TOPOLOGY_BARILLA_FOGGIA,
       qubitCapacity: 48,
       lastSyncTimestamp: new Date().toISOString()
     },
@@ -186,7 +223,7 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     qpuTarget: 'CUDA-Q Hybrid Grace Hopper',
     logoColor: '#dc2626',
     plantTopology: {
-      ...TOPOLOGY_NESTLE,
+      ...TOPOLOGY_NESTLE_BENEVENTO,
       qubitCapacity: 64,
       lastSyncTimestamp: new Date().toISOString()
     },
@@ -206,7 +243,7 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     qpuTarget: 'Quantum Edge QPU Perugina',
     logoColor: '#b91c1c',
     plantTopology: {
-      ...TOPOLOGY_NESTLE,
+      ...TOPOLOGY_NESTLE_PERUGIA,
       qubitCapacity: 56,
       lastSyncTimestamp: new Date().toISOString()
     },
@@ -244,7 +281,7 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     qpuTarget: 'QPU D-Wave Advantage 5000Q',
     logoColor: '#059669',
     plantTopology: {
-      ...TOPOLOGY_SANTANNA,
+      ...TOPOLOGY_SANTANNA_LANZO,
       qubitCapacity: 64,
       lastSyncTimestamp: new Date().toISOString()
     },

@@ -67,12 +67,47 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
 
   // Unique companies available
   const availableCompanies = useMemo(() => {
-    const set = new Set<string>();
-    tenants.forEach(t => {
-      if (t.azienda) set.add(t.azienda);
-    });
-    return Array.from(set);
-  }, [tenants]);
+    if (isAdmin) {
+      const set = new Set<string>();
+      tenants.forEach(t => {
+        if (t.azienda) set.add(t.azienda);
+      });
+      return Array.from(set);
+    }
+    // Non-admin can ONLY see their assigned company
+    return [currentUser.azienda || activeTenant.azienda || 'Barilla G. e R. Fratelli'];
+  }, [isAdmin, tenants, currentUser.azienda, activeTenant.azienda]);
+
+  // Plants available for this user within the selected company
+  const availablePlants = useMemo(() => {
+    const companyTenants = tenants.filter(t => t.azienda === selectedAzienda);
+    if (isAdmin) return companyTenants;
+    // Non-admin can only see their permitted plants
+    if (currentUser.allowedTenantIds && currentUser.allowedTenantIds.length > 0) {
+      return companyTenants.filter(t => currentUser.allowedTenantIds!.includes(t.id));
+    }
+    if (currentUser.tenantId) {
+      return companyTenants.filter(t => t.id === currentUser.tenantId);
+    }
+    return companyTenants;
+  }, [tenants, selectedAzienda, isAdmin, currentUser]);
+
+  const [selectedPlantId, setSelectedPlantId] = useState<string>(() => {
+    return activeTenant.id;
+  });
+
+  // Keep selectedPlantId synchronized with available plants
+  useEffect(() => {
+    if (availablePlants.some(p => p.id === activeTenant.id)) {
+      setSelectedPlantId(activeTenant.id);
+    } else if (availablePlants.length > 0) {
+      setSelectedPlantId(availablePlants[0].id);
+    }
+  }, [activeTenant.id, availablePlants]);
+
+  const selectedPlantTenant = useMemo(() => {
+    return tenants.find(t => t.id === selectedPlantId) || activeTenant;
+  }, [tenants, selectedPlantId, activeTenant]);
 
   // Query records from history service
   const records = useMemo(() => {
@@ -82,7 +117,7 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
     if (scopeLevel === 'azienda') {
       companyFilter = selectedAzienda;
     } else if (scopeLevel === 'stabilimento' || scopeLevel === 'macchinario') {
-      plantFilter = activeTenant.id;
+      plantFilter = selectedPlantId;
     }
 
     const filtered = PlantTelemetryHistoryService.getFilteredHistory({
@@ -92,7 +127,7 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
     });
 
     return filtered;
-  }, [scopeLevel, selectedAzienda, activeTenant.id, timeRange]);
+  }, [scopeLevel, selectedAzienda, selectedPlantId, timeRange]);
 
   // Earliest record timestamp
   const firstRecord = records[0];
@@ -266,15 +301,45 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
           {scopeLevel === 'azienda' && (
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] text-slate-400">Società:</span>
-              <select
-                value={selectedAzienda}
-                onChange={e => setSelectedAzienda(e.target.value)}
-                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-purple-500"
-              >
-                {availableCompanies.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              {availableCompanies.length > 1 ? (
+                <select
+                  value={selectedAzienda}
+                  onChange={e => setSelectedAzienda(e.target.value)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-purple-500"
+                >
+                  {availableCompanies.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-bold">
+                  {selectedAzienda}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Selettore Stabilimento (se livello 'stabilimento' o 'macchinario') */}
+          {(scopeLevel === 'stabilimento' || scopeLevel === 'macchinario') && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-400">Stabilimento:</span>
+              {availablePlants.length > 1 ? (
+                <select
+                  value={selectedPlantId}
+                  onChange={e => setSelectedPlantId(e.target.value)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 font-bold text-xs focus:outline-none focus:border-cyan-500 max-w-[260px]"
+                >
+                  {availablePlants.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome.includes(' - ') ? p.nome.split(' - ')[1] : p.nome}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold">
+                  {availablePlants[0]?.nome.includes(' - ') ? availablePlants[0]?.nome.split(' - ')[1] : (availablePlants[0]?.nome || activeTenant.nome)}
+                </span>
+              )}
             </div>
           )}
 
@@ -301,8 +366,8 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
               {scopeLevel === 'azienda' 
                 ? selectedAzienda 
                 : scopeLevel === 'stabilimento' 
-                  ? activeTenant.nome 
-                  : currentMachineDef.label.split('(')[0].trim()}
+                  ? selectedPlantTenant.nome 
+                  : `${selectedPlantTenant.nome.split(' - ')[1] || selectedPlantTenant.nome} • ${currentMachineDef.label.split('(')[0].trim()}`}
             </strong>
           </div>
         </div>

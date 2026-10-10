@@ -142,7 +142,7 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess }) => {
               <div>
                 <strong className="block text-slate-200">Instradamento Automatico Ruolo & Sede</strong>
                 <span className="text-slate-400 text-[11px] leading-relaxed">
-                  Se sei un <strong>Operatore</strong> verrai instradato direttamente ed esclusivamente nello stabilimento per cui lavori; se sei un <strong>Amministratore</strong> avrai accesso alla gestione globale dei 21 algoritmi quantistici.
+                  Se sei un <strong>Operatore</strong> o un <strong>Responsabile</strong> lavorerai esclusivamente sugli stabilimenti della tua società con i calcoli abilitati per i tuoi nodi; se sei un <strong>Amministratore</strong> avrai accesso alla gestione globale di tutti i siti industriali e dell'infrastruttura quantistica.
                 </span>
               </div>
             </div>
@@ -188,6 +188,19 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess }) => {
                   <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-purple-400 transition-colors" />
                 </button>
 
+                {/* Responsabile Barilla */}
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('resp_barilla', 'barilla')}
+                  className="p-2.5 rounded-lg bg-amber-950/30 hover:bg-amber-900/40 border border-amber-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
+                >
+                  <div>
+                    <div className="font-bold text-amber-300">Responsabile Barilla (Multi-Sito)</div>
+                    <div className="text-[10px] text-slate-400">user: <code className="text-amber-200">resp_barilla</code> | pass: <code className="text-amber-200">barilla</code></div>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition-colors" />
+                </button>
+
                 {/* Operator Barilla */}
                 <button
                   type="button"
@@ -218,7 +231,7 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess }) => {
                 <button
                   type="button"
                   onClick={() => handleQuickLogin('op_santanna', 'santanna')}
-                  className="p-2.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
+                  className="p-2.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer sm:col-span-2"
                 >
                   <div>
                     <div className="font-bold text-emerald-300">Operatore Sant'Anna (Vinadio)</div>

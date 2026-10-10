@@ -17,10 +17,24 @@ import {
 } from '../types/quantum';
 import { AuthStorage } from './authStorage';
 
+export interface DeepDataPlantOptions {
+  includeWoodpecker?: boolean;
+  includeSmartStore?: boolean;
+  includeSilkworm?: boolean;
+  includeRaptor?: boolean;
+  includeRobotPalletizing?: boolean;
+  includeTrafficInfra?: boolean;
+}
+
 /**
  * Generatore dei 7 Nodi a livello Deep Data conforme alle specifiche Elettric80 / SM.I.LE80
  */
-export function buildDeepDataForPlant(prefix: string, baseRpm = 48.5, baseTens = 152.0) {
+export function buildDeepDataForPlant(
+  prefix: string, 
+  baseRpm = 48.5, 
+  baseTens = 152.0,
+  options?: DeepDataPlantOptions
+) {
   const p = prefix.toUpperCase();
 
   const isolePallettizzazione: RobotPalletizingNode[] = [
@@ -206,12 +220,12 @@ export function buildDeepDataForPlant(prefix: string, baseRpm = 48.5, baseTens =
   };
 
   return {
-    isolePallettizzazione,
-    fasciatoriSilkworm,
-    etichettatriciRaptor,
-    magazzinoSmartStore,
-    controlloWoodpecker,
-    infrastrutturaTraffico
+    isolePallettizzazione: options?.includeRobotPalletizing === false ? [] : isolePallettizzazione,
+    fasciatoriSilkworm: options?.includeSilkworm === false ? [] : fasciatoriSilkworm,
+    etichettatriciRaptor: options?.includeRaptor === false ? [] : etichettatriciRaptor,
+    magazzinoSmartStore: options?.includeSmartStore === false ? undefined : magazzinoSmartStore,
+    controlloWoodpecker: options?.includeWoodpecker === false ? undefined : controlloWoodpecker,
+    infrastrutturaTraffico: options?.includeTrafficInfra === false ? undefined : infrastrutturaTraffico
   };
 }
 
@@ -389,7 +403,7 @@ export const TOPOLOGY_NESTLE: PlantTopology = {
     simulatorBackend: 'NVIDIA CUDA-Q / QPU IonQ Forte'
   },
   lastSyncTimestamp: '2026-03-20T09:40:00Z',
-  deepDataNodes: buildDeepDataForPlant('nestle', 46.5, 143.0)
+  deepDataNodes: buildDeepDataForPlant('nestle', 46.5, 143.0, { includeWoodpecker: false })
 };
 
 export const TOPOLOGY_SANTANNA: PlantTopology = {
@@ -430,7 +444,6 @@ export const TOPOLOGY_SANTANNA: PlantTopology = {
   macchinari: [
     { id: 'M-STA-BEMA-01', nome: 'Fasciatore Bema Vinadio Linea 1.5L', tipo: 'BEMA_FASCIATORE', reparto: 'Reparto 3', plcTag: 'DB180.DBW02_TENS', stato: 'IN_MARCIA', telemetria: { rpm: 52.0, tensione_newton: 165.0, spessore_film: 25 } },
     { id: 'M-STA-BEMA-02', nome: 'Fasciatore Bema Vinadio Linea 0.5L', tipo: 'BEMA_FASCIATORE', reparto: 'Reparto 3', plcTag: 'DB180.DBW04_TENS', stato: 'IN_MARCIA', telemetria: { rpm: 54.5, tensione_newton: 162.0, spessore_film: 25 } },
-    { id: 'M-STA-ASRS-01', nome: 'Navetta Gravitazionale Buffer Vinadio', tipo: 'TRASLOELEVATORE_SMARTSTORE', reparto: 'Reparto 2', plcTag: 'DB50.DBD20_SHUTTLE_X', stato: 'IN_MARCIA', telemetria: { velocita_ms: 4.2, saturazione_corsia: 89.0 } },
     { id: 'M-STA-PAL-01', nome: 'Fardellatrice + Pallettizzatore Linea Rebella', tipo: 'PALLETTIZZATORE', reparto: 'Reparto 3', plcTag: 'DB60.DBX4.1_OK', stato: 'IN_MARCIA', telemetria: { fardelli_ora: 4200 } }
   ],
   flottaAgv: [
@@ -455,7 +468,37 @@ export const TOPOLOGY_SANTANNA: PlantTopology = {
     simulatorBackend: 'D-Wave Advantage 5000+ / Hybrid QAOA'
   },
   lastSyncTimestamp: '2026-03-20T10:05:00Z',
-  deepDataNodes: buildDeepDataForPlant('santanna', 53.0, 163.5)
+  deepDataNodes: buildDeepDataForPlant('santanna', 53.0, 163.5, { includeWoodpecker: false, includeSmartStore: false })
+};
+
+export const TOPOLOGY_BARILLA_NOVARA: PlantTopology = {
+  ...TOPOLOGY_BARILLA,
+  macchinari: TOPOLOGY_BARILLA.macchinari.filter(m => m.tipo !== 'TRASLOELEVATORE_SMARTSTORE'),
+  deepDataNodes: buildDeepDataForPlant('barilla_novara', 47.0, 150.0, { includeWoodpecker: false, includeSmartStore: false })
+};
+
+export const TOPOLOGY_BARILLA_FOGGIA: PlantTopology = {
+  ...TOPOLOGY_BARILLA,
+  macchinari: TOPOLOGY_BARILLA.macchinari.filter(m => m.tipo !== 'BEMA_FASCIATORE' && m.tipo !== 'TRASLOELEVATORE_SMARTSTORE'),
+  deepDataNodes: buildDeepDataForPlant('barilla_foggia', 40.0, 140.0, { includeWoodpecker: false, includeSmartStore: false, includeSilkworm: false, includeRaptor: false })
+};
+
+export const TOPOLOGY_NESTLE_BENEVENTO: PlantTopology = {
+  ...TOPOLOGY_NESTLE,
+  macchinari: TOPOLOGY_NESTLE.macchinari.filter(m => m.tipo !== 'TRASLOELEVATORE_SMARTSTORE'),
+  deepDataNodes: buildDeepDataForPlant('nestle_benevento', 45.0, 140.0, { includeWoodpecker: false, includeSmartStore: false })
+};
+
+export const TOPOLOGY_NESTLE_PERUGIA: PlantTopology = {
+  ...TOPOLOGY_NESTLE,
+  macchinari: TOPOLOGY_NESTLE.macchinari.filter(m => m.tipo !== 'BEMA_FASCIATORE' && m.tipo !== 'TRASLOELEVATORE_SMARTSTORE'),
+  deepDataNodes: buildDeepDataForPlant('nestle_perugia', 42.0, 138.0, { includeWoodpecker: false, includeSmartStore: false, includeSilkworm: false })
+};
+
+export const TOPOLOGY_SANTANNA_LANZO: PlantTopology = {
+  ...TOPOLOGY_SANTANNA,
+  macchinari: TOPOLOGY_SANTANNA.macchinari.filter(m => m.tipo !== 'BEMA_FASCIATORE'),
+  deepDataNodes: buildDeepDataForPlant('santanna_lanzo', 50.0, 160.0, { includeWoodpecker: false, includeSmartStore: false, includeSilkworm: false })
 };
 
 // Preset Templates that Admin can choose from to quickly populate the form

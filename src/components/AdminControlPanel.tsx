@@ -54,7 +54,7 @@ import {
   X,
   UserPlus
 } from 'lucide-react';
-import { FactoryTenant, UserAccount, IndustrialProtocol } from '../types/quantum';
+import { FactoryTenant, UserAccount, IndustrialProtocol, UserRole } from '../types/quantum';
 import { AuthStorage } from '../services/authStorage';
 import { 
   PlantAutoDiscoveryService, 
@@ -82,7 +82,10 @@ export const AdminControlPanel: React.FC<Props> = ({
   onOpenCsvModalForPlant,
   onSwitchToOperator
 }) => {
-  const [activeTab, setActiveTab] = useState<'discovery' | 'topology' | 'operators' | 'mtls' | 'daemon_frequency'>('discovery');
+  const isResponsabile = currentUser.ruolo === 'Responsabile di Stabilimento';
+  const [activeTab, setActiveTab] = useState<'discovery' | 'topology' | 'operators' | 'mtls' | 'daemon_frequency'>(() => {
+    return currentUser.ruolo === 'Responsabile di Stabilimento' ? 'operators' : 'discovery';
+  });
   const [adminSubView, setAdminSubView] = useState<'aziende' | 'stabilimenti' | 'nuovo_stabilimento'>('stabilimenti');
   const [plantForOperatorsModal, setPlantForOperatorsModal] = useState<FactoryTenant | null>(null);
   const [quickOpUsername, setQuickOpUsername] = useState('');
@@ -94,8 +97,9 @@ export const AdminControlPanel: React.FC<Props> = ({
 
   const [users, setUsers] = useState<UserAccount[]>(() => AuthStorage.getUsers());
 
-  // Granular Operator Permissions Modal State (Azienda, Stabilimenti, Nodi/Macchinari)
+  // Granular Operator / Responsabile Permissions Modal State (Azienda, Stabilimenti, Nodi/Macchinari)
   const [editingPermissionsUser, setEditingPermissionsUser] = useState<UserAccount | null>(null);
+  const [permRuolo, setPermRuolo] = useState<UserRole>('Operatore di Linea');
   const [permAzienda, setPermAzienda] = useState<string>('');
   const [permTenantId, setPermTenantId] = useState<string>('');
   const [permAllowedTenantIds, setPermAllowedTenantIds] = useState<string[]>([]);
@@ -530,9 +534,10 @@ export const AdminControlPanel: React.FC<Props> = ({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
 
-  // Manual Operator Creation State (Tab 3)
+  // Manual Operator / Responsabile Creation State (Tab 3)
   const [newOpUsername, setNewOpUsername] = useState('');
   const [newOpNomeCompleto, setNewOpNomeCompleto] = useState('');
+  const [newOpRuolo, setNewOpRuolo] = useState<UserRole>('Operatore di Linea');
   const [newOpPassword, setNewOpPassword] = useState('linea2026');
   const [newOpLinea, setNewOpLinea] = useState('Linea 1 - Inbound & Scarico Baie');
   const [newOpTenantId, setNewOpTenantId] = useState(activeTenant.id);
@@ -841,19 +846,23 @@ export const AdminControlPanel: React.FC<Props> = ({
       return;
     }
 
+    const targetTenant = tenants.find(t => t.id === newOpTenantId);
     const created = AuthStorage.addUser({
       username: newOpUsername.trim(),
       nomeCompleto: newOpNomeCompleto.trim(),
-      ruolo: 'Operatore di Linea',
+      ruolo: newOpRuolo,
       password: newOpPassword.trim() || 'linea2026',
       lineaAssegnata: newOpLinea,
       tenantId: newOpTenantId,
+      azienda: targetTenant?.azienda,
+      allowedTenantIds: [newOpTenantId],
+      allowedMachineIds: PLANT_MACHINERY_NODES.map(m => m.key),
       attivo: true
     });
 
     const updatedUsers = AuthStorage.getUsers();
     setUsers(updatedUsers);
-    setNewOpSuccess(`Operatore "${created.nomeCompleto}" (${created.username}) abilitato all'accesso per lo stabilimento selezionato!`);
+    setNewOpSuccess(`${newOpRuolo === 'Responsabile di Stabilimento' ? 'Responsabile' : 'Operatore'} "${created.nomeCompleto}" (${created.username}) abilitato all'accesso per lo stabilimento selezionato!`);
     setNewOpUsername('');
     setNewOpNomeCompleto('');
     setTimeout(() => setNewOpSuccess(null), 5000);
@@ -861,6 +870,7 @@ export const AdminControlPanel: React.FC<Props> = ({
 
   const handleOpenPermissionsModal = (op: UserAccount) => {
     setEditingPermissionsUser(op);
+    setPermRuolo(op.ruolo);
     const assignedTenant = tenants.find(t => t.id === op.tenantId);
     setPermAzienda(op.azienda || assignedTenant?.azienda || 'Barilla G. e R. Fratelli');
     setPermTenantId(op.tenantId || tenants[0]?.id || '');
@@ -872,6 +882,7 @@ export const AdminControlPanel: React.FC<Props> = ({
     if (!editingPermissionsUser) return;
     const updated: UserAccount = {
       ...editingPermissionsUser,
+      ruolo: permRuolo,
       azienda: permAzienda,
       tenantId: permTenantId,
       allowedTenantIds: permAllowedTenantIds,
@@ -887,7 +898,7 @@ export const AdminControlPanel: React.FC<Props> = ({
       alert('Non puoi eliminare l\'amministratore principale.');
       return;
     }
-    if (window.confirm(`Rimuovere l'operatore ${username}?`)) {
+    if (window.confirm(`Rimuovere l'utente ${username}?`)) {
       AuthStorage.deleteUser(id);
       setUsers(AuthStorage.getUsers());
     }
@@ -905,7 +916,12 @@ export const AdminControlPanel: React.FC<Props> = ({
   };
 
   const filteredOperators = users.filter(u => {
-    if (u.ruolo !== 'Operatore di Linea') return false;
+    if (u.ruolo === 'Amministratore') return false;
+    if (isResponsabile) {
+      const respAzienda = (currentUser.azienda || activeTenant.azienda || '').toLowerCase().trim();
+      const userAzienda = (u.azienda || '').toLowerCase().trim();
+      if (respAzienda && userAzienda && respAzienda !== userAzienda) return false;
+    }
     if (operatorFilterTenant === 'all') return true;
     return u.tenantId === operatorFilterTenant;
   });
@@ -913,20 +929,34 @@ export const AdminControlPanel: React.FC<Props> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Top Banner */}
-      <div className="p-6 rounded-3xl bg-slate-900 border border-purple-500/20 bg-gradient-to-r from-purple-950/40 via-slate-900 to-cyan-950/30 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className={`p-6 rounded-3xl bg-slate-900 border shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+        isResponsabile 
+          ? 'border-amber-500/30 bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950'
+          : 'border-purple-500/20 bg-gradient-to-r from-purple-950/40 via-slate-900 to-cyan-950/30'
+      }`}>
         <div className="flex items-center gap-3">
-          <div className="p-3 rounded-2xl bg-purple-500/20 border border-purple-500/40 text-purple-300">
+          <div className={`p-3 rounded-2xl border ${
+            isResponsabile 
+              ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' 
+              : 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+          }`}>
             <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
             <h2 className="text-lg font-bold font-mono text-white flex items-center gap-2">
-              Pannello Amministratore Joker 80
-              <span className="text-xs font-normal px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                Super-Admin
+              {isResponsabile ? 'Pannello Responsabile di Stabilimento' : 'Pannello Amministratore Joker 80'}
+              <span className={`text-xs font-normal px-2.5 py-0.5 rounded-full border ${
+                isResponsabile 
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
+                  : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+              }`}>
+                {isResponsabile ? `Coordinamento ${currentUser.azienda || activeTenant.azienda}` : 'Super-Admin'}
               </span>
             </h2>
             <p className="text-xs text-slate-400 font-mono mt-0.5">
-              Connessione dinamica e Auto-Discovery SM.I.LE80: inserimento minimo, scansione automatica macchine e generazione automatica degli account dipendenti.
+              {isResponsabile 
+                ? `Gestione e configurazione permessi per gli operatori della società ${currentUser.azienda || activeTenant.azienda}. Decidi quali stabilimenti e nodi/calcoli assegnare a ciascun operatore.`
+                : 'Connessione dinamica e Auto-Discovery SM.I.LE80: inserimento minimo, scansione automatica macchine e generazione automatica degli account dipendenti.'}
             </p>
           </div>
         </div>
@@ -934,15 +964,15 @@ export const AdminControlPanel: React.FC<Props> = ({
         {/* Tab Navigation */}
         <div className="flex items-center gap-2 p-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono overflow-x-auto no-scrollbar touch-pan-x flex-nowrap w-full">
           <button
-            onClick={() => setActiveTab('discovery')}
+            onClick={() => setActiveTab('operators')}
             className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
-              activeTab === 'discovery'
-                ? 'bg-purple-600 text-white shadow-sm'
+              activeTab === 'operators'
+                ? isResponsabile ? 'bg-amber-600 text-white shadow-sm' : 'bg-cyan-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
-            <Zap className="w-3.5 h-3.5" />
-            <span>Connessione Rapida & Sedi ({tenants.length})</span>
+            <Users className="w-3.5 h-3.5" />
+            <span>Operatori & Permessi Nodi ({filteredOperators.length})</span>
           </button>
 
           <button
@@ -957,17 +987,19 @@ export const AdminControlPanel: React.FC<Props> = ({
             <span>Digital Twin & Macchine ({activeTenant.plantTopology?.macchinari.length || 0})</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('operators')}
-            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
-              activeTab === 'operators'
-                ? 'bg-cyan-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Operatori Generati ({users.filter(u => u.ruolo === 'Operatore di Linea').length})</span>
-          </button>
+          {!isResponsabile && (
+            <button
+              onClick={() => setActiveTab('discovery')}
+              className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
+                activeTab === 'discovery'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>Connessione Rapida & Sedi ({tenants.length})</span>
+            </button>
+          )}
 
           {/* TAB FREQUENZA TELEMETRIA & DEMONI MULTI-OS */}
           <button
@@ -2427,8 +2459,23 @@ export const AdminControlPanel: React.FC<Props> = ({
 
               <div className="space-y-1">
                 <label className="text-slate-300 flex items-center gap-1 font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  Ruolo Profilo *
+                </label>
+                <select
+                  value={newOpRuolo}
+                  onChange={e => setNewOpRuolo(e.target.value as UserRole)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none text-slate-100"
+                >
+                  <option value="Operatore di Linea">Operatore di Linea (Nodi & Macchine Specifiche)</option>
+                  <option value="Responsabile di Stabilimento">Responsabile di Stabilimento (Supervisione Nodi & Impianti Gruppo)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 flex items-center gap-1 font-bold">
                   <Users className="w-3.5 h-3.5 text-cyan-400" />
-                  Nome e Cognome Operatore *
+                  Nome e Cognome *
                 </label>
                 <input
                   type="text"
@@ -2539,6 +2586,13 @@ export const AdminControlPanel: React.FC<Props> = ({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-xs text-slate-100">
                           {op.nomeCompleto}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          op.ruolo === 'Responsabile di Stabilimento'
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                            : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                        }`}>
+                          {op.ruolo === 'Responsabile di Stabilimento' ? 'RESPONSABILE' : 'OPERATORE'}
                         </span>
                         {op.azienda && (
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
@@ -3525,6 +3579,22 @@ export const AdminControlPanel: React.FC<Props> = ({
             </div>
 
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+              {/* 0. Ruolo Utente */}
+              <div className="space-y-1.5">
+                <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Ruolo Profilo</span>
+                </label>
+                <select
+                  value={permRuolo}
+                  onChange={e => setPermRuolo(e.target.value as UserRole)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="Operatore di Linea">Operatore di Linea (Operazioni specifiche di macchina)</option>
+                  <option value="Responsabile di Stabilimento">Responsabile di Stabilimento (Supervisione nodi & selezione stabilimenti)</option>
+                </select>
+              </div>
+
               {/* 1. Azienda / Società */}
               <div className="space-y-1.5">
                 <label className="text-slate-300 font-bold flex items-center gap-1.5">
@@ -3533,7 +3603,16 @@ export const AdminControlPanel: React.FC<Props> = ({
                 </label>
                 <select
                   value={permAzienda}
-                  onChange={e => setPermAzienda(e.target.value)}
+                  onChange={e => {
+                    const newAz = e.target.value;
+                    setPermAzienda(newAz);
+                    // Select first plant of that company
+                    const firstOfCo = tenants.find(t => (t.azienda || '').toLowerCase() === newAz.toLowerCase());
+                    if (firstOfCo) {
+                      setPermTenantId(firstOfCo.id);
+                      setPermAllowedTenantIds([firstOfCo.id]);
+                    }
+                  }}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-purple-500 cursor-pointer"
                 >
                   {Array.from(new Set(tenants.map(t => t.azienda).filter(Boolean))).map(az => (
@@ -3562,6 +3641,52 @@ export const AdminControlPanel: React.FC<Props> = ({
                     <option key={t.id} value={t.id}>{t.nome} ({t.azienda || 'Azienda'})</option>
                   ))}
                 </select>
+              </div>
+
+              {/* 2b. Stabilimenti Abilitati della Stessa Società (Multi-Sito per Responsabile e Operatore) */}
+              <div className="space-y-2 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <label className="text-slate-300 font-bold flex items-center gap-1.5 text-xs">
+                  <Building2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Stabilimenti della stessa Società abilitati ({permAllowedTenantIds.length}):</span>
+                </label>
+                <p className="text-[10px] text-slate-400">
+                  L'utente vedrà in alto lo stabilimento attivo e potrà selezionare tra questi stabilimenti appartenenti alla società <strong>{permAzienda}</strong>.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {tenants
+                    .filter(t => !permAzienda || (t.azienda || '').toLowerCase() === permAzienda.toLowerCase())
+                    .map(t => {
+                      const isAllowed = permAllowedTenantIds.includes(t.id) || t.id === permTenantId;
+                      return (
+                        <label
+                          key={t.id}
+                          className={`p-2 rounded-lg border flex items-center gap-2 cursor-pointer text-xs ${
+                            isAllowed 
+                              ? 'bg-cyan-950/40 border-cyan-500/50 text-white' 
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isAllowed}
+                            disabled={t.id === permTenantId}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setPermAllowedTenantIds(prev => [...prev, t.id]);
+                              } else {
+                                setPermAllowedTenantIds(prev => prev.filter(id => id !== t.id));
+                              }
+                            }}
+                            className="rounded text-cyan-500 focus:ring-0 cursor-pointer"
+                          />
+                          <div className="min-w-0">
+                            <span className="font-bold block truncate">{t.nome}</span>
+                            <span className="text-[10px] text-slate-400 block truncate">{t.sito}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                </div>
               </div>
 
               {/* 3. Singoli Macchinari e Nodi di Impianto Abilitati */}
@@ -3652,6 +3777,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                       handleSavePermissions();
                       const updated: UserAccount = {
                         ...editingPermissionsUser,
+                        ruolo: permRuolo,
                         azienda: permAzienda,
                         tenantId: permTenantId,
                         allowedTenantIds: permAllowedTenantIds,
