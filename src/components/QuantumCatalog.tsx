@@ -28,10 +28,10 @@ import {
   Zap,
   Focus,
   Eye,
-  Maximize2,
   FileText,
+  Activity,
   Download,
-  BookOpen
+  BookOpen,
   ChevronDown,
   ChevronUp,
   TrendingUp,
@@ -39,7 +39,7 @@ import {
   AlertOctagon
 } from 'lucide-react';
 import { PlantTelemetryTrendCharts } from './PlantTelemetryTrendCharts';
-import { isCalculationSupportedByPlant, PLANT_NODE_REQUIREMENTS, getUserPermittedCalculations, PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
+import { getUserPermittedCalculations, PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
 import { UserAccount } from '../types/quantum';
 import { AutoScanSummary } from '../services/plantTelemetryScanner';
 
@@ -332,6 +332,175 @@ export const QuantumCatalog: React.FC<Props> = ({
     navigator.clipboard.writeText(JSON.stringify(data, null, 2));
     setCopiedId(calcId);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const renderDiagnosticResultBox = (calc: QuantumCalculationMeta, res: any) => {
+    if (executingId === calc.id) {
+      return (
+        <div className="p-3.5 rounded-xl bg-cyan-950/70 border border-cyan-500/40 text-cyan-200 font-mono text-xs flex items-center gap-3 animate-pulse">
+          <div className="w-4 h-4 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin shrink-0" />
+          <span>Elaborazione quantistica CUDA-Q in corso con telemetria gateway...</span>
+        </div>
+      );
+    }
+
+    if (!res) {
+      return (
+        <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 text-slate-400 font-mono text-xs flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-cyan-400" />
+            <span>In attesa di primo campionamento dati o avvio routine...</span>
+          </span>
+        </div>
+      );
+    }
+
+    const isCritical = Boolean(
+      res.indice_rischio_blocco?.toLowerCase().includes('critico') ||
+      res.livello_rischio?.toLowerCase().includes('critico') ||
+      res.rischio_stocastico?.toLowerCase().includes('critico') ||
+      (res.probabilita_fermo_pct && parseFloat(String(res.probabilita_fermo_pct)) > 70) ||
+      (res.codice_allarme_fabbrica && res.codice_allarme_fabbrica > 0) ||
+      res.codice_controllo_bema === 514 ||
+      res.codice_controllo_film === 515 ||
+      res.codice_controllo_lgv === 516 ||
+      res.codice_controllo_robot === 518 ||
+      res.codice_esito_woodpecker === 520
+    );
+
+    const isWarning = !isCritical && Boolean(
+      res.indice_rischio_blocco?.toLowerCase().includes('attenzione') ||
+      res.livello_rischio?.toLowerCase().includes('attenzione') ||
+      res.rischio_stocastico?.toLowerCase().includes('attenzione') ||
+      (res.probabilita_fermo_pct && parseFloat(String(res.probabilita_fermo_pct)) > 30) ||
+      res.codice_gestione_rete === 519 ||
+      res.codice_validazione_raptor === 521
+    );
+
+    return (
+      <div id={`result-card-${calc.id}`} className={`p-4 rounded-xl border space-y-3 font-mono text-xs shadow-lg transition-all ${
+        isCritical 
+          ? 'bg-gradient-to-br from-rose-950/35 via-slate-950 to-slate-950 border-rose-500/50 shadow-rose-950/20'
+          : isWarning
+            ? 'bg-gradient-to-br from-amber-950/35 via-slate-950 to-slate-950 border-amber-500/50 shadow-amber-950/20'
+            : 'bg-gradient-to-br from-emerald-950/25 via-slate-950 to-slate-950 border-emerald-500/40 shadow-emerald-950/20'
+      }`}>
+        {/* Status Header */}
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${
+              isCritical
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                : isWarning
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+            }`}>
+              {isCritical ? (
+                <>
+                  <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
+                  <span>CRITICO - PROBLEMATICA ATTIVA</span>
+                </>
+              ) : isWarning ? (
+                <>
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                  <span>ATTENZIONE - MONITORAGGIO</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>A REGIME - NESSUNA ANOMALIA</span>
+                </>
+              )}
+            </span>
+            {res.timestamp_esecuzione && (
+              <span className="text-[10px] text-slate-400">
+                Aggiornato alle {res.timestamp_esecuzione}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {res.tempo_simulazione_qpu_ms && (
+              <span className="px-2 py-0.5 rounded text-[10px] bg-cyan-950/80 text-cyan-300 border border-cyan-800/80">
+                QPU: {res.tempo_simulazione_qpu_ms}ms
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => copyResult(calc.id, res)}
+              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              {copiedId === calc.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-slate-400" />}
+              <span className="text-[10px]">{copiedId === calc.id ? 'Copiato' : 'Copia JSON'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Primary Metric Banner */}
+        {res.metrica_principale_valore && (
+          <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
+            isCritical
+              ? 'bg-rose-950/30 border-rose-500/40'
+              : isWarning
+                ? 'bg-amber-950/30 border-amber-500/40'
+                : 'bg-cyan-950/30 border-cyan-500/40'
+          }`}>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">
+                {res.metrica_principale_etichetta || 'Metrica Principale di Controllo'}
+              </span>
+              <span className={`text-xl sm:text-2xl font-black tracking-tight font-mono ${
+                isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-cyan-300'
+              }`}>
+                {res.metrica_principale_valore}
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 border border-slate-700 text-slate-300">
+                DIAGNOSI REALE
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Detailed KPIs Grid */}
+        {res.metriche_dettagliate && Object.keys(res.metriche_dettagliate).length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {Object.entries(res.metriche_dettagliate).map(([key, val]) => (
+              <div key={key} className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs font-mono">
+                <span className="text-slate-400 text-[10px] block truncate">{key}:</span>
+                <span className="font-bold text-cyan-300 text-xs sm:text-sm block mt-0.5 truncate">{String(val)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Human-readable diagnostic summary */}
+        {(res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica || res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+            {(res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica) && (
+              <div className={`p-2.5 rounded-lg border ${
+                isCritical ? 'bg-rose-950/20 border-rose-500/30' : isWarning ? 'bg-amber-950/20 border-amber-500/30' : 'bg-slate-900/80 border-slate-800'
+              }`}>
+                <span className="text-slate-400 text-[10px] block font-bold">Diagnosi / Valutazione:</span>
+                <span className={`font-bold ${isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-slate-200'}`}>
+                  {res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica}
+                </span>
+              </div>
+            )}
+
+            {(res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita) && (
+              <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
+                <span className="text-slate-400 text-[10px] block font-bold">Azione Suggerita:</span>
+                <span className="font-bold text-cyan-300">
+                  {res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -747,11 +916,41 @@ export const QuantumCatalog: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* Dynamic Parameter Controls */}
-              <div 
-                onFocusCapture={() => { if (focusedCalcId === null) setFocusedCalcId(calc.id); }}
-                className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-4"
-              >
+              {/* RISULTATO DIAGNOSTICO IMMEDIATO (Visibile subito senza premere calcolo) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                    Risultato & Stato Problematiche in Tempo Reale:
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    Telemetria gateway / log attivi
+                  </span>
+                </div>
+                {renderDiagnosticResultBox(calc, result)}
+              </div>
+
+              {/* Sezione Parametri di Fabbrica (Collassabile o Regolabile se si desidera forzare nuovi input) */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandedInputs(prev => ({ ...prev, [calc.id]: !prev[calc.id] }))}
+                  className="w-full py-1.5 px-3 rounded-lg bg-slate-950/90 hover:bg-slate-800/90 border border-slate-800 text-xs font-mono flex items-center justify-between text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Parametri Macchinario / Input ({expandedInputs[calc.id] ? 'Nascondi' : 'Mostra / Modifica'})</span>
+                  </span>
+                  <span className="text-[10px] text-cyan-400 font-bold flex items-center gap-1">
+                    {expandedInputs[calc.id] ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </span>
+                </button>
+
+                {(expandedInputs[calc.id] || focusedCalcId === calc.id) && (
+                  <div 
+                    onFocusCapture={() => { if (focusedCalcId === null) setFocusedCalcId(calc.id); }}
+                    className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-4 animate-in fade-in duration-150"
+                  >
                 <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-b border-slate-800 pb-2">
                   <span className="flex items-center gap-1.5">
                     <Sliders className="w-3.5 h-3.5 text-cyan-400" />
@@ -1368,22 +1567,13 @@ export const QuantumCatalog: React.FC<Props> = ({
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Action buttons & Busy Banner */}
-              <div className="space-y-3 pt-2">
-                {isBusy && (
-                  <div className="p-3 rounded-xl bg-cyan-950/80 border border-cyan-500/50 text-cyan-200 font-mono text-xs flex items-center gap-2.5 shadow-lg animate-pulse">
-                    <div className="w-4 h-4 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin shrink-0" />
-                    <span>Elaborazione quantistica in corso sul circuito CUDA-Q con i parametri correnti...</span>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end gap-3">
+                {/* Pulsante Ricalcola Parametri manuali (opzionale per l'operatore) */}
+                <div className="pt-2 flex items-center justify-end">
                   <button
                     onClick={() => executeCalculation(calc)}
                     disabled={isBusy}
-                    className={`w-full sm:w-auto px-6 py-2.5 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer ${
+                    className={`w-full sm:w-auto px-5 py-2 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer ${
                       isBusy
                         ? 'bg-slate-800 text-slate-500 cursor-wait'
                         : isLocked
@@ -1394,141 +1584,24 @@ export const QuantumCatalog: React.FC<Props> = ({
                     {isBusy ? (
                       <>
                         <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                        <span>Campionamento...</span>
+                        <span>Ricalcolo in corso...</span>
                       </>
                     ) : (
                       <>
                         <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>Esegui Calcolo ({calc.entanglementSymbol})</span>
+                        <span>Ricalcola con Nuovi Parametri ({calc.entanglementSymbol})</span>
                       </>
                     )}
                   </button>
                 </div>
               </div>
-
-              {/* Result Container */}
-              {result && (
-                <div id={`result-card-${calc.id}`} className="mt-4 p-4 rounded-xl bg-slate-950 border border-emerald-500/40 space-y-3 animate-in fade-in duration-150 shadow-lg shadow-emerald-950/20">
-                  <div className="flex items-center justify-between text-xs font-mono border-b border-slate-800 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="p-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      </span>
-                      <div>
-                        <span className="text-emerald-300 font-bold">
-                          Calcolo [{calc.id}] Eseguito con Successo
-                        </span>
-                        {result.timestamp_esecuzione && (
-                          <span className="text-slate-400 text-[10px] ml-2">
-                            alle {result.timestamp_esecuzione}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {result.tempo_simulazione_qpu_ms && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800">
-                          QPU: {result.tempo_simulazione_qpu_ms}ms
-                        </span>
-                      )}
-                      <button
-                        onClick={() => copyResult(calc.id, result)}
-                        className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
-                      >
-                        {copiedId === calc.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-slate-400" />}
-                        <span className="text-[10px]">{copiedId === calc.id ? 'Copiato' : 'Copia JSON'}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Primary Metric Banner */}
-                  {result.metrica_principale_valore && (
-                    <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/80 via-slate-900 to-blue-950/80 border border-cyan-500/50 shadow-md flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold block">
-                          {result.metrica_principale_etichetta || 'Risultato Calcolo Quantistico'}
-                        </span>
-                        <span className="text-2xl font-black text-white tracking-tight font-mono">
-                          {result.metrica_principale_valore}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold">
-                          CALCOLO REALE
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Detailed Recalculated KPIs Grid */}
-                  {result.metriche_dettagliate && Object.keys(result.metriche_dettagliate).length > 0 && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {Object.entries(result.metriche_dettagliate).map(([key, val]) => (
-                        <div key={key} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono">
-                          <span className="text-slate-400 text-[10px] block truncate">{key}:</span>
-                          <span className="font-bold text-cyan-300 text-sm block mt-0.5 truncate">{String(val)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Human-readable diagnostic summary */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
-                    {(result.indice_rischio_blocco || result.livello_rischio || result.rischio_stocastico || result.validazione_qualita || result.diagnosi || result.diagnostica_pallettizzatore || result.stato_ricarica) && (
-                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                        <span className="text-slate-400 text-[10px] block">Diagnosi / Rischio:</span>
-                        <span className="font-bold text-amber-300">
-                          {result.indice_rischio_blocco || result.livello_rischio || result.rischio_stocastico || result.validazione_qualita || result.diagnosi || result.diagnostica_pallettizzatore || result.stato_ricarica}
-                        </span>
-                      </div>
-                    )}
-
-                    {(result.azione_correttiva_suggerita || result.piano_azione || result.azione_immediata || result.azione_logistica_immediata || result.azione_misure_sicurezza || result.azione_suggerita) && (
-                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                        <span className="text-slate-400 text-[10px] block">Azione Suggerita:</span>
-                        <span className="font-bold text-cyan-300">
-                          {result.azione_correttiva_suggerita || result.piano_azione || result.azione_immediata || result.azione_logistica_immediata || result.azione_misure_sicurezza || result.azione_suggerita}
-                        </span>
-                      </div>
-                    )}
-
-                    {(result.stato_qubit_dominante || result.stato_qubit_rilevato || result.stato_qubit_ottimale || result.stato_qubit_cluster || result.cluster_qubit_estratto || result.stato_qubit_robot || result.stato_qubit_ricarica || result.stato_qubit_zkp) && (
-                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 sm:col-span-2 flex items-center justify-between">
-                        <span className="text-slate-400 text-[10px]">Stato Qubit Collassato:</span>
-                        <span className="px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 font-bold border border-purple-800/80">
-                          |{result.stato_qubit_dominante || result.stato_qubit_rilevato || result.stato_qubit_ottimale || result.stato_qubit_cluster || result.cluster_qubit_estratto || result.stato_qubit_robot || result.stato_qubit_ricarica || result.stato_qubit_zkp}⟩
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Parameters Echo */}
-                  {(() => {
-                    const paramsObj = result.parametri_elaborati || result.dati_elaborati;
-                    if (!paramsObj || Object.keys(paramsObj).length === 0) return null;
-                    return (
-                      <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80">
-                        <span className="text-slate-400 text-[10px] block font-mono mb-1">
-                          Parametri di Fabbrica Elaborati (Input Utente Ricalcolati):
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(paramsObj).map(([k, v]) => (
-                            <span key={k} className="px-2 py-0.5 rounded bg-slate-950 border border-cyan-500/30 text-[10px] font-mono text-slate-200">
-                              <strong className="text-cyan-400">{k}:</strong> {typeof v === 'object' ? JSON.stringify(v) : String(v)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          );
-        })
-      )}
-      </div>
+            )}
+          </div>
+        </div>
+      );
+    })
+  )}
+</div>
 
       {/* Modal Popup Punto di Domanda: Riga Esatta Telemetria CPU */}
       {selectedCpuCalc && (

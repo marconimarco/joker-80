@@ -302,9 +302,10 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
           newCustomMachines.push({
             id: `CUSTOM_${Date.now()}_${idx}`,
             nome: `${unknownName} (Nuovo Nodo Rilevato da CSV)`,
-            stato: 'ATTIVO',
-            tagPlc: `DB_CSV_${unknownName.toUpperCase().replace(/\s+/g, '_')}`,
-            descrizione: 'Macchinario ausiliario rilevato tramite file CSV telemetria'
+            tipo: 'ALTRO',
+            reparto: 'Linee Ausiliarie Telemetria',
+            plcTag: `DB_CSV_${unknownName.toUpperCase().replace(/\s+/g, '_')}`,
+            stato: 'IN_MARCIA'
           });
         });
       }
@@ -328,10 +329,11 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
       onApplyInputsToCatalog?.(extractedInputs);
 
       // Registra snapshot nella cronologia temporale dell'impianto
+      const isHighSpeed = columns.some(c => c.toLowerCase().includes('hz') || c.toLowerCase().includes('vibraz') || c.toLowerCase().includes('rpm') || c.toLowerCase().includes('ms'));
       try {
         PlantTelemetryHistoryService.recordNewSnapshot(
           updatedTenant,
-          selectedFormat === 'TYPE_1_EVENTS_OEE' ? 'UPLOAD_CSV_EVENTI' : 'UPLOAD_CSV_TELEMETRIA',
+          isHighSpeed ? 'UPLOAD_CSV_TELEMETRIA' : 'UPLOAD_CSV_EVENTI',
           undefined,
           {
             bemaVibrazione: extractedInputs.vibrazione_cuscinetti_bema_g,
