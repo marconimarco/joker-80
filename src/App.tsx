@@ -163,6 +163,7 @@ export default function App() {
   }
 
   const isAdmin = currentUser.ruolo === 'Amministratore';
+  const isResponsabile = currentUser.ruolo === 'Responsabile di Stabilimento';
 
   return (
     <div className="h-full min-h-full w-full bg-slate-950 text-slate-100 flex flex-col overflow-hidden selection:bg-cyan-500/30 selection:text-cyan-200">
@@ -210,6 +211,7 @@ export default function App() {
               importedInputs={importedCsvInputs}
               currentUser={currentUser}
               tenants={tenants}
+              onSelectTenant={handleSelectTenant}
               scanSummary={scanSummary && scanSummary.stabilimentoId === activeTenant.id ? scanSummary : null}
             />
           </div>
@@ -225,7 +227,7 @@ export default function App() {
           />
         )}
 
-        {activeView === 'admin' && isAdmin && (
+        {activeView === 'admin' && (isAdmin || isResponsabile) && (
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             <AdminControlPanel
               tenants={tenants}

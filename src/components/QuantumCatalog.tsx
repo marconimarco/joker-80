@@ -36,7 +36,11 @@ import {
   ChevronUp,
   TrendingUp,
   AlertTriangle,
-  AlertOctagon
+  AlertOctagon,
+  ChevronRight,
+  Search,
+  LayoutList,
+  Grid
 } from 'lucide-react';
 import { PlantTelemetryTrendCharts } from './PlantTelemetryTrendCharts';
 import { getUserPermittedCalculations, PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
@@ -54,6 +58,7 @@ interface Props {
   currentUser?: UserAccount;
   tenants?: FactoryTenant[];
   scanSummary?: AutoScanSummary | null;
+  onSelectTenant?: (tenant: FactoryTenant) => void;
 }
 
 const CATEGORIES: MacroCategory[] = [
@@ -73,7 +78,8 @@ export const QuantumCatalog: React.FC<Props> = ({
   importedInputs,
   currentUser,
   tenants = [],
-  scanSummary
+  scanSummary,
+  onSelectTenant
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<MacroCategory | 'ALL'>('ALL');
   const [filterOnlyPlantNodes, setFilterOnlyPlantNodes] = useState<boolean>(true);
@@ -189,6 +195,7 @@ export const QuantumCatalog: React.FC<Props> = ({
       const target = QUANTUM_CALCULATIONS.find(c => c.id === targetInspectCalcId);
       if (target) {
         setSelectedCategory(target.category);
+        setSelectedCalcId(target.id);
         setSelectedCpuCalc(target);
         onClearInspectTarget?.();
       }
@@ -265,7 +272,59 @@ export const QuantumCatalog: React.FC<Props> = ({
     return pool.filter(c => c.category === selectedCategory);
   }, [filterOnlyPlantNodes, activeTenant, plantSupportedCalcs, selectedCategory]);
 
-  // ID del calcolo attualmente selezionato per lavorarci (quando attivo, gli altri si nascondono a scomparsa)
+  // Modalità di visualizzazione: 'table-focus' (Pulsanti a sinistra + Singolo Ingrandito a destra) oppure 'grid' (Tutti)
+  const [displayMode, setDisplayMode] = useState<'table-focus' | 'grid'>('table-focus');
+
+  // ID del calcolo attualmente selezionato nella tabella pulsanti a sinistra
+  const [selectedCalcId, setSelectedCalcId] = useState<number>(() => {
+    return plantSupportedCalcs[0]?.id || 1;
+  });
+
+  // Query di ricerca testuale nella tabella dei pulsanti
+  const [searchTableQuery, setSearchTableQuery] = useState<string>('');
+
+  // Se cambiano i calcoli supportati dallo stabilimento, sincronizza selectedCalcId
+  useEffect(() => {
+    if (plantSupportedCalcs.length > 0) {
+      if (!plantSupportedCalcs.some(c => c.id === selectedCalcId)) {
+        setSelectedCalcId(plantSupportedCalcs[0].id);
+      }
+    }
+  }, [plantSupportedCalcs, selectedCalcId]);
+
+  // Calcolo selezionato per la visualizzazione ingrandita
+  const selectedCalc = useMemo(() => {
+    return (
+      plantSupportedCalcs.find(c => c.id === selectedCalcId) ||
+      QUANTUM_CALCULATIONS.find(c => c.id === selectedCalcId) ||
+      plantSupportedCalcs[0] ||
+      QUANTUM_CALCULATIONS[0]
+    );
+  }, [selectedCalcId, plantSupportedCalcs]);
+
+  // Calcoli filtrati per la tabella dei pulsanti a sinistra
+  const tableCalculations = useMemo(() => {
+    let pool = (filterOnlyPlantNodes && activeTenant) ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
+    if (selectedCategory !== 'ALL') {
+      pool = pool.filter(c => c.category === selectedCategory);
+    }
+    if (searchTableQuery.trim()) {
+      const q = searchTableQuery.toLowerCase().trim();
+      pool = pool.filter(c => {
+        const nodeReq = PLANT_NODE_REQUIREMENTS[c.id];
+        return (
+          c.id.toString() === q ||
+          c.name.toLowerCase().includes(q) ||
+          c.technicalModule.toLowerCase().includes(q) ||
+          c.subFunction.toLowerCase().includes(q) ||
+          (nodeReq && nodeReq.nodeName.toLowerCase().includes(q))
+        );
+      });
+    }
+    return pool;
+  }, [filterOnlyPlantNodes, activeTenant, plantSupportedCalcs, selectedCategory, searchTableQuery]);
+
+  // ID del calcolo in focus (per compatibilità con la barra rapida)
   const [focusedCalcId, setFocusedCalcId] = useState<number | null>(null);
 
   // Calcolo attivo in focus
@@ -669,6 +728,7 @@ export const QuantumCatalog: React.FC<Props> = ({
               activeTenant={activeTenant}
               currentUser={currentUser}
               tenants={tenants}
+              onSelectTenant={onSelectTenant}
             />
           )}
         </div>
@@ -714,101 +774,247 @@ export const QuantumCatalog: React.FC<Props> = ({
         })}
       </div>
 
-      {/* Barra di Selezione Rapida Calcolo (Modalità Singolo Calcolo) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl font-mono text-xs">
+      {/* Barra di Selezione Visualizzazione & Controllo Layout */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-900/90 border border-slate-800 rounded-2xl font-mono text-xs shadow-md">
         <div className="flex items-center gap-2 flex-wrap">
-          <Focus className="w-4 h-4 text-cyan-400 shrink-0" />
-          <span className="text-slate-300 font-bold">Lavora su un Calcolo Specifico:</span>
-          <select
-            value={focusedCalcId ?? ''}
-            onChange={(e) => {
-              const val = e.target.value;
-              setFocusedCalcId(val === '' ? null : Number(val));
-            }}
-            className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-cyan-300 font-bold text-xs focus:outline-none focus:border-cyan-400 cursor-pointer max-w-full sm:max-w-md"
-          >
-            <option value="">Tutti i calcoli abilitati ({displayedCalculations.length})</option>
-            {displayedCalculations.map((c) => (
-              <option key={c.id} value={c.id}>
-                [{c.id}] {c.name} ({c.technicalModule})
-              </option>
-            ))}
-          </select>
+          <span className="text-slate-300 font-bold flex items-center gap-1.5">
+            <LayoutList className="w-4 h-4 text-cyan-400" />
+            <span>Modalità Visualizzazione Calcoli:</span>
+          </span>
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setDisplayMode('table-focus')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                displayMode === 'table-focus'
+                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/60'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Tabella con solo i pulsanti a sinistra e singolo calcolo selezionato ingrandito a destra"
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+              <span>Tabella Pulsanti a Sinistra (Singolo Ingrandito)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDisplayMode('grid')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                displayMode === 'grid'
+                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/60'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Visualizza tutti i calcoli contemporaneamente in una griglia"
+            >
+              <Grid className="w-3.5 h-3.5" />
+              <span>Griglia Estesa (Tutti)</span>
+            </button>
+          </div>
         </div>
 
-        {focusedCalcId !== null && (
-          <button
-            type="button"
-            onClick={() => setFocusedCalcId(null)}
-            className="px-3 py-1.5 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-500/50 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer self-start sm:self-auto shrink-0 shadow-xs"
-          >
-            <Eye className="w-3.5 h-3.5 text-cyan-300" />
-            <span>Mostra tutti i calcoli ({displayedCalculations.length})</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 text-[11px] text-slate-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <span>
+            {displayMode === 'table-focus'
+              ? `Calcolo [${selectedCalc.id}] ingrandito • ${tableCalculations.length} calcoli inerenti a ${activeTenant?.nome || 'stabilimento'}`
+              : `Mostrando ${displayedCalculations.length} calcoli in parallelo`}
+          </span>
+        </div>
       </div>
 
-      {/* Banner Modalità Focalizzata quando un calcolo è attivo ed isolato */}
-      {focusedCalcId !== null && focusedCalcMeta && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-cyan-950/80 border border-cyan-500/50 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs animate-in fade-in duration-200">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0">
-              <Focus className="w-4 h-4 text-cyan-400 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-white text-sm">
-                  Calcolo [{focusedCalcId}] Selezionato in Modalità Focalizzata
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                  Gli altri {displayedCalculations.length > 1 ? displayedCalculations.length - 1 : 0} calcoli sono temporaneamente nascosti
+      <div className={displayMode === 'table-focus' ? "flex flex-col lg:flex-row gap-4 sm:gap-6 items-start" : ""}>
+        {/* COLONNA SINISTRA: TABELLA DEI SOLI PULSANTI (solo in modalità table-focus) */}
+        {displayMode === 'table-focus' && (
+          <div className="w-full lg:w-80 xl:w-96 shrink-0 bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-col gap-3 font-mono shadow-xl sticky top-2">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <LayoutList className="w-4 h-4 text-cyan-400" />
+                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  Tabella Calcoli
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Stai lavorando ed inserendo manualmente i parametri per questo specifico calcolo quantistico.
-              </p>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                {tableCalculations.length} Nodi Inerenti
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-snug">
+              Pulsanti dei calcoli inerenti a <strong className="text-cyan-300">{activeTenant?.nome || 'questo stabilimento'}</strong>. Clicca un pulsante per ingrandire il calcolo a destra:
+            </p>
+
+            {/* Ricerca veloce nei pulsanti */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTableQuery}
+                onChange={e => setSearchTableQuery(e.target.value)}
+                placeholder="Cerca calcolo, modulo o nodo..."
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-400"
+              />
+              {searchTableQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTableQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Micro categorie */}
+            <div className="flex gap-1 overflow-x-auto no-scrollbar py-0.5 text-[10px]">
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('ALL')}
+                className={`px-2 py-1 rounded-lg whitespace-nowrap cursor-pointer transition-colors ${
+                  selectedCategory === 'ALL'
+                    ? 'bg-cyan-600 text-white font-bold'
+                    : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Tutti ({tableCalculations.length})
+              </button>
+              {CATEGORIES.map(cat => {
+                const short = cat.split('. ')[1]?.split(' & ')[0] || cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-2 py-1 rounded-lg whitespace-nowrap cursor-pointer transition-colors ${
+                      selectedCategory === cat
+                        ? 'bg-cyan-600 text-white font-bold'
+                        : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {short}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tabella dei soli pulsanti */}
+            <div className="flex flex-col gap-1.5 max-h-[calc(100vh-250px)] min-h-[300px] overflow-y-auto pr-1">
+              {tableCalculations.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                  Nessun calcolo inerente per questo filtro.
+                </div>
+              ) : (
+                tableCalculations.map(c => {
+                  const isSelected = selectedCalc.id === c.id;
+                  const nodeReq = PLANT_NODE_REQUIREMENTS[c.id];
+                  const hasResult = Boolean(results[c.id]);
+                  const isExecuting = executingId === c.id;
+
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCalcId(c.id);
+                        if (window.innerWidth < 1024) {
+                          document.getElementById('enlarged-calc-view')?.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                      className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 ${
+                        isSelected
+                          ? 'bg-gradient-to-r from-cyan-950/90 via-slate-900 to-slate-900 border-cyan-400 text-white shadow-lg shadow-cyan-950/60 ring-2 ring-cyan-500/40 scale-[1.01]'
+                          : 'bg-slate-950/60 hover:bg-slate-800/80 border-slate-800 hover:border-slate-700 text-slate-300'
+                      }`}
+                      title={`Clicca per ingrandire il calcolo [${c.id}] ${c.name}`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0 ${
+                            isSelected ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-cyan-400 border border-slate-700'
+                          }`}>
+                            #{c.id}
+                          </span>
+                          <span className="text-xs font-bold truncate">
+                            {c.name}
+                          </span>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-1">
+                          <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${
+                            c.entanglement === 'OBBLIGATORIO'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}>
+                            {c.entanglementSymbol}
+                          </span>
+                          {isSelected && <ChevronRight className="w-3.5 h-3.5 text-cyan-400 shrink-0" />}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 gap-1">
+                        <span className="truncate text-slate-400">
+                          {nodeReq?.nodeName ? nodeReq.nodeName : c.technicalModule}
+                        </span>
+                        <span className={`font-mono text-[9px] ${
+                          isExecuting ? 'text-amber-400 animate-pulse' : hasResult ? 'text-emerald-400 font-bold' : 'text-slate-500'
+                        }`}>
+                          {isExecuting ? '● In Esecuzione' : hasResult ? '✓ Dati Pronti' : 'In attesa'}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setFocusedCalcId(null)}
-            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-white border border-cyan-500/40 font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md shrink-0 self-start sm:self-auto"
-            title="Fai ricomparire tutti i calcoli dell'elenco"
-          >
-            <Eye className="w-4 h-4 text-cyan-400" />
-            <span>Mostra Tutti i Calcoli ({displayedCalculations.length})</span>
-          </button>
-        </div>
-      )}
+        )}
 
-      {/* Calculations Grid */}
-      <div className={focusedCalcId !== null ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6"}>
-        {visibleCalculations.length === 0 ? (
-          <div className="col-span-full p-8 text-center bg-slate-900/60 border border-slate-800 rounded-2xl font-mono text-slate-400 space-y-2">
-            <AlertCircle className="w-8 h-8 mx-auto text-amber-400" />
-            <p className="text-sm font-bold text-slate-200">
-              Nessun macchinario o nodo presente in questa categoria per lo stabilimento attivo.
-            </p>
-            <p className="text-xs">
-              Fai clic su "Mostra Tutti i 21 Nodi" in alto per visualizzare l'intero catalogo Elettric80.
-            </p>
-          </div>
-        ) : (
-          visibleCalculations.map((calc) => {
-            const isLocked = calc.entanglement === 'OBBLIGATORIO';
-            const inputs = formInputs[calc.id] || calc.defaultInputs;
-            const result = results[calc.id];
-            const isBusy = executingId === calc.id;
-            const nodeReq = PLANT_NODE_REQUIREMENTS[calc.id];
-            const isSupported = isCalculationSupportedByPlant(calc.id, activeTenant);
+        {/* AREA DEI CALCOLI: SE table-focus MOSTRA SOLO QUELLO SELEZIONATO INGRANDITO, ALTRIMENTI GRIGLIA */}
+        <div id="enlarged-calc-view" className={displayMode === 'table-focus' ? "flex-1 min-w-0 w-full" : "grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 flex-1"}>
+          {(displayMode === 'table-focus' ? (selectedCalc ? [selectedCalc] : []) : visibleCalculations).length === 0 ? (
+            <div className="col-span-full p-8 text-center bg-slate-900/60 border border-slate-800 rounded-2xl font-mono text-slate-400 space-y-2">
+              <AlertCircle className="w-8 h-8 mx-auto text-amber-400" />
+              <p className="text-sm font-bold text-slate-200">
+                Nessun macchinario o nodo presente per questo stabilimento.
+              </p>
+              <p className="text-xs">
+                I calcoli vengono mostrati solo per i macchinari effettivamente installati.
+              </p>
+            </div>
+          ) : (
+            (displayMode === 'table-focus' ? (selectedCalc ? [selectedCalc] : []) : visibleCalculations).map((calc) => {
+              const isLocked = calc.entanglement === 'OBBLIGATORIO';
+              const inputs = formInputs[calc.id] || calc.defaultInputs;
+              const result = results[calc.id];
+              const isBusy = executingId === calc.id;
+              const nodeReq = PLANT_NODE_REQUIREMENTS[calc.id];
+              const isSupported = isCalculationSupportedByPlant(calc.id, activeTenant);
+              const isEnlarged = displayMode === 'table-focus';
 
-          return (
-            <div 
-              key={calc.id}
-              className={`bg-slate-900 border rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col justify-between space-y-4 sm:space-y-5 transition-colors ${
-                isSupported ? 'border-slate-800 hover:border-slate-700' : 'border-slate-800/60 opacity-85'
-              }`}
-            >
+              return (
+                <div 
+                  key={calc.id}
+                  id={`calc-card-${calc.id}`}
+                  className={`bg-slate-900 border rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col justify-between space-y-4 sm:space-y-5 transition-all ${
+                    isEnlarged
+                      ? 'border-cyan-500/50 shadow-2xl shadow-cyan-950/40 ring-1 ring-cyan-500/30 w-full'
+                      : isSupported 
+                      ? 'border-slate-800 hover:border-slate-700' 
+                      : 'border-slate-800/60 opacity-85'
+                  }`}
+                >
+                  {/* Banner superiore se in modalità ingrandita */}
+                  {isEnlarged && (
+                    <div className="p-3 sm:p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/80 via-slate-900 to-slate-950 border border-cyan-500/40 flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+                      <div className="flex items-center gap-2">
+                        <Focus className="w-4 h-4 text-cyan-400 animate-pulse" />
+                        <span className="font-bold text-white">Calcolo Selezionato Ingrandito:</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                          [#{calc.id}] {calc.name}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-400">
+                        1 calcolo alla volta • Usa i pulsanti a sinistra per cambiare calcolo
+                      </span>
+                    </div>
+                  )}
               {/* Connected Plant Node Badge */}
               {nodeReq && (
                 <div className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono flex items-center justify-between border ${
@@ -973,14 +1179,14 @@ export const QuantumCatalog: React.FC<Props> = ({
                 >
                   <span className="flex items-center gap-1.5">
                     <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Parametri Macchinario / Input ({expandedInputs[calc.id] ? 'Nascondi' : 'Mostra / Modifica'})</span>
+                    <span>Parametri Macchinario / Input ({(isEnlarged || expandedInputs[calc.id]) ? 'Parametri Attivi' : 'Mostra / Modifica'})</span>
                   </span>
                   <span className="text-[10px] text-cyan-400 font-bold flex items-center gap-1">
-                    {expandedInputs[calc.id] ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    {(isEnlarged || expandedInputs[calc.id]) ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   </span>
                 </button>
 
-                {(expandedInputs[calc.id] || focusedCalcId === calc.id) && (
+                {(isEnlarged || expandedInputs[calc.id] || focusedCalcId === calc.id) && (
                   <div 
                     onFocusCapture={() => { if (focusedCalcId === null) setFocusedCalcId(calc.id); }}
                     className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-4 animate-in fade-in duration-150"
@@ -1630,12 +1836,13 @@ export const QuantumCatalog: React.FC<Props> = ({
                 </div>
               </div>
             )}
-          </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
-      );
-    })
-  )}
-</div>
+      </div>
 
       {/* Modal Popup Punto di Domanda: Riga Esatta Telemetria CPU */}
       {selectedCpuCalc && (

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Activity, 
   TrendingUp, 
@@ -28,12 +28,14 @@ interface Props {
   activeTenant: FactoryTenant;
   currentUser: UserAccount;
   tenants: FactoryTenant[];
+  onSelectTenant?: (tenant: FactoryTenant) => void;
 }
 
 export const PlantTelemetryTrendCharts: React.FC<Props> = ({
   activeTenant,
   currentUser,
-  tenants
+  tenants,
+  onSelectTenant
 }) => {
   const isAdmin = currentUser.ruolo === 'Amministratore';
 
@@ -326,7 +328,14 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
               {availablePlants.length > 1 ? (
                 <select
                   value={selectedPlantId}
-                  onChange={e => setSelectedPlantId(e.target.value)}
+                  onChange={e => {
+                    const newId = e.target.value;
+                    setSelectedPlantId(newId);
+                    const found = tenants.find(t => t.id === newId);
+                    if (found && onSelectTenant) {
+                      onSelectTenant(found);
+                    }
+                  }}
                   className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 font-bold text-xs focus:outline-none focus:border-cyan-500 max-w-[260px]"
                 >
                   {availablePlants.map(p => (
