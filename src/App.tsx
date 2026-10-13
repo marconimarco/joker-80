@@ -182,7 +182,7 @@ export default function App() {
       />
 
       {/* Main Content View */}
-      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-2 sm:px-4 py-1.5 sm:py-2 flex flex-col overflow-hidden">
+      <main className="flex-1 min-h-0 w-full max-w-[1600px] mx-auto px-2 sm:px-4 py-1.5 sm:py-2 flex flex-col overflow-hidden">
         {activeView === 'chat' && (
           <QuantumChatTerminal
             onOpenCircuit={handleOpenCircuit}

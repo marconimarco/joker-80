@@ -58,7 +58,7 @@ export const Header: React.FC<Props> = ({
       {/* ========================================================================= */}
       {/* RIGA 1: Header Superiore - Brand, Stabilimento Connesso, Profilo & Logout */}
       {/* ========================================================================= */}
-      <div className="max-w-7xl mx-auto px-2.5 sm:px-4 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
+      <div className="max-w-[1600px] mx-auto px-2.5 sm:px-4 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
         {/* Brand & Architettura Quantistica */}
         <div className="flex items-center space-x-2.5 shrink-0">
           <div className="p-2 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-md shadow-cyan-500/25 flex items-center justify-center shrink-0 ring-1 ring-cyan-400/40">
@@ -170,7 +170,7 @@ export const Header: React.FC<Props> = ({
       {/* RIGA 2: Barra di Navigazione Principale & Sezioni Operative                 */}
       {/* ========================================================================= */}
       <div className="border-t border-slate-800/80 bg-slate-950/80">
-        <div className="max-w-7xl mx-auto px-2.5 sm:px-4 py-1.5 flex items-center justify-between gap-3 overflow-x-auto scrollbar-thin">
+        <div className="max-w-[1600px] mx-auto px-2.5 sm:px-4 py-1.5 flex items-center justify-between gap-3 overflow-x-auto scrollbar-thin">
           <nav aria-label="Sezioni Principali" className="flex items-center gap-2 sm:gap-2.5 flex-nowrap shrink-0">
             {/* 1. Chat Terminal (Solo per Amministratori; gli operatori non hanno bisogno di vedere la Chat Terminal) */}
             {isAdmin && (
@@ -241,7 +241,7 @@ export const Header: React.FC<Props> = ({
                 title={isResponsabile ? "Gestione Operatori & Permessi Nodi della tua Azienda" : "Pannello Amministrazione Multi-Stabilimento & Configurazione Flotte"}
               >
                 <Sliders className={`w-4 h-4 ${isResponsabile ? 'text-amber-400' : 'text-purple-400'}`} />
-                <span>{isResponsabile ? 'Gestione Operatori' : 'Pannello Admin'}</span>
+                <span>{isResponsabile ? 'Gestione Impianti & Nodi' : 'Pannello Admin'}</span>
               </button>
             )}
           </nav>

@@ -54,7 +54,7 @@ import {
   X,
   UserPlus
 } from 'lucide-react';
-import { FactoryTenant, UserAccount, IndustrialProtocol, UserRole } from '../types/quantum';
+import { FactoryTenant, UserAccount, IndustrialProtocol, UserRole, MachineAsset } from '../types/quantum';
 import { AuthStorage } from '../services/authStorage';
 import { 
   PlantAutoDiscoveryService, 
@@ -62,6 +62,16 @@ import {
 } from '../services/plantAutoDiscovery';
 import { DaemonFrequencyPanel } from './DaemonFrequencyPanel';
 import { PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
+import { 
+  getPlantActiveNodeKeys,
+  buildDefaultMachineForNode,
+  generateMachinesForNodes,
+  buildTopologyWithNodes,
+  addNodeToPlant,
+  removeNodeFromPlant,
+  addMachineToPlant,
+  removeMachineFromPlant
+} from '../utils/plantTopologyUtils';
 
 interface Props {
   tenants: FactoryTenant[];
@@ -524,6 +534,135 @@ export const AdminControlPanel: React.FC<Props> = ({
   const [plantApiKey, setPlantApiKey] = useState(() => `E80_SEC_${(activeTenant.id || 'GW').toUpperCase()}_TOKEN_2026`);
   const [selectedOperatorIds, setSelectedOperatorIds] = useState<string[]>(() => activeTenant.operatoriAssegnati || []);
 
+  // Nodi & Macchinari nel Form di Creazione / Modifica Stabilimento
+  const [plantMachineryNodes, setPlantMachineryNodes] = useState<string[]>(() => {
+    const active = getPlantActiveNodeKeys(activeTenant);
+    return active.length > 0 ? active : PLANT_MACHINERY_NODES.map(m => m.key);
+  });
+  const [plantCustomMachines, setPlantCustomMachines] = useState<MachineAsset[]>(() => {
+    return activeTenant.plantTopology?.macchinari && activeTenant.plantTopology.macchinari.length > 0
+      ? activeTenant.plantTopology.macchinari
+      : generateMachinesForNodes(PLANT_MACHINERY_NODES.map(m => m.key), activeTenant.id || 'E80');
+  });
+
+  // Modal State for adding an individual machine in Tab Topology or in Form
+  const [isAddMachineModalOpen, setIsAddMachineModalOpen] = useState(false);
+  const [addMachineTarget, setAddMachineTarget] = useState<'form' | 'activePlant'>('activePlant');
+  const [newMachineNome, setNewMachineNome] = useState('');
+  const [newMachineTipo, setNewMachineTipo] = useState<MachineAsset['tipo']>('BEMA_FASCIATORE');
+  const [newMachineReparto, setNewMachineReparto] = useState('Fine Linea Confezionamento (ECS)');
+  const [newMachinePlcTag, setNewMachinePlcTag] = useState('');
+  const [newMachineStato, setNewMachineStato] = useState<MachineAsset['stato']>('IN_MARCIA');
+
+  // Quick feedback toast in topology
+  const [topologyToast, setTopologyToast] = useState<string | null>(null);
+  const showTopologyToast = (msg: string) => {
+    setTopologyToast(msg);
+    setTimeout(() => setTopologyToast(null), 3500);
+  };
+
+  // Node toggle inside the form
+  const handleToggleNodeInForm = (nodeKey: string) => {
+    setPlantMachineryNodes(prev => {
+      const isPresent = prev.includes(nodeKey);
+      const updated = isPresent ? prev.filter(k => k !== nodeKey) : [...prev, nodeKey];
+      if (isPresent) {
+        setPlantCustomMachines(cur => cur.filter(m => {
+          if (nodeKey === 'BEMA_FASCIATORE') return m.tipo !== 'BEMA_FASCIATORE' && !m.nome.toLowerCase().includes('bema');
+          if (nodeKey === 'SMARTSTORE') return m.tipo !== 'TRASLOELEVATORE_SMARTSTORE';
+          if (nodeKey === 'BAIE_INBOUND_OUTBOUND') return m.tipo !== 'BAIA_CARICO';
+          if (nodeKey === 'ISOLA_ROBOT') return m.tipo !== 'ISOLA_ROBOT' && m.tipo !== 'PALLETTIZZATORE';
+          if (nodeKey === 'WOODPECKER') return !m.nome.toLowerCase().includes('woodpecker');
+          if (nodeKey === 'RAPTOR') return !m.nome.toLowerCase().includes('raptor');
+          if (nodeKey === 'QUALITA_TRACCIABILITA') return m.tipo !== 'RULLIERA_INBOUND';
+          return true;
+        }));
+      } else {
+        const newMac = buildDefaultMachineForNode(nodeKey, plantNome || 'PLANT', plantCustomMachines.length + 1);
+        setPlantCustomMachines(cur => [...cur, newMac]);
+      }
+      return updated;
+    });
+  };
+
+  const handleRemoveMachineFromForm = (machineId: string) => {
+    setPlantCustomMachines(prev => prev.filter(m => m.id !== machineId));
+  };
+
+  // Node toggle inside active plant (Tab 2: Topology)
+  const handleToggleNodeInActivePlant = (nodeKey: string) => {
+    const activeKeys = getPlantActiveNodeKeys(activeTenant);
+    let updatedTenant: FactoryTenant;
+    if (activeKeys.includes(nodeKey)) {
+      updatedTenant = removeNodeFromPlant(activeTenant, nodeKey);
+      showTopologyToast(`Nodo "${nodeKey}" rimosso dallo stabilimento ${activeTenant.nome}`);
+    } else {
+      updatedTenant = addNodeToPlant(activeTenant, nodeKey);
+      showTopologyToast(`Nodo "${nodeKey}" aggiunto con successo allo stabilimento ${activeTenant.nome}`);
+    }
+    AuthStorage.updateTenant(updatedTenant);
+    const all = AuthStorage.getTenants();
+    onUpdateTenants(all);
+    onSelectTenant(updatedTenant);
+  };
+
+  // Remove single machine from active plant
+  const handleRemoveMachineFromActivePlant = (machineId: string) => {
+    const mac = activeTenant.plantTopology?.macchinari.find(m => m.id === machineId);
+    const updatedTenant = removeMachineFromPlant(activeTenant, machineId);
+    AuthStorage.updateTenant(updatedTenant);
+    const all = AuthStorage.getTenants();
+    onUpdateTenants(all);
+    onSelectTenant(updatedTenant);
+    showTopologyToast(`Macchinario "${mac?.nome || machineId}" rimosso dal Digital Twin`);
+  };
+
+  // Add single machine submit
+  const handleSaveNewMachine = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMachineNome.trim()) return;
+
+    const newMachine: MachineAsset = {
+      id: `M-CUSTOM-${Date.now().toString(36).toUpperCase()}`,
+      nome: newMachineNome.trim(),
+      tipo: newMachineTipo,
+      reparto: newMachineReparto.trim() || 'Reparto Operativo',
+      plcTag: newMachinePlcTag.trim() || `PLC_${newMachineTipo}_${Date.now().toString().slice(-4)}`,
+      stato: newMachineStato,
+      telemetria: {
+        stato_comunicazione: 'ONLINE',
+        ultimo_aggiornamento: 'Adesso'
+      }
+    };
+
+    if (addMachineTarget === 'form') {
+      setPlantCustomMachines(prev => [...prev, newMachine]);
+      const matchingNode = PLANT_MACHINERY_NODES.find(n => {
+        if (newMachineTipo === 'BEMA_FASCIATORE') return n.key === 'BEMA_FASCIATORE';
+        if (newMachineTipo === 'TRASLOELEVATORE_SMARTSTORE') return n.key === 'SMARTSTORE';
+        if (newMachineTipo === 'BAIA_CARICO') return n.key === 'BAIE_INBOUND_OUTBOUND';
+        if (newMachineTipo === 'PALLETTIZZATORE' || newMachineTipo === 'ISOLA_ROBOT') return n.key === 'ISOLA_ROBOT';
+        if (newMachineTipo === 'RULLIERA_INBOUND') return n.key === 'QUALITA_TRACCIABILITA';
+        return false;
+      });
+      if (matchingNode && !plantMachineryNodes.includes(matchingNode.key)) {
+        setPlantMachineryNodes(prev => [...prev, matchingNode.key]);
+      }
+      showTopologyToast(`Macchinario "${newMachine.nome}" aggiunto al modulo stabilimento`);
+    } else {
+      const updatedTenant = addMachineToPlant(activeTenant, newMachine);
+      AuthStorage.updateTenant(updatedTenant);
+      const all = AuthStorage.getTenants();
+      onUpdateTenants(all);
+      onSelectTenant(updatedTenant);
+      showTopologyToast(`Macchinario "${newMachine.nome}" aggiunto al Digital Twin di ${activeTenant.nome}`);
+    }
+
+    setNewMachineNome('');
+    setNewMachinePlcTag('');
+    setIsAddMachineModalOpen(false);
+  };
+
   // Feedback notifications
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
@@ -558,6 +697,9 @@ export const AdminControlPanel: React.FC<Props> = ({
     setPlantColor(tenant.logoColor || '#3b82f6');
     setPlantApiKey(`E80_SEC_${tenant.id.toUpperCase()}_TOKEN_2026`);
     setSelectedOperatorIds(tenant.operatoriAssegnati || []);
+    const activeKeys = getPlantActiveNodeKeys(tenant);
+    setPlantMachineryNodes(activeKeys.length > 0 ? activeKeys : PLANT_MACHINERY_NODES.map(m => m.key));
+    setPlantCustomMachines(tenant.plantTopology?.macchinari && tenant.plantTopology.macchinari.length > 0 ? tenant.plantTopology.macchinari : generateMachinesForNodes(activeKeys, tenant.id));
     setDiscoveryResult(null);
     setSaveSuccessMessage(null);
   };
@@ -589,6 +731,8 @@ export const AdminControlPanel: React.FC<Props> = ({
     setPlantColor('#3b82f6');
     setPlantApiKey('');
     setSelectedOperatorIds([]);
+    setPlantMachineryNodes(PLANT_MACHINERY_NODES.map(m => m.key));
+    setPlantCustomMachines(generateMachinesForNodes(PLANT_MACHINERY_NODES.map(m => m.key), 'PLANT'));
     setDiscoveryResult(null);
     setSaveSuccessMessage(null);
     setAdminSubView('nuovo_stabilimento');
@@ -673,6 +817,13 @@ export const AdminControlPanel: React.FC<Props> = ({
       const existing = tenants.find(t => t.id === selectedExistingTenantId);
       if (!existing) return;
 
+      const updatedTopology = buildTopologyWithNodes(
+        plantMachineryNodes,
+        plantCustomMachines,
+        existing.id,
+        existing.plantTopology
+      );
+
       const updated: FactoryTenant = {
         ...existing,
         nome: plantNome.trim(),
@@ -683,26 +834,46 @@ export const AdminControlPanel: React.FC<Props> = ({
         protocol: plantProtocol,
         plcIp: plantPlcIp.trim() || existing.plcIp,
         logoColor: plantColor || existing.logoColor,
+        plantTopology: updatedTopology,
         operatoriAssegnati: selectedOperatorIds
       };
 
       AuthStorage.updateTenant(updated);
+
+      // Sincronizza permessi operatori selezionati
+      const currentUsers = AuthStorage.getUsers();
+      currentUsers.forEach(u => {
+        if (selectedOperatorIds.includes(u.id)) {
+          const currentAllowed = u.allowedTenantIds || (u.tenantId ? [u.tenantId] : []);
+          if (!currentAllowed.includes(updated.id)) {
+            AuthStorage.updateUser({ ...u, allowedTenantIds: [...currentAllowed, updated.id] });
+          }
+        }
+      });
+      setUsers(AuthStorage.getUsers());
+
       const allTenants = AuthStorage.getTenants();
       onUpdateTenants(allTenants);
       if (activeTenant.id === updated.id) {
         onSelectTenant(updated);
       }
-      setSaveSuccessMessage(`Stabilimento "${updated.nome}" (#${updated.numeroStabilimento}) di "${updated.azienda}" salvato con successo!`);
+      setSaveSuccessMessage(`Stabilimento "${updated.nome}" (#${updated.numeroStabilimento}) con ${updatedTopology.macchinari.length} macchinari salvato con successo!`);
       setTimeout(() => setSaveSuccessMessage(null), 4000);
     } else {
       // Creazione nuovo stabilimento
       const slug = plantNome.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 16);
       const uniqueId = `tenant_${slug}_${Date.now().toString(36)}`;
 
+      const newTopology = buildTopologyWithNodes(
+        plantMachineryNodes,
+        plantCustomMachines.length > 0 ? plantCustomMachines : generateMachinesForNodes(plantMachineryNodes, uniqueId),
+        uniqueId
+      );
+
       const newTenant: FactoryTenant = {
         id: uniqueId,
         nome: plantNome.trim(),
-        azienda: plantAzienda.trim() || 'Nuova Società',
+        azienda: plantAzienda.trim() || (isResponsabile ? (currentUser.azienda || 'Azienda') : 'Nuova Società'),
         numeroStabilimento: Number(plantNumeroStabilimento) || 1,
         sito: plantSito.trim() || 'Stabilimento Industriale',
         endpoint: plantEndpoint.trim(),
@@ -711,18 +882,31 @@ export const AdminControlPanel: React.FC<Props> = ({
         plcIp: plantPlcIp.trim() || `${plantEndpoint.replace(/^https?:\/\//, '').split('/')[0]}:502`,
         qpuTarget: 'Simulatore GPU CUDA-Q (cuStateVec)',
         logoColor: plantColor || '#3b82f6',
-        plantTopology: activeTenant.plantTopology,
+        plantTopology: newTopology,
         operatoriAssegnati: selectedOperatorIds,
         createdAt: new Date().toISOString()
       };
 
       AuthStorage.addTenant(newTenant);
+
+      // Sincronizza permessi operatori selezionati
+      const currentUsers = AuthStorage.getUsers();
+      currentUsers.forEach(u => {
+        if (selectedOperatorIds.includes(u.id)) {
+          const currentAllowed = u.allowedTenantIds || (u.tenantId ? [u.tenantId] : []);
+          if (!currentAllowed.includes(uniqueId)) {
+            AuthStorage.updateUser({ ...u, allowedTenantIds: [...currentAllowed, uniqueId] });
+          }
+        }
+      });
+      setUsers(AuthStorage.getUsers());
+
       const allTenants = AuthStorage.getTenants();
       onUpdateTenants(allTenants);
       onSelectTenant(newTenant);
       setSelectedExistingTenantId(newTenant.id);
       setIsEditingMode(true);
-      setSaveSuccessMessage(`Nuovo stabilimento "${newTenant.nome}" (#${newTenant.numeroStabilimento}) per "${newTenant.azienda}" creato e salvato con successo!`);
+      setSaveSuccessMessage(`Nuovo stabilimento "${newTenant.nome}" (#${newTenant.numeroStabilimento}) per "${newTenant.azienda}" con ${newTopology.macchinari.length} macchinari creato e salvato con successo!`);
       setTimeout(() => setSaveSuccessMessage(null), 4000);
     }
   };
@@ -955,8 +1139,8 @@ export const AdminControlPanel: React.FC<Props> = ({
             </h2>
             <p className="text-xs text-slate-400 font-mono mt-0.5">
               {isResponsabile 
-                ? `Gestione e configurazione permessi per gli operatori della società ${currentUser.azienda || activeTenant.azienda}. Decidi quali stabilimenti e nodi/calcoli assegnare a ciascun operatore.`
-                : 'Connessione dinamica e Auto-Discovery SM.I.LE80: inserimento minimo, scansione automatica macchine e generazione automatica degli account dipendenti.'}
+                ? `Gestione stabilimenti, aggiunta/rimozione nodi e macchinari, e abilitazione operatori per la società ${currentUser.azienda || activeTenant.azienda}.`
+                : 'Pannello Amministratore: gestione multi-società, aggiunta/rimozione nodi e macchinari Elettric80, creazione stabilimenti e abilitazione operatori.'}
             </p>
           </div>
         </div>
@@ -987,19 +1171,17 @@ export const AdminControlPanel: React.FC<Props> = ({
             <span>Digital Twin & Macchine ({activeTenant.plantTopology?.macchinari.length || 0})</span>
           </button>
 
-          {!isResponsabile && (
-            <button
-              onClick={() => setActiveTab('discovery')}
-              className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
-                activeTab === 'discovery'
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span>Connessione Rapida & Sedi ({tenants.length})</span>
-            </button>
-          )}
+          <button
+            onClick={() => setActiveTab('discovery')}
+            className={`px-3.5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shrink-0 whitespace-nowrap min-h-[40px] ${
+              activeTab === 'discovery'
+                ? isResponsabile ? 'bg-amber-600 text-white shadow-sm' : 'bg-purple-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>{isResponsabile ? `Stabilimenti & Nodi Società (${tenants.filter(t => (t.azienda || '').toLowerCase() === (currentUser.azienda || activeTenant.azienda || '').toLowerCase()).length})` : `Connessione Rapida & Sedi (${tenants.length})`}</span>
+          </button>
 
           {/* TAB FREQUENZA TELEMETRIA & DEMONI MULTI-OS */}
           <button
@@ -1855,17 +2037,167 @@ export const AdminControlPanel: React.FC<Props> = ({
                   />
                 </div>
 
-                {/* 8. Assegna Operatore o Più Operatori */}
-                <div className="space-y-2 pt-2 border-t border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <label className="text-slate-300 flex items-center gap-1 font-bold">
-                      <Users className="w-3.5 h-3.5 text-cyan-400" />
-                      8. Assegna Operatore o Più Operatori ({selectedOperatorIds.length} selezionati)
+                {/* 8. Nodi & Macchinari Elettric80 dello Stabilimento */}
+                <div className="space-y-3 pt-3 border-t border-slate-800">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-slate-300 flex items-center gap-1.5 font-bold">
+                      <Boxes className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>8. Nodi & Macchinari Elettric80 ({plantMachineryNodes.length}/{PLANT_MACHINERY_NODES.length} nodi attivi)</span>
                     </label>
                     <div className="flex items-center gap-2 text-[10px] font-mono">
                       <button
                         type="button"
-                        onClick={() => setSelectedOperatorIds(users.filter(u => u.ruolo === 'Operatore di Linea').map(u => u.id))}
+                        onClick={() => {
+                          setPlantMachineryNodes(PLANT_MACHINERY_NODES.map(m => m.key));
+                          setPlantCustomMachines(generateMachinesForNodes(PLANT_MACHINERY_NODES.map(m => m.key), plantNome || 'PLANT'));
+                        }}
+                        className="text-cyan-400 hover:underline cursor-pointer"
+                      >
+                        Tutti i Nodi (8/8)
+                      </button>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlantMachineryNodes([]);
+                          setPlantCustomMachines([]);
+                        }}
+                        className="text-slate-400 hover:underline cursor-pointer"
+                      >
+                        Deseleziona
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono">
+                    Seleziona quali macro-nodi Elettric80/SM.I.LE80 sono installati in questo stabilimento. Ciascun nodo abilita automaticamente i calcoli diagnostici dedicati.
+                  </p>
+
+                  {/* 8 Macro-Nodi Selector */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {PLANT_MACHINERY_NODES.map(node => {
+                      const isChecked = plantMachineryNodes.includes(node.key);
+                      return (
+                        <div
+                          key={node.key}
+                          onClick={() => handleToggleNodeInForm(node.key)}
+                          className={`p-2.5 rounded-xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-emerald-950/40 border-emerald-500/50 text-white shadow-xs'
+                              : 'bg-slate-950/40 border-slate-800/80 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="mt-0.5 rounded text-emerald-500 focus:ring-0 cursor-pointer pointer-events-none"
+                          />
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-bold text-xs truncate text-slate-200">
+                                {node.label.split('(')[0].trim()}
+                              </span>
+                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono shrink-0 font-bold ${
+                                isChecked ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-500'
+                              }`}>
+                                {isChecked ? 'ATTIVO' : 'ESCLUSO'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block line-clamp-1">
+                              {node.desc}
+                            </span>
+                            <div className="flex items-center gap-1 pt-0.5 text-[9px] text-cyan-400">
+                              <span>Calcoli: [{node.calcIds.join(', ')}]</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Elenco Macchine Fisiche Dettagliate per lo Stabilimento */}
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2 mt-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                        <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Macchinari & Sensori Fisici ({plantCustomMachines.length} macchine configurate)</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddMachineTarget('form');
+                          setNewMachineNome('');
+                          setNewMachinePlcTag('');
+                          setIsAddMachineModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 border border-cyan-500/50 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Aggiungi Macchinario / Nodo</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                      {plantCustomMachines.length === 0 ? (
+                        <div className="text-[10px] text-slate-500 p-2 text-center">
+                          Nessun macchinario specifico presente. Seleziona almeno un nodo sopra o aggiungi una macchina manuale.
+                        </div>
+                      ) : (
+                        plantCustomMachines.map((mac, mIdx) => (
+                          <div
+                            key={mac.id || mIdx}
+                            className="p-2 rounded-lg bg-slate-900 border border-slate-800/80 flex items-center justify-between gap-2 text-[11px] font-mono"
+                          >
+                            <div className="min-w-0">
+                              <span className="font-bold text-slate-200 block truncate">{mac.nome}</span>
+                              <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                <span>{mac.reparto}</span>
+                                <span>•</span>
+                                <code className="text-cyan-400">{mac.plcTag}</code>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                                {mac.stato}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMachineFromForm(mac.id)}
+                                className="p-1 rounded text-rose-400 hover:text-white hover:bg-rose-500/30 transition-colors cursor-pointer"
+                                title="Rimuovi macchinario da questo stabilimento"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 9. Assegna & Abilita Operatori sullo Stabilimento e sui Nodi */}
+                <div className="space-y-2 pt-3 border-t border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <label className="text-slate-300 flex items-center gap-1 font-bold">
+                      <Users className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>9. Assegna & Abilita Operatori ({selectedOperatorIds.length} selezionati)</span>
+                    </label>
+                    <div className="flex items-center gap-2 text-[10px] font-mono">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const opUsers = users.filter(u => {
+                            if (u.ruolo !== 'Operatore di Linea') return false;
+                            if (isResponsabile) {
+                              const rAz = (currentUser.azienda || activeTenant.azienda || '').toLowerCase().trim();
+                              const uAz = (u.azienda || '').toLowerCase().trim();
+                              return !rAz || !uAz || rAz === uAz;
+                            }
+                            return true;
+                          });
+                          setSelectedOperatorIds(opUsers.map(u => u.id));
+                        }}
                         className="text-cyan-400 hover:underline cursor-pointer"
                       >
                         Seleziona Tutti
@@ -1881,27 +2213,44 @@ export const AdminControlPanel: React.FC<Props> = ({
                     </div>
                   </div>
                   <p className="text-[10px] text-slate-500 font-mono">
-                    Seleziona gli account operatori che avranno autorizzazione ad accedere e operare su questo stabilimento.
+                    Abilita gli operatori su questo stabilimento e clicca su "Configura Nodi" per definire a quali specifici macchinari e calcoli hanno accesso.
                   </p>
 
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 border border-slate-800 rounded-xl p-2 bg-slate-950/80">
-                    {users.filter(u => u.ruolo === 'Operatore di Linea').length === 0 ? (
+                    {users.filter(u => {
+                      if (u.ruolo !== 'Operatore di Linea') return false;
+                      if (isResponsabile) {
+                        const rAz = (currentUser.azienda || activeTenant.azienda || '').toLowerCase().trim();
+                        const uAz = (u.azienda || '').toLowerCase().trim();
+                        return !rAz || !uAz || rAz === uAz;
+                      }
+                      return true;
+                    }).length === 0 ? (
                       <div className="text-[11px] font-mono text-slate-500 p-2 text-center">
-                        Nessun account operatore registrato nel sistema.
+                        Nessun account operatore registrato per questa società.
                       </div>
                     ) : (
-                      users.filter(u => u.ruolo === 'Operatore di Linea').map((op, oIdx) => {
+                      users.filter(u => {
+                        if (u.ruolo !== 'Operatore di Linea') return false;
+                        if (isResponsabile) {
+                          const rAz = (currentUser.azienda || activeTenant.azienda || '').toLowerCase().trim();
+                          const uAz = (u.azienda || '').toLowerCase().trim();
+                          return !rAz || !uAz || rAz === uAz;
+                        }
+                        return true;
+                      }).map((op, oIdx) => {
                         const isChecked = selectedOperatorIds.includes(op.id);
+                        const allowedCount = op.allowedMachineIds?.length ?? PLANT_MACHINERY_NODES.length;
                         return (
-                          <label
+                          <div
                             key={`${op.id || 'op'}-${oIdx}`}
-                            className={`flex items-center justify-between p-2 rounded-lg text-[11px] font-mono cursor-pointer transition-all border ${
+                            className={`flex items-center justify-between p-2 rounded-lg text-[11px] font-mono transition-all border ${
                               isChecked
                                 ? 'bg-cyan-950/40 border-cyan-500/40 text-cyan-200'
                                 : 'bg-slate-900/50 border-slate-800/80 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
                             }`}
                           >
-                            <div className="flex items-center gap-2.5 truncate">
+                            <label className="flex items-center gap-2.5 truncate cursor-pointer flex-1">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
@@ -1912,11 +2261,23 @@ export const AdminControlPanel: React.FC<Props> = ({
                                 <span className="font-bold text-slate-200">{op.nomeCompleto}</span>
                                 <span className="ml-2 text-[10px] text-slate-500">(@{op.username})</span>
                               </div>
+                            </label>
+                            
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPermissionsModal(op)}
+                                className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-cyan-600/30 text-cyan-300 hover:text-white border border-slate-700 hover:border-cyan-500/40 transition-colors cursor-pointer"
+                                title="Configura a quali specifici nodi/macchinari questo operatore è abilitato"
+                              >
+                                <Sliders className="w-2.5 h-2.5 inline mr-1" />
+                                <span>Nodi Abilitati ({allowedCount}/{PLANT_MACHINERY_NODES.length})</span>
+                              </button>
+                              <span className="text-[10px] text-slate-400 shrink-0 hidden sm:inline">
+                                {op.lineaAssegnata}
+                              </span>
                             </div>
-                            <span className="text-[10px] text-slate-400 shrink-0 ml-2 hidden sm:inline">
-                              {op.lineaAssegnata}
-                            </span>
-                          </label>
+                          </div>
                         );
                       })
                     )}
@@ -2290,45 +2651,211 @@ export const AdminControlPanel: React.FC<Props> = ({
             )}
           </div>
 
+          {/* Feedback Toast in Topology */}
+          {topologyToast && (
+            <div className="p-3 rounded-xl bg-cyan-950/80 border border-cyan-500/50 text-cyan-200 text-xs font-mono flex items-center justify-between shadow-xl animate-in fade-in duration-150">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>{topologyToast}</span>
+              </span>
+              <button 
+                type="button" 
+                onClick={() => setTopologyToast(null)} 
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Section: Interruttori Rapidi Nodi Elettric80 dello Stabilimento */}
+          {(() => {
+            const activeKeys = getPlantActiveNodeKeys(activeTenant);
+            return (
+              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                  <div>
+                    <h4 className="text-xs font-bold font-mono text-white flex items-center gap-2">
+                      <Cpu className="w-4 h-4 text-emerald-400" />
+                      Interruttori Rapidi Nodi Elettric80 dello Stabilimento ({activeKeys.length}/{PLANT_MACHINERY_NODES.length} attivi)
+                    </h4>
+                    <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+                      Aggiungi o togli istantaneamente macro-nodi industriali per questo stabilimento. L'attivazione/disattivazione sincronizza i calcoli operativi e la telemetria live.
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700 self-start sm:self-auto">
+                    LIVE CONFIG
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 font-mono text-xs">
+                  {PLANT_MACHINERY_NODES.map(node => {
+                    const isActive = activeKeys.includes(node.key);
+                    return (
+                      <div
+                        key={node.key}
+                        className={`p-3.5 rounded-xl border flex flex-col justify-between gap-3 transition-all ${
+                          isActive
+                            ? 'bg-gradient-to-br from-emerald-950/40 via-slate-950 to-slate-900 border-emerald-500/40 shadow-xs'
+                            : 'bg-slate-950/50 border-slate-800/80 opacity-75 hover:opacity-100 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-slate-200 text-xs truncate">
+                              {node.label.split('(')[0].trim()}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 ${
+                              isActive
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                : 'bg-slate-800 text-slate-500 border-slate-700'
+                            }`}>
+                              {isActive ? 'INSTALLATO' : 'ASSENTE'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 line-clamp-2 leading-snug">
+                            {node.desc}
+                          </p>
+                          <div className="text-[9px] text-cyan-400 pt-0.5">
+                            Calcoli associati: [{node.calcIds.join(', ')}]
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleNodeInActivePlant(node.key)}
+                          className={`w-full py-1.5 px-2.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                            isActive
+                              ? 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border-rose-500/40 hover:border-rose-400'
+                              : 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border-emerald-500/40 hover:border-emerald-400'
+                          }`}
+                        >
+                          {isActive ? (
+                            <>
+                              <Trash2 className="w-3 h-3 text-rose-400" />
+                              <span>Rimuovi Nodo</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-3 h-3 text-emerald-400" />
+                              <span>+ Aggiungi all'Impianto</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Section: Machinery & Sensors */}
           <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-            <h4 className="text-xs font-bold font-mono text-white flex items-center gap-2">
-              <Boxes className="w-4 h-4 text-cyan-400" />
-              Macchinari di Fabbrica & Tag PLC Rilevati ({activeTenant.plantTopology?.macchinari.length || 0})
-            </h4>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div>
+                <h4 className="text-xs font-bold font-mono text-white flex items-center gap-2">
+                  <Boxes className="w-4 h-4 text-cyan-400" />
+                  Macchinari di Fabbrica & Tag PLC Rilevati ({activeTenant.plantTopology?.macchinari.length || 0})
+                </h4>
+                <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+                  Elenco delle macchine connesse per {activeTenant.nome}. Puoi aggiungere nuovi nodi o rimuoverne singoli.
+                </p>
+              </div>
+
+              {/* PULSANTE AGGIUNGI MACCHINARIO / NODO */}
+              <button
+                type="button"
+                onClick={() => {
+                  setAddMachineTarget('activePlant');
+                  setNewMachineNome('');
+                  setNewMachinePlcTag('');
+                  setIsAddMachineModalOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white text-xs font-mono font-bold flex items-center gap-1.5 shadow-md shadow-cyan-600/20 transition-all cursor-pointer self-start sm:self-auto"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Aggiungi Macchinario / Nodo</span>
+              </button>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {activeTenant.plantTopology?.macchinari.map(mac => (
-                <div
-                  key={mac.id}
-                  className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono text-xs"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-100 truncate">{mac.nome}</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      {mac.stato}
-                    </span>
-                  </div>
+              {activeTenant.plantTopology?.macchinari.map(mac => {
+                // Count operators authorized for this machine
+                const matchingNode = PLANT_MACHINERY_NODES.find(n => {
+                  if (mac.tipo === 'BEMA_FASCIATORE') return n.key === 'BEMA_FASCIATORE';
+                  if (mac.tipo === 'TRASLOELEVATORE_SMARTSTORE') return n.key === 'SMARTSTORE';
+                  if (mac.tipo === 'BAIA_CARICO') return n.key === 'BAIE_INBOUND_OUTBOUND';
+                  if (mac.tipo === 'PALLETTIZZATORE' || mac.tipo === 'ISOLA_ROBOT') return n.key === 'ISOLA_ROBOT';
+                  if (mac.tipo === 'RULLIERA_INBOUND') return n.key === 'QUALITA_TRACCIABILITA';
+                  if (mac.nome.toLowerCase().includes('woodpecker')) return n.key === 'WOODPECKER';
+                  if (mac.nome.toLowerCase().includes('raptor')) return n.key === 'RAPTOR';
+                  return false;
+                });
+                const authorizedOpsCount = users.filter(u => {
+                  if (u.ruolo !== 'Operatore di Linea') return false;
+                  if (!matchingNode) return true;
+                  return !u.allowedMachineIds || u.allowedMachineIds.includes(matchingNode.key);
+                }).length;
 
-                  <div className="text-[11px] text-slate-400">
-                    Reparto: <span className="text-slate-300">{mac.reparto}</span>
-                  </div>
+                return (
+                  <div
+                    key={mac.id}
+                    className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono text-xs flex flex-col justify-between"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-bold text-slate-100 truncate flex-1">{mac.nome}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            {mac.stato}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMachineFromActivePlant(mac.id)}
+                            className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                            title={`Rimuovi macchinario "${mac.nome}"`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
 
-                  <div className="text-[10px] text-amber-300/90 flex items-center gap-1">
-                    <span>PLC Tag:</span> <code className="bg-slate-900 px-1 py-0.5 rounded">{mac.plcTag}</code>
-                  </div>
+                      <div className="text-[11px] text-slate-400">
+                        Reparto: <span className="text-slate-300">{mac.reparto}</span>
+                      </div>
 
-                  {mac.telemetria && (
-                    <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-400 flex flex-wrap gap-x-2 gap-y-1">
-                      {Object.entries(mac.telemetria).map(([k, v]) => (
-                        <span key={k} className="bg-slate-900/80 px-1.5 py-0.5 rounded text-cyan-300">
-                          {k}: <strong>{String(v)}</strong>
-                        </span>
-                      ))}
+                      <div className="text-[10px] text-amber-300/90 flex items-center gap-1">
+                        <span>PLC Tag:</span> <code className="bg-slate-900 px-1 py-0.5 rounded">{mac.plcTag}</code>
+                      </div>
+
+                      {mac.telemetria && (
+                        <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-400 flex flex-wrap gap-x-2 gap-y-1">
+                          {Object.entries(mac.telemetria).map(([k, v]) => (
+                            <span key={k} className="bg-slate-900/80 px-1.5 py-0.5 rounded text-cyan-300">
+                              {k}: <strong>{String(v)}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3 h-3 text-cyan-400" />
+                        <span>Operatori autorizzati: <strong className="text-white">{authorizedOpsCount}</strong></span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('operators')}
+                        className="text-cyan-400 hover:underline cursor-pointer"
+                      >
+                        Gestisci
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -3802,6 +4329,172 @@ export const AdminControlPanel: React.FC<Props> = ({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODALE: AGGIUNGI NUOVO MACCHINARIO / NODO DIGITALE                         */}
+      {/* ========================================================================= */}
+      {isAddMachineModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="w-full max-w-lg bg-slate-900 border border-cyan-500/50 rounded-2xl shadow-2xl p-5 sm:p-6 space-y-4 font-mono text-xs animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                  <Boxes className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white">
+                    {addMachineTarget === 'form' 
+                      ? 'Aggiungi Macchinario al Modulo Stabilimento' 
+                      : `Aggiungi Macchinario a ${activeTenant.nome}`}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Configura parametri hardware, reparto e tag PLC del nuovo nodo industriale.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddMachineModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNewMachine} className="space-y-3.5">
+              {/* Tipo Macchinario */}
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Tipo Macchinario / Categoria Nodo *</span>
+                </label>
+                <select
+                  value={newMachineTipo}
+                  onChange={e => {
+                    const tipo = e.target.value as MachineAsset['tipo'];
+                    setNewMachineTipo(tipo);
+                    if (tipo === 'BEMA_FASCIATORE') {
+                      setNewMachineNome('Fasciatore Robotico Bema Silkworm');
+                      setNewMachineReparto('Fine Linea Confezionamento (ECS)');
+                      setNewMachinePlcTag('DB104.BEMA_SILKWORM_TENSIONE');
+                    } else if (tipo === 'TRASLOELEVATORE_SMARTSTORE') {
+                      setNewMachineNome('Trasloelevatore SmartStore Corsia ASRS');
+                      setNewMachineReparto('Magazzino Intensivo Automatico (WMS)');
+                      setNewMachinePlcTag('DB300.SMARTSTORE_POS_Z');
+                    } else if (tipo === 'BAIA_CARICO') {
+                      setNewMachineNome('Baia di Carico / Scarico Merci');
+                      setNewMachineReparto('Piazzale Spedizioni & Banchina (YMS)');
+                      setNewMachinePlcTag('DB50.BAY_DOCK_STATUS');
+                    } else if (tipo === 'ISOLA_ROBOT' || tipo === 'PALLETTIZZATORE') {
+                      setNewMachineNome('Isola Robotica di Pallettizzazione Antropomorfa');
+                      setNewMachineReparto('Pallettizzazione & Packaging Secondario');
+                      setNewMachinePlcTag('DB120.ROBOT_PALLET_READY');
+                    } else if (tipo === 'RULLIERA_INBOUND') {
+                      setNewMachineNome('Rulliera Inbound Controllo Materie Prime');
+                      setNewMachineReparto('Ricevimento Merci & Laboratorio MIP');
+                      setNewMachinePlcTag('DB10.MIP_LOT_VERIFIED');
+                    } else {
+                      setNewMachineNome('Macchinario Speciale Elettric80');
+                      setNewMachineReparto('Reparto Produzione');
+                      setNewMachinePlcTag(`DB99.SPECIAL_NODE_${Date.now().toString().slice(-4)}`);
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-purple-500 cursor-pointer"
+                >
+                  <option value="BEMA_FASCIATORE">Fasciatore Bema Silkworm (Avvolgimento Film)</option>
+                  <option value="TRASLOELEVATORE_SMARTSTORE">Trasloelevatore SmartStore 3D (ASRS)</option>
+                  <option value="BAIA_CARICO">Baia di Carico / Scarico Intermodale</option>
+                  <option value="ISOLA_ROBOT">Isola Robotica Pallettizzazione Antropomorfa</option>
+                  <option value="PALLETTIZZATORE">Pallettizzatore di Linea Standard</option>
+                  <option value="RULLIERA_INBOUND">Rulliera Inbound Tracciabilità Materie Prime</option>
+                  <option value="ALTRO">Altro Nodo / Sensore Speciale (Woodpecker, Raptor, ecc.)</option>
+                </select>
+              </div>
+
+              {/* Nome Macchinario */}
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                  <Boxes className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Nome Macchinario / Identificativo *</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Es. Fasciatore Robotico Bema Silkworm 03"
+                  value={newMachineNome}
+                  onChange={e => setNewMachineNome(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"
+                />
+              </div>
+
+              {/* Reparto */}
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Reparto di Produzione</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Es. Fine Linea Confezionamento (ECS)"
+                  value={newMachineReparto}
+                  onChange={e => setNewMachineReparto(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              {/* Tag PLC */}
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                  <Network className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Tag PLC / Indirizzo Siemens o OPC-UA</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Es. DB104.BEMA_03_TENSIONE"
+                  value={newMachinePlcTag}
+                  onChange={e => setNewMachinePlcTag(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              {/* Stato Iniziale */}
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Stato Operativo Iniziale</span>
+                </label>
+                <select
+                  value={newMachineStato}
+                  onChange={e => setNewMachineStato(e.target.value as MachineAsset['stato'])}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                >
+                  <option value="IN_MARCIA">🟢 IN_MARCIA (Operativo al 100%)</option>
+                  <option value="STANDBY">🟡 STANDBY (In Attesa Carico)</option>
+                  <option value="ALLARME">🔴 ALLARME (Richiede Manutenzione)</option>
+                </select>
+              </div>
+
+              <div className="border-t border-slate-800 pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddMachineModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newMachineNome.trim()}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-cyan-600/30 transition-all disabled:opacity-40"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Salva e Collega Macchinario</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

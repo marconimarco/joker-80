@@ -349,6 +349,7 @@ export interface PlantTopology {
   etichettatriciRaptor?: RaptorLabelerNode[];
   magazziniSmartStore?: SmartStoreWarehouseNode[];
   magazzinoSmartStore?: SmartStoreWarehouseNode;
+  controlloWoodpecker?: WoodpeckerPalletCheckNode;
   ispezioneWoodpecker?: WoodpeckerPalletCheckNode[];
   stazioniIspezioneWoodpecker?: WoodpeckerPalletCheckNode[];
   infrastrutturaTraffico?: PlantTrafficInfrastructureNode;

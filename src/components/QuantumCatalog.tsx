@@ -202,8 +202,6 @@ export const QuantumCatalog: React.FC<Props> = ({
     }
   }, [targetInspectCalcId, onClearInspectTarget]);
 
-  const isOperator = currentUser?.ruolo === 'Operatore di Linea';
-  const isResponsabile = currentUser?.ruolo === 'Responsabile di Stabilimento';
   const isAdmin = currentUser?.ruolo === 'Amministratore';
 
   // Allowed calculations for the user (filtered by their assigned machinery/nodes and active plant)
@@ -723,38 +721,6 @@ export const QuantumCatalog: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Banner Coordinamento per Responsabile di Stabilimento */}
-      {isResponsabile && currentUser && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-950/50 via-slate-900 to-slate-950 border border-amber-500/40 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs animate-in fade-in">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
-              <Cpu className="w-4 h-4 text-amber-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-white text-xs sm:text-sm">
-                  Pannello Responsabile: {currentUser.nomeCompleto}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                  {currentUser.azienda || activeTenant?.azienda || 'Azienda'}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                  Stabilimento Attivo: {activeTenant?.nome}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
-                Supervisione tecnica di stabilimento: hai accesso a tutti i <strong>{plantSupportedCalcs.length} calcoli</strong> operativi di questo impianto e puoi selezionare altri stabilimenti del gruppo {currentUser.azienda || activeTenant?.azienda} dal selettore in alto.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-            <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
-              ★ Vista Responsabile Attiva
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Category Tabs: Smooth touch-scroll on smartphones */}
       <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar touch-pan-x flex-nowrap sm:flex-wrap">
         {/* Tab "TUTTI I CALCOLI" per vedere l'insieme completo dei calcoli dello stabilimento */}
@@ -793,56 +759,6 @@ export const QuantumCatalog: React.FC<Props> = ({
             </button>
           );
         })}
-      </div>
-
-      {/* Barra di Selezione Visualizzazione & Controllo Layout */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-900/90 border border-slate-800 rounded-2xl font-mono text-xs shadow-md">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-slate-300 font-bold flex items-center gap-1.5">
-            <LayoutList className="w-4 h-4 text-cyan-400" />
-            <span>Modalità Visualizzazione Calcoli:</span>
-          </span>
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-            <button
-              type="button"
-              onClick={() => setDisplayMode('table-focus')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                displayMode === 'table-focus'
-                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/60'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
-              }`}
-              title="Tabella con solo i pulsanti a sinistra e singolo calcolo selezionato ingrandito a destra"
-            >
-              <LayoutList className="w-3.5 h-3.5" />
-              <span>Tabella Pulsanti a Sinistra (Singolo Ingrandito)</span>
-            </button>
-
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setDisplayMode('grid')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  displayMode === 'grid'
-                    ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/60'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                }`}
-                title="Visualizza tutti i calcoli contemporaneamente in una griglia"
-              >
-                <Grid className="w-3.5 h-3.5" />
-                <span>Griglia Estesa (Tutti)</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-[11px] text-slate-400">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-          <span>
-            {displayMode === 'table-focus'
-              ? `Calcolo [${selectedCalc.id}] ingrandito • ${tableCalculations.length} calcoli inerenti a ${activeTenant?.nome || 'stabilimento'}`
-              : `Mostrando ${displayedCalculations.length} calcoli in parallelo`}
-          </span>
-        </div>
       </div>
 
       <div className={displayMode === 'table-focus' ? "flex flex-col lg:flex-row gap-4 sm:gap-6 items-start" : ""}>
