@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { PlantTelemetryTrendCharts } from './PlantTelemetryTrendCharts';
 import { getUserPermittedCalculations, PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
+import { PlantTelemetryHistoryService } from '../services/plantTelemetryHistory';
 import { UserAccount } from '../types/quantum';
 import { AutoScanSummary } from '../services/plantTelemetryScanner';
 
@@ -82,10 +83,9 @@ export const QuantumCatalog: React.FC<Props> = ({
   onSelectTenant
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<MacroCategory | 'ALL'>('ALL');
-  const [filterOnlyPlantNodes, setFilterOnlyPlantNodes] = useState<boolean>(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isLogicDocModalOpen, setIsLogicDocModalOpen] = useState<boolean>(false);
-  const [showTrendCharts, setShowTrendCharts] = useState<boolean>(true);
+  const [showTrendCharts, setShowTrendCharts] = useState<boolean>(false);
   const [expandedInputs, setExpandedInputs] = useState<Record<number, boolean>>({});
 
   const [formInputs, setFormInputs] = useState<Record<number, Record<string, any>>>(() => {
@@ -204,20 +204,17 @@ export const QuantumCatalog: React.FC<Props> = ({
 
   const isOperator = currentUser?.ruolo === 'Operatore di Linea';
   const isResponsabile = currentUser?.ruolo === 'Responsabile di Stabilimento';
+  const isAdmin = currentUser?.ruolo === 'Amministratore';
 
-  // Allowed calculations for the user (filtered by their assigned machinery/nodes)
+  // Allowed calculations for the user (filtered by their assigned machinery/nodes and active plant)
   const userPermittedIds = useMemo(() => {
     return getUserPermittedCalculations(currentUser || null, activeTenant);
   }, [currentUser, activeTenant]);
 
-  // Calculations supported by the active plant's hardware nodes and operator machinery permissions
+  // Calculations supported by the active plant's hardware nodes and machinery permissions
   const plantSupportedCalcs = useMemo(() => {
-    if (isOperator) {
-      return QUANTUM_CALCULATIONS.filter(c => userPermittedIds.includes(c.id));
-    }
-    // Responsabile and Admin see all calculations of the plant they have selected
-    return QUANTUM_CALCULATIONS.filter(c => isCalculationSupportedByPlant(c.id, activeTenant));
-  }, [isOperator, userPermittedIds, activeTenant]);
+    return QUANTUM_CALCULATIONS.filter(c => userPermittedIds.includes(c.id));
+  }, [userPermittedIds]);
 
   // Auto-populate / auto-compute calculation results on mount or activeTenant change so operator sees results without pressing Calcola
   useEffect(() => {
@@ -267,10 +264,10 @@ export const QuantumCatalog: React.FC<Props> = ({
 
   // Calculations displayed after applying plant nodes filter and selected category
   const displayedCalculations = useMemo(() => {
-    const pool = (filterOnlyPlantNodes && activeTenant) ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
+    const pool = activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
     if (selectedCategory === 'ALL') return pool;
     return pool.filter(c => c.category === selectedCategory);
-  }, [filterOnlyPlantNodes, activeTenant, plantSupportedCalcs, selectedCategory]);
+  }, [activeTenant, plantSupportedCalcs, selectedCategory]);
 
   // Modalità di visualizzazione: 'table-focus' (Pulsanti a sinistra + Singolo Ingrandito a destra) oppure 'grid' (Tutti)
   const [displayMode, setDisplayMode] = useState<'table-focus' | 'grid'>('table-focus');
@@ -292,6 +289,13 @@ export const QuantumCatalog: React.FC<Props> = ({
     }
   }, [plantSupportedCalcs, selectedCalcId]);
 
+  // Gli utenti non amministratori visualizzano esclusivamente la modalità a tabella focalizzata con calcolo ingrandito
+  useEffect(() => {
+    if (!isAdmin && displayMode === 'grid') {
+      setDisplayMode('table-focus');
+    }
+  }, [isAdmin, displayMode]);
+
   // Calcolo selezionato per la visualizzazione ingrandita
   const selectedCalc = useMemo(() => {
     return (
@@ -304,7 +308,7 @@ export const QuantumCatalog: React.FC<Props> = ({
 
   // Calcoli filtrati per la tabella dei pulsanti a sinistra
   const tableCalculations = useMemo(() => {
-    let pool = (filterOnlyPlantNodes && activeTenant) ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
+    let pool = activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
     if (selectedCategory !== 'ALL') {
       pool = pool.filter(c => c.category === selectedCategory);
     }
@@ -322,7 +326,7 @@ export const QuantumCatalog: React.FC<Props> = ({
       });
     }
     return pool;
-  }, [filterOnlyPlantNodes, activeTenant, plantSupportedCalcs, selectedCategory, searchTableQuery]);
+  }, [activeTenant, plantSupportedCalcs, selectedCategory, searchTableQuery]);
 
   // ID del calcolo in focus (per compatibilità con la barra rapida)
   const [focusedCalcId, setFocusedCalcId] = useState<number | null>(null);
@@ -336,24 +340,35 @@ export const QuantumCatalog: React.FC<Props> = ({
   // Elenco effettivo visualizzato: se focusedCalcId è impostato, mostra solo quel calcolo e nasconde tutti gli altri
   const visibleCalculations = useMemo(() => {
     if (focusedCalcId !== null) {
-      const match = (filterOnlyPlantNodes && activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).find(c => c.id === focusedCalcId);
+      const match = (activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).find(c => c.id === focusedCalcId);
       if (match) return [match];
       const fallback = QUANTUM_CALCULATIONS.find(c => c.id === focusedCalcId);
       return fallback ? [fallback] : displayedCalculations;
     }
     return displayedCalculations;
-  }, [focusedCalcId, displayedCalculations, filterOnlyPlantNodes, activeTenant, plantSupportedCalcs]);
+  }, [focusedCalcId, displayedCalculations, activeTenant, plantSupportedCalcs]);
 
   const handleInputChange = (calcId: number, field: string, value: any) => {
     const meta = QUANTUM_CALCULATIONS.find(c => c.id === calcId);
-    setFormInputs(prev => ({
-      ...prev,
-      [calcId]: {
+    setFormInputs(prev => {
+      const updatedForCalc = {
         ...(meta?.defaultInputs || {}),
         ...(prev[calcId] || {}),
         [field]: value
+      };
+      const next = {
+        ...prev,
+        [calcId]: updatedForCalc
+      };
+      if (activeTenant?.id) {
+        try {
+          const storageKey = `joker_custom_telemetry_${activeTenant.id}`;
+          const currentSaved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+          localStorage.setItem(storageKey, JSON.stringify({ ...currentSaved, [field]: value }));
+        } catch {}
       }
-    }));
+      return next;
+    });
   };
 
   const executeCalculation = async (calc: QuantumCalculationMeta) => {
@@ -369,7 +384,56 @@ export const QuantumCatalog: React.FC<Props> = ({
       await new Promise(r => setTimeout(r, 260));
       const res = await QuantumEngine.executeCalculation(calc.id, inputs);
       setResults(prev => ({ ...prev, [calc.id]: res }));
-      setToastMessage(`⚡ Calcolo [${calc.id}] "${calc.name}" eseguito con successo con i parametri inseriti!`);
+
+      // Determina il livello di allarme del risultato per la telemetria storica
+      const isCrit = Boolean(
+        res.indice_rischio_blocco?.toLowerCase().includes('critico') ||
+        res.livello_rischio?.toLowerCase().includes('critico') ||
+        res.rischio_stocastico?.toLowerCase().includes('critico') ||
+        (res.probabilita_fermo_pct && parseFloat(String(res.probabilita_fermo_pct)) > 70) ||
+        (res.codice_allarme_fabbrica && res.codice_allarme_fabbrica > 0)
+      );
+      const isWarn = !isCrit && Boolean(
+        res.indice_rischio_blocco?.toLowerCase().includes('attenzione') ||
+        res.livello_rischio?.toLowerCase().includes('attenzione') ||
+        res.rischio_stocastico?.toLowerCase().includes('attenzione') ||
+        (res.probabilita_fermo_pct && parseFloat(String(res.probabilita_fermo_pct)) > 30)
+      );
+      const allarme = isCrit ? 'CRITICO' : isWarn ? 'ATTENZIONE' : 'NORMALE';
+
+      // 1. Salva i parametri personalizzati in localStorage per persistenza futura
+      if (activeTenant?.id) {
+        try {
+          const storageKey = `joker_custom_telemetry_${activeTenant.id}`;
+          const currentSaved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+          localStorage.setItem(storageKey, JSON.stringify({ ...currentSaved, ...inputs }));
+        } catch {}
+      }
+
+      // 2. Registra il nuovo punto telemetrico nello storico dei grafici di andamento temporale
+      if (activeTenant) {
+        try {
+          PlantTelemetryHistoryService.recordNewSnapshot(
+            activeTenant,
+            'GATEWAY_AUTOSCAN',
+            [{
+              calcId: calc.id,
+              calcNome: calc.name,
+              livelloAllarme: allarme,
+              res
+            }],
+            {
+              bemaVibrazione: typeof inputs.vibrazione_corrente === 'number' ? inputs.vibrazione_corrente : undefined,
+              lgvSoc: typeof inputs.batteria_soc === 'number' ? inputs.batteria_soc : undefined,
+              baieRitardo: typeof inputs.ritardo_stimato === 'number' ? inputs.ritardo_stimato : undefined
+            }
+          );
+        } catch (e) {
+          console.error('Failed to record snapshot for calc', e);
+        }
+      }
+
+      setToastMessage(`⚡ Calcolo [${calc.id}] "${calc.name}" eseguito: parametri salvati e registrati nel Grafico Andamenti!`);
       setTimeout(() => setToastMessage(null), 3500);
 
       // Auto-scroll directly to result card so the user sees immediate feedback
@@ -594,9 +658,7 @@ export const QuantumCatalog: React.FC<Props> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
-                {filterOnlyPlantNodes
-                  ? `Mostrando esclusivamente i calcoli compatibili con i macchinari e i nodi fisici installati in "${activeTenant.nome}" (${activeTenant.sito}).`
-                  : `Visualizzazione estesa a tutti i 21 nodi dell'infrastruttura Elettric80.`}
+                Mostrando esclusivamente i calcoli compatibili con i macchinari e i nodi fisici autorizzati per "{activeTenant.nome}" ({activeTenant.sito}).
               </p>
             </div>
           </div>
@@ -615,61 +677,49 @@ export const QuantumCatalog: React.FC<Props> = ({
               </button>
             )}
 
-            {/* FILTRO NODI ATTIVO */}
-            <button
-              type="button"
-              onClick={() => setFilterOnlyPlantNodes(!filterOnlyPlantNodes)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-sm ${
-                filterOnlyPlantNodes
-                  ? 'bg-cyan-600/30 text-cyan-200 border-cyan-400/60 hover:bg-cyan-600/40'
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-              title="Attiva/Disattiva il filtro per mostrare solo i calcoli che lo stabilimento può effettuare"
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span>{filterOnlyPlantNodes ? `Filtro Stabilimento Attivo (${plantSupportedCalcs.length}/21)` : 'Mostra Tutti i 21 Nodi'}</span>
-            </button>
+            {/* PULSANTE VISUALIZZAZIONE GRAFICO STABILIMENTO (A FIANCO DI CARICA CSV) */}
+            {currentUser && (
+              <button
+                type="button"
+                onClick={() => setShowTrendCharts(!showTrendCharts)}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer border shadow-lg ${
+                  showTrendCharts
+                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-400 shadow-cyan-950/40'
+                    : 'bg-slate-800 hover:bg-slate-750 text-cyan-300 hover:text-white border-cyan-500/40 shadow-slate-950/40 hover:scale-[1.02]'
+                } active:scale-[0.98]`}
+                title="Visualizza o nascondi il modulo grafico degli andamenti temporali di telemetria e calcoli dello stabilimento"
+              >
+                <TrendingUp className="w-4 h-4 text-cyan-300" />
+                <span>{showTrendCharts ? 'Nascondi Grafico Stabilimento' : 'Mostra Grafico Stabilimento'}</span>
+                {showTrendCharts ? <ChevronUp className="w-3.5 h-3.5 text-cyan-200" /> : <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />}
+              </button>
+            )}
 
-            {/* DOCUMENTAZIONE LOGICA DEI 21 CALCOLI (Copia & Scarica) */}
-            <button
-              type="button"
-              onClick={() => setIsLogicDocModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border border-cyan-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
-              title="Apri casella di testo con tutta la logica quantistica e classica dei 21 calcoli per copiarla o scaricarla"
-            >
-              <FileText className="w-4 h-4 text-cyan-400" />
-              <span>Logica 21 Calcoli (Copia & Scarica)</span>
-            </button>
+            {/* DOCUMENTAZIONE LOGICA DEI 21 CALCOLI (Copia & Scarica) - SOLO PER AMMINISTRATORE */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsLogicDocModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border border-cyan-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                title="Apri casella di testo con tutta la logica quantistica e classica dei 21 calcoli per copiarla o scaricarla"
+              >
+                <FileText className="w-4 h-4 text-cyan-400" />
+                <span>Logica 21 Calcoli (Copia & Scarica)</span>
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {/* Banner Restrizione Nodi per Operatore di Linea */}
-      {isOperator && currentUser && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-950/60 via-slate-900 to-slate-950 border border-purple-500/40 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs animate-in fade-in">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
-              <Cpu className="w-4 h-4 text-purple-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-white text-xs sm:text-sm">
-                  Area Riservata Operatore: {currentUser.nomeCompleto}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                  {currentUser.azienda || activeTenant?.azienda || 'Azienda'}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
-                Visualizzazione vincolata esclusivamente ai <strong>{plantSupportedCalcs.length} calcoli</strong> autorizzati per i tuoi nodi operativi ({currentUser.allowedMachineIds && currentUser.allowedMachineIds.length > 0 ? currentUser.allowedMachineIds.join(', ') : currentUser.lineaAssegnata || 'Tutti i nodi autorizzati'}). Non occorre premere calcola: i risultati sono precaricati e aggiornati automaticamente.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-            <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
-              ✓ Risultati Precalcolati Attivi
-            </span>
-          </div>
+      {/* SEZIONE GRAFICO DEGLI ANDAMENTI TEMPORALI DEI DATI NEL TEMPO (Attivata dal pulsante a fianco di Carica CSV) */}
+      {activeTenant && currentUser && showTrendCharts && (
+        <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+          <PlantTelemetryTrendCharts
+            activeTenant={activeTenant}
+            currentUser={currentUser}
+            tenants={tenants}
+            onSelectTenant={onSelectTenant}
+          />
         </div>
       )}
 
@@ -705,35 +755,6 @@ export const QuantumCatalog: React.FC<Props> = ({
         </div>
       )}
 
-      {/* SEZIONE GRAFICO DEGLI ANDAMENTI TEMPORALI DEI DATI NEL TEMPO */}
-      {activeTenant && currentUser && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setShowTrendCharts(!showTrendCharts)}
-              className="text-xs font-mono font-bold text-cyan-300 hover:text-white flex items-center gap-2 cursor-pointer bg-slate-900/90 hover:bg-slate-850 px-3.5 py-2 rounded-xl border border-cyan-500/30 shadow-md transition-all"
-            >
-              <TrendingUp className="w-4 h-4 text-cyan-400" />
-              <span>{showTrendCharts ? 'Nascondi Grafico Andamenti Temporali' : 'Mostra Grafico Andamenti Temporali Dati & Risultati'}</span>
-              {showTrendCharts ? <ChevronUp className="w-3.5 h-3.5 text-cyan-400" /> : <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />}
-            </button>
-            <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">
-              Storico continuo da quando sono stati inseriti i primi dati (CSV o Daemon Python mTLS)
-            </span>
-          </div>
-
-          {showTrendCharts && (
-            <PlantTelemetryTrendCharts
-              activeTenant={activeTenant}
-              currentUser={currentUser}
-              tenants={tenants}
-              onSelectTenant={onSelectTenant}
-            />
-          )}
-        </div>
-      )}
-
       {/* Category Tabs: Smooth touch-scroll on smartphones */}
       <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar touch-pan-x flex-nowrap sm:flex-wrap">
         {/* Tab "TUTTI I CALCOLI" per vedere l'insieme completo dei calcoli dello stabilimento */}
@@ -747,13 +768,13 @@ export const QuantumCatalog: React.FC<Props> = ({
         >
           <span>TUTTI I CALCOLI</span>
           <span className={`px-1.5 py-0.2 rounded text-[10px] ${selectedCategory === 'ALL' ? 'bg-black/30 text-cyan-200' : 'bg-slate-800 text-slate-400'}`}>
-            {(filterOnlyPlantNodes && activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).length}
+            {(activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).length}
           </span>
         </button>
 
         {CATEGORIES.map((cat) => {
           const isSelected = selectedCategory === cat;
-          const countInCat = (filterOnlyPlantNodes && activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).filter(c => c.category === cat).length;
+          const countInCat = (activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).filter(c => c.category === cat).length;
 
           return (
             <button
@@ -796,19 +817,21 @@ export const QuantumCatalog: React.FC<Props> = ({
               <span>Tabella Pulsanti a Sinistra (Singolo Ingrandito)</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setDisplayMode('grid')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                displayMode === 'grid'
-                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/60'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
-              }`}
-              title="Visualizza tutti i calcoli contemporaneamente in una griglia"
-            >
-              <Grid className="w-3.5 h-3.5" />
-              <span>Griglia Estesa (Tutti)</span>
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setDisplayMode('grid')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  displayMode === 'grid'
+                    ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/60'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+                title="Visualizza tutti i calcoli contemporaneamente in una griglia"
+              >
+                <Grid className="w-3.5 h-3.5" />
+                <span>Griglia Estesa (Tutti)</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1843,6 +1866,7 @@ export const QuantumCatalog: React.FC<Props> = ({
           )}
         </div>
       </div>
+
 
       {/* Modal Popup Punto di Domanda: Riga Esatta Telemetria CPU */}
       {selectedCpuCalc && (

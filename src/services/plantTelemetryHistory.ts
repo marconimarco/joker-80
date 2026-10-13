@@ -82,6 +82,9 @@ export class PlantTelemetryHistoryService {
       // Keep up to 300 points for memory safety
       const trimmed = records.slice(-300);
       localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(trimmed));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('telemetry-history-updated'));
+      }
     } catch (e) {
       console.error('Failed to save telemetry records', e);
     }

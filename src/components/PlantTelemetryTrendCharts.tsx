@@ -111,6 +111,18 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
     return tenants.find(t => t.id === selectedPlantId) || activeTenant;
   }, [tenants, selectedPlantId, activeTenant]);
 
+  const [historyVersion, setHistoryVersion] = useState(0);
+
+  useEffect(() => {
+    const handler = () => {
+      setHistoryVersion(v => v + 1);
+    };
+    window.addEventListener('telemetry-history-updated', handler);
+    return () => {
+      window.removeEventListener('telemetry-history-updated', handler);
+    };
+  }, []);
+
   // Query records from history service
   const records = useMemo(() => {
     let companyFilter: string | undefined = undefined;
@@ -129,7 +141,7 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
     });
 
     return filtered;
-  }, [scopeLevel, selectedAzienda, selectedPlantId, timeRange]);
+  }, [scopeLevel, selectedAzienda, selectedPlantId, timeRange, historyVersion]);
 
   // Earliest record timestamp
   const firstRecord = records[0];
