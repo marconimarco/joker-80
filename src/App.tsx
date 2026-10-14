@@ -331,18 +331,22 @@ export default function App() {
           <span>Notifiche</span>
         </button>
 
-        {isAdmin && (
+        {(isAdmin || isResponsabile) && (
           <button
             type="button"
             onClick={() => setActiveView('admin')}
             className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer min-h-[44px] ${
               activeView === 'admin'
-                ? 'text-purple-300 font-bold bg-purple-500/15'
+                ? isResponsabile
+                  ? 'text-amber-300 font-bold bg-amber-500/15'
+                  : 'text-purple-300 font-bold bg-purple-500/15'
+                : isResponsabile
+                ? 'text-amber-400/80 hover:text-amber-300'
                 : 'text-purple-400/80 hover:text-purple-300'
             }`}
           >
             <Sliders className="w-4 h-4 mb-0.5" />
-            <span>Admin</span>
+            <span>{isResponsabile ? 'Gestione Nodi' : 'Admin'}</span>
           </button>
         )}
       </nav>

@@ -501,7 +501,7 @@ export const QuantumCatalog: React.FC<Props> = ({
     );
 
     return (
-      <div id={`result-card-${calc.id}`} className={`p-4 rounded-xl border space-y-3 font-mono text-xs shadow-lg transition-all ${
+      <div id={`result-card-${calc.id}`} className={`p-2.5 sm:p-3 rounded-xl border space-y-2 font-mono text-xs shadow-md transition-all ${
         isCritical 
           ? 'bg-gradient-to-br from-rose-950/35 via-slate-950 to-slate-950 border-rose-500/50 shadow-rose-950/20'
           : isWarning
@@ -509,9 +509,9 @@ export const QuantumCatalog: React.FC<Props> = ({
             : 'bg-gradient-to-br from-emerald-950/25 via-slate-950 to-slate-950 border-emerald-500/40 shadow-emerald-950/20'
       }`}>
         {/* Status Header */}
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5 flex-wrap gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className={`px-2 py-0.5 rounded text-[11px] font-bold border flex items-center gap-1 ${
               isCritical
                 ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
                 : isWarning
@@ -520,79 +520,79 @@ export const QuantumCatalog: React.FC<Props> = ({
             }`}>
               {isCritical ? (
                 <>
-                  <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
+                  <AlertOctagon className="w-3 h-3 text-rose-400" />
                   <span>CRITICO - PROBLEMATICA ATTIVA</span>
                 </>
               ) : isWarning ? (
                 <>
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                  <AlertTriangle className="w-3 h-3 text-amber-400" />
                   <span>ATTENZIONE - MONITORAGGIO</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                   <span>A REGIME - NESSUNA ANOMALIA</span>
                 </>
               )}
             </span>
             {res.timestamp_esecuzione && (
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[9.5px] text-slate-400">
                 Aggiornato alle {res.timestamp_esecuzione}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {res.tempo_simulazione_qpu_ms && (
-              <span className="px-2 py-0.5 rounded text-[10px] bg-cyan-950/80 text-cyan-300 border border-cyan-800/80">
+              <span className="px-1.5 py-0.5 rounded text-[9.5px] bg-cyan-950/80 text-cyan-300 border border-cyan-800/80">
                 QPU: {res.tempo_simulazione_qpu_ms}ms
               </span>
             )}
             <button
               type="button"
               onClick={() => copyResult(calc.id, res)}
-              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
+              className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 cursor-pointer transition-colors text-[10px]"
             >
               {copiedId === calc.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-slate-400" />}
-              <span className="text-[10px]">{copiedId === calc.id ? 'Copiato' : 'Copia JSON'}</span>
+              <span>{copiedId === calc.id ? 'Copiato' : 'Copia JSON'}</span>
             </button>
           </div>
         </div>
 
         {/* Primary Metric Banner */}
         {res.metrica_principale_valore && (
-          <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
+          <div className={`p-2 sm:p-2.5 rounded-lg border flex items-center justify-between gap-2 ${
             isCritical
               ? 'bg-rose-950/30 border-rose-500/40'
               : isWarning
                 ? 'bg-amber-950/30 border-amber-500/40'
                 : 'bg-cyan-950/30 border-cyan-500/40'
           }`}>
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">
-                {res.metrica_principale_etichetta || 'Metrica Principale di Controllo'}
+            <div className="flex items-baseline gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                {res.metrica_principale_etichetta || 'Metrica Principale'}:
               </span>
-              <span className={`text-xl sm:text-2xl font-black tracking-tight font-mono ${
+              <span className={`text-base sm:text-lg font-black tracking-tight font-mono ${
                 isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-cyan-300'
               }`}>
                 {res.metrica_principale_valore}
               </span>
             </div>
-            <div className="text-right">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 border border-slate-700 text-slate-300">
+            <div>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-900 border border-slate-700 text-slate-300">
                 DIAGNOSI REALE
               </span>
             </div>
           </div>
         )}
 
-        {/* Detailed KPIs Grid */}
+        {/* Detailed KPIs Grid - Sulla stessa riga */}
         {res.metriche_dettagliate && Object.keys(res.metriche_dettagliate).length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 w-full">
             {Object.entries(res.metriche_dettagliate).map(([key, val]) => (
-              <div key={key} className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs font-mono">
-                <span className="text-slate-400 text-[10px] block truncate">{key}:</span>
-                <span className="font-bold text-cyan-300 text-xs sm:text-sm block mt-0.5 truncate">{String(val)}</span>
+              <div key={key} className="px-2 py-1.5 rounded-md bg-slate-900/90 border border-slate-800 text-[11px] font-mono leading-tight flex flex-col justify-between">
+                <span className="text-slate-400 text-[9.5px] block truncate" title={key}>{key}:</span>
+                <span className="font-bold text-cyan-300 text-xs block mt-0.5 truncate">{String(val)}</span>
               </div>
             ))}
           </div>
@@ -600,22 +600,22 @@ export const QuantumCatalog: React.FC<Props> = ({
 
         {/* Human-readable diagnostic summary */}
         {(res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica || res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] font-mono">
             {(res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica) && (
-              <div className={`p-2.5 rounded-lg border ${
+              <div className={`px-2.5 py-1.5 rounded-md border ${
                 isCritical ? 'bg-rose-950/20 border-rose-500/30' : isWarning ? 'bg-amber-950/20 border-amber-500/30' : 'bg-slate-900/80 border-slate-800'
               }`}>
-                <span className="text-slate-400 text-[10px] block font-bold">Diagnosi / Valutazione:</span>
-                <span className={`font-bold ${isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-slate-200'}`}>
+                <span className="text-slate-400 text-[9.5px] block font-bold">Diagnosi / Valutazione:</span>
+                <span className={`font-semibold text-xs leading-snug ${isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-slate-200'}`}>
                   {res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica}
                 </span>
               </div>
             )}
 
             {(res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita) && (
-              <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                <span className="text-slate-400 text-[10px] block font-bold">Azione Suggerita:</span>
-                <span className="font-bold text-cyan-300">
+              <div className="px-2.5 py-1.5 rounded-md bg-slate-900/80 border border-slate-800">
+                <span className="text-slate-400 text-[9.5px] block font-bold">Azione Suggerita:</span>
+                <span className="font-semibold text-xs text-cyan-300 leading-snug">
                   {res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita}
                 </span>
               </div>
@@ -723,20 +723,6 @@ export const QuantumCatalog: React.FC<Props> = ({
 
       {/* Category Tabs: Smooth touch-scroll on smartphones */}
       <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar touch-pan-x flex-nowrap sm:flex-wrap">
-        {/* Tab "TUTTI I CALCOLI" per vedere l'insieme completo dei calcoli dello stabilimento */}
-        <button
-          onClick={() => setSelectedCategory('ALL')}
-          className={`shrink-0 sm:flex-1 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs font-mono font-semibold whitespace-nowrap min-h-[38px] transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-            selectedCategory === 'ALL'
-              ? 'bg-cyan-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-          }`}
-        >
-          <span>TUTTI I CALCOLI</span>
-          <span className={`px-1.5 py-0.2 rounded text-[10px] ${selectedCategory === 'ALL' ? 'bg-black/30 text-cyan-200' : 'bg-slate-800 text-slate-400'}`}>
-            {(activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).length}
-          </span>
-        </button>
 
         {CATEGORIES.map((cat) => {
           const isSelected = selectedCategory === cat;
@@ -745,7 +731,13 @@ export const QuantumCatalog: React.FC<Props> = ({
           return (
             <button
               key={cat}
-              onClick={() => setSelectedCategory(cat)}
+              onClick={() => {
+                setSelectedCategory(cat);
+                const firstInCat = (activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).find(c => c.category === cat);
+                if (firstInCat) {
+                  setSelectedCalcId(firstInCat.id);
+                }
+              }}
               className={`shrink-0 sm:flex-1 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs font-mono font-semibold whitespace-nowrap min-h-[38px] transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 isSelected
                   ? 'bg-cyan-600 text-white shadow-md'
@@ -764,78 +756,21 @@ export const QuantumCatalog: React.FC<Props> = ({
       <div className={displayMode === 'table-focus' ? "flex flex-col lg:flex-row gap-4 sm:gap-6 items-start" : ""}>
         {/* COLONNA SINISTRA: TABELLA DEI SOLI PULSANTI (solo in modalità table-focus) */}
         {displayMode === 'table-focus' && (
-          <div className="w-full lg:w-80 xl:w-96 shrink-0 bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-col gap-3 font-mono shadow-xl sticky top-2">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <LayoutList className="w-4 h-4 text-cyan-400" />
-                <span className="text-xs font-bold text-white uppercase tracking-wider">
-                  Tabella Calcoli
+          <div className="w-full lg:w-80 xl:w-96 shrink-0 bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-col gap-2.5 font-mono shadow-xl sticky top-2">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2 min-w-0">
+                <LayoutList className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span className="text-xs font-bold text-white uppercase tracking-wider truncate">
+                  {selectedCategory === 'ALL' ? 'Tutti i Calcoli' : selectedCategory}
                 </span>
               </div>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                {tableCalculations.length} Nodi Inerenti
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0">
+                {tableCalculations.length} {tableCalculations.length === 1 ? 'Nodo' : 'Nodi'}
               </span>
             </div>
 
-            <p className="text-[11px] text-slate-400 leading-snug">
-              Pulsanti dei calcoli inerenti a <strong className="text-cyan-300">{activeTenant?.nome || 'questo stabilimento'}</strong>. Clicca un pulsante per ingrandire il calcolo a destra:
-            </p>
-
-            {/* Ricerca veloce nei pulsanti */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchTableQuery}
-                onChange={e => setSearchTableQuery(e.target.value)}
-                placeholder="Cerca calcolo, modulo o nodo..."
-                className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-400"
-              />
-              {searchTableQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTableQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {/* Micro categorie */}
-            <div className="flex gap-1 overflow-x-auto no-scrollbar py-0.5 text-[10px]">
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('ALL')}
-                className={`px-2 py-1 rounded-lg whitespace-nowrap cursor-pointer transition-colors ${
-                  selectedCategory === 'ALL'
-                    ? 'bg-cyan-600 text-white font-bold'
-                    : 'bg-slate-950 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Tutti ({tableCalculations.length})
-              </button>
-              {CATEGORIES.map(cat => {
-                const short = cat.split('. ')[1]?.split(' & ')[0] || cat;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-2 py-1 rounded-lg whitespace-nowrap cursor-pointer transition-colors ${
-                      selectedCategory === cat
-                        ? 'bg-cyan-600 text-white font-bold'
-                        : 'bg-slate-950 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {short}
-                  </button>
-                );
-              })}
-            </div>
-
             {/* Tabella dei soli pulsanti */}
-            <div className="flex flex-col gap-1.5 max-h-[calc(100vh-250px)] min-h-[300px] overflow-y-auto pr-1">
+            <div className="flex flex-col gap-1.5 max-h-[calc(100vh-210px)] min-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
               {tableCalculations.length === 0 ? (
                 <div className="p-4 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
                   Nessun calcolo inerente per questo filtro.
@@ -931,7 +866,7 @@ export const QuantumCatalog: React.FC<Props> = ({
                 <div 
                   key={calc.id}
                   id={`calc-card-${calc.id}`}
-                  className={`bg-slate-900 border rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col justify-between space-y-4 sm:space-y-5 transition-all ${
+                  className={`bg-slate-900 border rounded-2xl p-3 sm:p-4 shadow-xl flex flex-col justify-between space-y-2.5 sm:space-y-3 transition-all ${
                     isEnlarged
                       ? 'border-cyan-500/50 shadow-2xl shadow-cyan-950/40 ring-1 ring-cyan-500/30 w-full'
                       : isSupported 
@@ -941,31 +876,31 @@ export const QuantumCatalog: React.FC<Props> = ({
                 >
                   {/* Banner superiore se in modalità ingrandita */}
                   {isEnlarged && (
-                    <div className="p-3 sm:p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/80 via-slate-900 to-slate-950 border border-cyan-500/40 flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+                    <div className="px-3 py-2 rounded-xl bg-gradient-to-r from-cyan-950/80 via-slate-900 to-slate-950 border border-cyan-500/40 flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
                       <div className="flex items-center gap-2">
-                        <Focus className="w-4 h-4 text-cyan-400 animate-pulse" />
-                        <span className="font-bold text-white">Calcolo Selezionato Ingrandito:</span>
+                        <Focus className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                        <span className="font-bold text-white text-[11px] sm:text-xs">Calcolo Selezionato:</span>
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
                           [#{calc.id}] {calc.name}
                         </span>
                       </div>
-                      <span className="text-[11px] text-slate-400">
-                        1 calcolo alla volta • Usa i pulsanti a sinistra per cambiare calcolo
+                      <span className="text-[10px] text-slate-400 hidden sm:inline">
+                        1 calcolo alla volta • Usa i pulsanti a sinistra per cambiare
                       </span>
                     </div>
                   )}
               {/* Connected Plant Node Badge */}
               {nodeReq && (
-                <div className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono flex items-center justify-between border ${
+                <div className={`px-2.5 py-1 rounded-lg text-[10.5px] font-mono flex items-center justify-between border ${
                   isSupported
                     ? 'bg-cyan-950/40 text-cyan-300 border-cyan-800/80 shadow-xs'
                     : 'bg-slate-950/60 text-slate-500 border-slate-800'
                 }`}>
                   <span className="flex items-center gap-1.5 truncate">
-                    <Cpu className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <Cpu className="w-3 h-3 text-cyan-400 shrink-0" />
                     <span>Nodo Associato: <strong className="text-white">{nodeReq.nodeName}</strong></span>
                   </span>
-                  <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold shrink-0 ${
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${
                     isSupported 
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
                       : 'bg-slate-800 text-slate-400 border border-slate-700'
@@ -976,10 +911,10 @@ export const QuantumCatalog: React.FC<Props> = ({
               )}
 
               {/* Header */}
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2.5 py-1 text-xs font-mono font-bold rounded-md border flex items-center gap-1.5 ${
+                  <div className="flex items-center flex-wrap gap-1.5 text-xs font-mono">
+                    <span className={`px-2 py-0.5 text-[11px] font-mono font-bold rounded-md border flex items-center gap-1 ${
                       isLocked
                         ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/10'
                         : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
@@ -987,23 +922,20 @@ export const QuantumCatalog: React.FC<Props> = ({
                       {isLocked ? (
                         <>
                           <span className="font-extrabold text-amber-200">[+]</span>
-                          <Lock className="w-3.5 h-3.5" />
+                          <Lock className="w-3 h-3" />
                         </>
                       ) : (
                         <>
                           <span className="font-extrabold text-emerald-300">[-]</span>
-                          <Unlock className="w-3.5 h-3.5" />
+                          <Unlock className="w-3 h-3" />
                         </>
                       )}
                       Calcolo [{calc.id}] {isLocked ? 'INCROCIATO' : 'LOCALE'}
                     </span>
-                    <span className="px-2 py-0.5 text-xs font-mono rounded bg-slate-800 text-cyan-400 border border-slate-700">
+                    <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-cyan-400 border border-slate-700 font-bold">
                       {calc.technicalModule}
                     </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-slate-400">
+                    <span className="text-[11px] font-mono text-slate-300 font-medium px-0.5">
                       {calc.subFunction}
                     </span>
 
@@ -1014,19 +946,19 @@ export const QuantumCatalog: React.FC<Props> = ({
                         onClick={() => setSelectedCpuCalc(calc)}
                         onMouseEnter={() => setHoveredCalcId(calc.id)}
                         onMouseLeave={() => setHoveredCalcId(null)}
-                        className="p-1 sm:p-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 hover:border-cyan-400 text-cyan-300 hover:text-white transition-all cursor-pointer shadow-sm group flex items-center gap-1"
+                        className="px-1.5 py-0.5 rounded-md bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 hover:border-cyan-400 text-cyan-300 hover:text-white transition-all cursor-pointer shadow-sm group flex items-center gap-1"
                         title="Visualizza telemetria CPU / specifiche tecniche complete del calcolo (Punto di domanda)"
                       >
-                        <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[11px] font-mono font-bold text-cyan-400">?</span>
+                        <HelpCircle className="w-3 h-3 text-cyan-400 group-hover:scale-110 transition-transform" />
+                        <span className="text-[10px] font-mono font-bold text-cyan-400">?</span>
                       </button>
 
                       {/* Tooltip popup al passaggio del mouse */}
                       {hoveredCalcId === calc.id && !selectedCpuCalc && (
-                        <div className="absolute z-50 right-0 top-full mt-2 w-72 sm:w-80 p-3 rounded-xl bg-slate-950/95 border border-cyan-500/60 shadow-2xl backdrop-blur-md text-left font-mono text-[11px] pointer-events-none animate-in fade-in zoom-in-95 space-y-2">
-                          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                        <div className="absolute z-50 left-0 top-full mt-2 w-72 sm:w-80 p-2.5 rounded-xl bg-slate-950/95 border border-cyan-500/60 shadow-2xl backdrop-blur-md text-left font-mono text-[11px] pointer-events-none animate-in fade-in zoom-in-95 space-y-1.5">
+                          <div className="flex items-center justify-between pb-1 border-b border-slate-800">
                             <span className="font-bold text-cyan-400 flex items-center gap-1">
-                              <Cpu className="w-3.5 h-3.5" />
+                              <Cpu className="w-3 h-3" />
                               Telemetria CPU [{calc.id}]
                             </span>
                             <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${calc.isCrossCategory ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
@@ -1034,46 +966,36 @@ export const QuantumCatalog: React.FC<Props> = ({
                             </span>
                           </div>
                           <div>
-                            <span className="text-slate-400 text-[10px] block font-semibold">Dati e Parametri Telemetria CPU:</span>
+                            <span className="text-slate-400 text-[9.5px] block font-semibold">Dati e Parametri Telemetria CPU:</span>
                             <span className="text-slate-200 text-[10px] leading-snug">
                               {calc.crossCategoryDetails?.parametersOrData || calc.description}
                             </span>
                           </div>
-                          <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-800/80 flex items-center justify-between">
+                          <div className="text-[9.5px] text-slate-400 pt-1 border-t border-slate-800/80 flex items-center justify-between">
                             <span>Target: <strong className="text-slate-300">{calc.hardwareTarget.split('/')[0]}</strong></span>
                             <span className="text-cyan-400 font-bold">Clicca per dettagli completi</span>
                           </div>
                         </div>
                       )}
                     </div>
-                  </div>
-                </div>
 
-                {calc.isCrossCategory && calc.crossCategoryDetails && (
-                  <div className="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs font-mono flex items-center justify-between gap-2 text-amber-300">
-                    <span className="font-semibold text-[11px]">
-                      [+] Incrociato con: {calc.crossCategoryDetails.crossedWith}
-                    </span>
-                    <span className="text-[10px] text-amber-400/80 px-1.5 py-0.5 rounded bg-amber-500/20">
-                      {calc.crossCategoryDetails.modules}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-100 font-mono">
-                      {calc.name}
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      {calc.description}
-                    </p>
+                    {/* [+] Incrociato con sulla stessa riga */}
+                    {calc.isCrossCategory && calc.crossCategoryDetails && (
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-[11px] font-mono text-amber-300">
+                        <span className="font-semibold text-[10px]">
+                          [+] Incrociato con: {calc.crossCategoryDetails.crossedWith}
+                        </span>
+                        <span className="text-[9px] text-amber-400/80 px-1 py-0.2 rounded bg-amber-500/20 font-bold">
+                          {calc.crossCategoryDetails.modules}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <button
                     type="button"
                     onClick={() => setFocusedCalcId(focusedCalcId === calc.id ? null : calc.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 border shadow-xs ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0 border shadow-xs ${
                       focusedCalcId === calc.id
                         ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
                         : 'bg-cyan-950/70 hover:bg-cyan-900/90 text-cyan-300 border-cyan-500/50 hover:border-cyan-400'
@@ -1082,27 +1004,36 @@ export const QuantumCatalog: React.FC<Props> = ({
                   >
                     {focusedCalcId === calc.id ? (
                       <>
-                        <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                        <Eye className="w-3 h-3 text-cyan-400" />
                         <span>Mostra Tutti</span>
                       </>
                     ) : (
                       <>
-                        <Focus className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Lavora solo su questo</span>
+                        <Focus className="w-3 h-3 text-cyan-400" />
+                        <span>Isola</span>
                       </>
                     )}
                   </button>
                 </div>
+
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-100 font-mono">
+                    {calc.name}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug line-clamp-2">
+                    {calc.description}
+                  </p>
+                </div>
               </div>
 
               {/* RISULTATO DIAGNOSTICO IMMEDIATO (Visibile subito senza premere calcolo) */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                  <span className="font-bold text-cyan-300 flex items-center gap-1.5">
-                    <Activity className="w-3.5 h-3.5 text-cyan-400" />
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10.5px] font-mono text-slate-400">
+                  <span className="font-bold text-cyan-300 flex items-center gap-1">
+                    <Activity className="w-3 h-3 text-cyan-400" />
                     Risultato & Stato Problematiche in Tempo Reale:
                   </span>
-                  <span className="text-[10px] text-slate-500">
+                  <span className="text-[9.5px] text-slate-500 hidden sm:inline">
                     Telemetria gateway / log attivi
                   </span>
                 </div>
@@ -1110,41 +1041,44 @@ export const QuantumCatalog: React.FC<Props> = ({
               </div>
 
               {/* Sezione Parametri di Fabbrica (Collassabile o Regolabile se si desidera forzare nuovi input) */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <button
                   type="button"
                   onClick={() => setExpandedInputs(prev => ({ ...prev, [calc.id]: !prev[calc.id] }))}
-                  className="w-full py-1.5 px-3 rounded-lg bg-slate-950/90 hover:bg-slate-800/90 border border-slate-800 text-xs font-mono flex items-center justify-between text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                  className="w-full py-1 px-2.5 rounded-lg bg-slate-950/90 hover:bg-slate-800/90 border border-slate-800 text-[11px] font-mono flex items-center justify-between text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
-                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                    <Sliders className="w-3 h-3 text-cyan-400" />
                     <span>Parametri Macchinario / Input ({(isEnlarged || expandedInputs[calc.id]) ? 'Parametri Attivi' : 'Mostra / Modifica'})</span>
                   </span>
                   <span className="text-[10px] text-cyan-400 font-bold flex items-center gap-1">
-                    {(isEnlarged || expandedInputs[calc.id]) ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    {(isEnlarged || expandedInputs[calc.id]) ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                   </span>
                 </button>
 
                 {(isEnlarged || expandedInputs[calc.id] || focusedCalcId === calc.id) && (
                   <div 
                     onFocusCapture={() => { if (focusedCalcId === null) setFocusedCalcId(calc.id); }}
-                    className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-4 animate-in fade-in duration-150"
+                    className="p-2.5 sm:p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-2.5 animate-in fade-in duration-150"
                   >
-                <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-b border-slate-800 pb-2">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 border-b border-slate-800 pb-1.5">
                   <span className="flex items-center gap-1.5">
-                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                    <Sliders className="w-3 h-3 text-cyan-400" />
                     Parametri di Fabbrica (Input)
                   </span>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-[10px] text-slate-500">
                     Target: {calc.hardwareTarget.split('/')[0]}
                   </span>
                 </div>
 
-                {/* Calcolo 1 */}
-                {calc.id === 1 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Camion in attesa</label>
+                {/* Sulla stessa riga: Campi Input e Pulsante Ricalcola */}
+                <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3 pt-0.5">
+                  <div className="flex-1 min-w-0">
+                    {/* Calcolo 1 */}
+                    {calc.id === 1 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                        <div>
+                          <label className="text-[11px] font-mono text-slate-400 block mb-1 truncate">Camion in attesa</label>
                       <input
                         type="number"
                         min="0"
@@ -1747,31 +1681,34 @@ export const QuantumCatalog: React.FC<Props> = ({
                   </div>
                 )}
 
-                {/* Pulsante Ricalcola Parametri manuali (opzionale per l'operatore) */}
-                <div className="pt-2 flex items-center justify-end">
-                  <button
-                    onClick={() => executeCalculation(calc)}
-                    disabled={isBusy}
-                    className={`w-full sm:w-auto px-5 py-2 rounded-xl text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer ${
-                      isBusy
-                        ? 'bg-slate-800 text-slate-500 cursor-wait'
-                        : isLocked
-                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-slate-950'
-                        : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white'
-                    }`}
-                  >
-                    {isBusy ? (
-                      <>
-                        <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                        <span>Ricalcolo in corso...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>Ricalcola con Nuovi Parametri ({calc.entanglementSymbol})</span>
-                      </>
-                    )}
-                  </button>
+                  </div>
+
+                  {/* Pulsante Ricalcola Parametri manuali (sulla stessa riga degli input) */}
+                  <div className="shrink-0 flex items-end">
+                    <button
+                      onClick={() => executeCalculation(calc)}
+                      disabled={isBusy}
+                      className={`w-full lg:w-auto px-4 py-2 h-[38px] rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer whitespace-nowrap ${
+                        isBusy
+                          ? 'bg-slate-800 text-slate-500 cursor-wait'
+                          : isLocked
+                          ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-slate-950'
+                          : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white'
+                      }`}
+                    >
+                      {isBusy ? (
+                        <>
+                          <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                          <span>Ricalcolo in corso...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3 h-3 fill-current" />
+                          <span>Ricalcola con Nuovi Parametri ({calc.entanglementSymbol})</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
