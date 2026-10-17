@@ -8,19 +8,23 @@ import {
   AlertCircle,
   Sparkles
 } from 'lucide-react';
+import { Lock, Scale, FileText } from 'lucide-react';
 import { UserAccount } from '../types/quantum';
 import { AuthStorage } from '../services/authStorage';
+import { LegalTermsModal } from './LegalTermsModal';
 
 interface Props {
   onLoginSuccess: (user: UserAccount) => void;
+  onLockPreAccess?: () => void;
 }
 
-export const LoginModal: React.FC<Props> = ({ onLoginSuccess }) => {
+export const LoginModal: React.FC<Props> = ({ onLoginSuccess, onLockPreAccess }) => {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('admin');
   const [error, setError] = useState<string | null>(null);
   const [showQuickFill, setShowQuickFill] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [showLegalModal, setShowLegalModal] = useState<boolean>(false);
 
   const executeLogin = (foundUser: UserAccount) => {
     setIsSubmitting(true);
@@ -90,9 +94,22 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess }) => {
             </div>
           </div>
 
-          <span className="text-[10px] sm:text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg shrink-0">
-            21 CUDA-Q
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {onLockPreAccess && (
+              <button
+                type="button"
+                onClick={onLockPreAccess}
+                title="Torna al pre-accesso con password master"
+                className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-mono text-slate-400 hover:text-cyan-300 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <Lock className="w-3 h-3 text-cyan-400" />
+                <span className="hidden sm:inline">Blocca Gateway</span>
+              </button>
+            )}
+            <span className="text-[10px] sm:text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg">
+              21 CUDA-Q
+            </span>
+          </div>
         </div>
 
         {/* Content Container */}
@@ -241,9 +258,32 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess }) => {
                 </button>
               </div>
             )}
+
+            {/* Legal Documents Acknowledged notice */}
+            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono text-slate-400">
+              <span className="flex items-center gap-1.5 text-slate-400">
+                <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-[10px] sm:text-[11px]">Termini Visionati: EULA, Disclaimer (89 Art.), NDA, Privacy</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowLegalModal(true)}
+                className="text-cyan-400 hover:text-cyan-300 underline cursor-pointer text-[10px] sm:text-[11px] shrink-0"
+              >
+                Rileggi Atti
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Legal terms viewer in viewOnly mode */}
+      <LegalTermsModal
+        isOpen={showLegalModal}
+        viewOnly={true}
+        onAccept={() => setShowLegalModal(false)}
+        onDecline={() => setShowLegalModal(false)}
+      />
     </div>
   );
 };

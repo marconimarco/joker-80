@@ -6,6 +6,7 @@ import { NotificationsView } from './components/NotificationsView';
 import { CompanyPlantSelectorModal } from './components/CompanyPlantSelectorModal';
 import { CircuitVisualizerModal } from './components/CircuitVisualizerModal';
 import { LoginModal } from './components/LoginModal';
+import { PreAccessGate } from './components/PreAccessGate';
 import { AdminControlPanel } from './components/AdminControlPanel';
 import { PlantCsvUploadModal } from './components/PlantCsvUploadModal';
 import { FactoryTenant, QuantumCalculationMeta, UserAccount } from './types/quantum';
@@ -30,6 +31,16 @@ export default function App() {
     const user = AuthStorage.getCurrentUser();
     if (user && user.ruolo !== 'Amministratore') return 'catalog';
     return 'chat';
+  });
+  const [isPreAccessGranted, setIsPreAccessGranted] = useState<boolean>(() => {
+    try {
+      return (
+        sessionStorage.getItem('joker80_preaccess_unlocked') === 'true' &&
+        sessionStorage.getItem('joker80_legal_accepted') === 'true'
+      );
+    } catch {
+      return false;
+    }
   });
   const [isCompanyPlantSelectorOpen, setIsCompanyPlantSelectorOpen] = useState<boolean>(false);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState<boolean>(false);
@@ -153,11 +164,31 @@ export default function App() {
     setTargetInspectCalcId(null);
   };
 
-  // If not logged in, enforce authentication via LoginModal
+  // Step 1: Pre-Access Gate requiring single master password 'nicopol'
+  if (!isPreAccessGranted) {
+    return (
+      <div className="h-[100dvh] min-h-[100dvh] w-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-3 sm:p-4 overflow-y-auto selection:bg-cyan-500/30 selection:text-cyan-200">
+        <PreAccessGate onUnlock={() => setIsPreAccessGranted(true)} />
+      </div>
+    );
+  }
+
+  // Step 2: Main Authentication & Test Credentials Selection via LoginModal
   if (!currentUser) {
     return (
       <div className="h-[100dvh] min-h-[100dvh] w-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-3 sm:p-4 overflow-y-auto selection:bg-cyan-500/30 selection:text-cyan-200">
-        <LoginModal onLoginSuccess={handleLoginSuccess} />
+        <LoginModal 
+          onLoginSuccess={handleLoginSuccess} 
+          onLockPreAccess={() => {
+            try {
+              sessionStorage.removeItem('joker80_preaccess_unlocked');
+              sessionStorage.removeItem('joker80_legal_accepted');
+            } catch (e) {
+              console.error(e);
+            }
+            setIsPreAccessGranted(false);
+          }}
+        />
       </div>
     );
   }
