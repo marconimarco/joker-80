@@ -192,7 +192,7 @@ export const PreAccessGate: React.FC<Props> = ({ onUnlock }) => {
                     }}
                     disabled={isSuccess}
                     required
-                    placeholder="Inserisci password (nicopol)..."
+                    placeholder="Inserisci la password di sicurezza..."
                     className={`w-full pl-3.5 pr-10 py-3 rounded-xl bg-slate-950 border font-mono text-sm text-white placeholder:text-slate-600 focus:outline-none transition-all ${
                       error 
                         ? 'border-rose-500 focus:border-rose-400 ring-1 ring-rose-500/30' 

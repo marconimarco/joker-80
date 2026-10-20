@@ -1191,33 +1191,21 @@ export const AdminControlPanel: React.FC<Props> = ({
             </button>
           </div>
 
-          {/* Seconda riga: Frequenza & Demoni (Linux / Mac / Win), Sicurezza mTLS & File .PFX */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 w-full">
+          {/* Seconda riga: Gateway Demoni (Linux / Mac / Win) con Sicurezza NIS2 Integrata */}
+          <div className="w-full">
             <button
               onClick={() => setActiveTab('daemon_frequency')}
-              className={`px-3 py-1.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all whitespace-nowrap min-h-[34px] ${
+              className={`w-full px-3 py-1.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all whitespace-nowrap min-h-[34px] cursor-pointer ${
                 activeTab === 'daemon_frequency'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
               <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-              <span>Frequenza & Demoni (Linux / Mac / Win)</span>
-              <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/20 text-blue-300 border border-blue-500/40">
-                Auto-Sync
+              <span>Gateway Demoni (Linux / Mac / Win) & Sicurezza NIS2</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                Certificati Inclusi
               </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('mtls')}
-              className={`px-3 py-1.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all whitespace-nowrap min-h-[34px] ${
-                activeTab === 'mtls'
-                  ? 'bg-amber-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-              }`}
-            >
-              <Lock className="w-3.5 h-3.5 shrink-0" />
-              <span>Sicurezza mTLS & File .PFX</span>
             </button>
           </div>
         </div>
@@ -3723,14 +3711,22 @@ export const AdminControlPanel: React.FC<Props> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <a
-                    href="/smile80_daemon.py"
+                    href="/api/daemon/download/python"
                     download="smile80_daemon.py"
                     className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Scarica smile80_daemon.py</span>
+                  </a>
+                  <a
+                    href={`/api/daemon/download/windows-bat?origin=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : '')}`}
+                    download="start_daemon_windows.bat"
+                    className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Scarica start_daemon_windows.bat</span>
                   </a>
                   <a
                     href="/send_telemetry_m2m.sh"
@@ -3790,7 +3786,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                         }`}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className={`w-2 h-2 rounded-full ${isAlarm ? 'bg-rose-500 animate-ping' : 'bg-emerald-400'}`} />
                             <strong className="text-white">{pkt.nomeMacchinario || 'Macchinario E80'}</strong>
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -3798,6 +3794,15 @@ export const AdminControlPanel: React.FC<Props> = ({
                             }`}>
                               {pkt.stato || 'ONLINE'}
                             </span>
+                            {pkt.isPhysicalPC ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                💻 PC FISICO
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-300 border border-blue-500/30">
+                                🧪 SIMULAZIONE
+                              </span>
+                            )}
                           </div>
 
                           <div className="text-[11px] text-slate-500 flex items-center gap-2">
