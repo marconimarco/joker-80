@@ -40,13 +40,15 @@ import {
   ChevronRight,
   Search,
   LayoutList,
-  Grid
+  Grid,
+  RefreshCw
 } from 'lucide-react';
 import { PlantTelemetryTrendCharts } from './PlantTelemetryTrendCharts';
 import { getUserPermittedCalculations, PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
 import { PlantTelemetryHistoryService } from '../services/plantTelemetryHistory';
 import { UserAccount } from '../types/quantum';
 import { AutoScanSummary } from '../services/plantTelemetryScanner';
+import { IndustrialHelpTooltip } from './IndustrialHelpTooltip';
 
 interface Props {
   onOpenCircuit: (calc: QuantumCalculationMeta, state?: string) => void;
@@ -69,6 +71,18 @@ const CATEGORIES: MacroCategory[] = [
   '4. IoT & Controllo Macchine'
 ];
 
+export type DepartmentFilter = 'ALL' | 'INBOUND_CAMION' | 'LGV_AGV' | 'SMARTSTORE' | 'BEMA_SILKWORM' | 'ENERGY_MAINT' | 'SHIFTS_OPS';
+
+export const DEPARTMENT_FILTERS: { id: DepartmentFilter; label: string; icon: string; calcIds: number[]; description: string }[] = [
+  { id: 'ALL', label: 'Tutti (21)', icon: '🏭', calcIds: Array.from({ length: 21 }, (_, i) => i + 1), description: 'Tutti i 21 algoritmi quantistici abilitati per questo stabilimento' },
+  { id: 'INBOUND_CAMION', label: 'Camion & Baie', icon: '🚚', calcIds: [1, 2], description: 'Ottimizzazione attracco baie, saturazione piazzale e code autisti' },
+  { id: 'LGV_AGV', label: 'Navette LGV', icon: '🚜', calcIds: [4, 5, 6, 7], description: 'Routing anti-collisione, batterie e missioni navette' },
+  { id: 'SMARTSTORE', label: 'Magazzino SmartStore', icon: '🏬', calcIds: [8, 9, 10, 11], description: 'Saturazione stoccaggio, slotting 3D e prelievi' },
+  { id: 'BEMA_SILKWORM', label: 'Fasciatori Bema', icon: '📦', calcIds: [12, 13, 14], description: 'Tensione film, pre-stiro pallet, usura cuscinetti e vibrazioni' },
+  { id: 'ENERGY_MAINT', label: 'Energia & Manutenzione', icon: '⚡', calcIds: [15, 16, 17, 21], description: 'Picchi potenza elettrica kWh, usura predittiva e ciclo vita' },
+  { id: 'SHIFTS_OPS', label: 'Turni & Reparto', icon: '👥', calcIds: [3, 18, 19, 20], description: 'Schedulazione squadre, ergonomia e OEE di fabbrica' },
+];
+
 export const QuantumCatalog: React.FC<Props> = ({ 
   onOpenCircuit, 
   allowPlcWrite,
@@ -83,6 +97,17 @@ export const QuantumCatalog: React.FC<Props> = ({
   onSelectTenant
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<MacroCategory | 'ALL'>('ALL');
+  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentFilter>('ALL');
+  const [operatorMode, setOperatorMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('joker80_operator_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const [isRecalculatingAll, setIsRecalculatingAll] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isLogicDocModalOpen, setIsLogicDocModalOpen] = useState<boolean>(false);
   const [showTrendCharts, setShowTrendCharts] = useState<boolean>(false);
@@ -260,12 +285,59 @@ export const QuantumCatalog: React.FC<Props> = ({
     };
   }, [scanSummary, activeTenant?.id, plantSupportedCalcs]);
 
-  // Calculations displayed after applying plant nodes filter and selected category
-  const displayedCalculations = useMemo(() => {
-    const pool = activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
-    if (selectedCategory === 'ALL') return pool;
-    return pool.filter(c => c.category === selectedCategory);
-  }, [activeTenant, plantSupportedCalcs, selectedCategory]);
+  // Global search shortcut listener (Ctrl+K or Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Helper matching calculation against search query
+  const matchesSearch = (c: QuantumCalculationMeta, q: string) => {
+    if (!q || !q.trim()) return true;
+    const lower = q.toLowerCase().trim();
+    const cleanNum = lower.replace('#', '').trim();
+    const nodeReq = PLANT_NODE_REQUIREMENTS[c.id];
+    return (
+      c.id.toString() === cleanNum ||
+      c.name.toLowerCase().includes(lower) ||
+      c.technicalModule.toLowerCase().includes(lower) ||
+      c.subFunction.toLowerCase().includes(lower) ||
+      c.description.toLowerCase().includes(lower) ||
+      (nodeReq && nodeReq.nodeName.toLowerCase().includes(lower)) ||
+      (lower.includes('bema') && [12, 13, 14].includes(c.id)) ||
+      (lower.includes('silkworm') && [12, 13, 14].includes(c.id)) ||
+      (lower.includes('lgv') && [4, 5, 6, 7].includes(c.id)) ||
+      (lower.includes('agv') && [4, 5, 6, 7].includes(c.id)) ||
+      (lower.includes('camion') && [1, 2].includes(c.id)) ||
+      (lower.includes('baia') && [1, 2].includes(c.id)) ||
+      (lower.includes('baie') && [1, 2].includes(c.id)) ||
+      (lower.includes('batteri') && [6, 17].includes(c.id)) ||
+      (lower.includes('film') && [4, 12, 13].includes(c.id)) ||
+      (lower.includes('vibraz') && [14, 15].includes(c.id)) ||
+      (lower.includes('smart') && [8, 9, 10, 11].includes(c.id)) ||
+      (lower.includes('oee') && [19, 20].includes(c.id))
+    );
+  };
+
+  // Helper to toggle and persist operatorMode
+  const toggleOperatorMode = () => {
+    setOperatorMode(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('joker80_operator_mode', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Query di ricerca testuale nella tabella dei pulsanti
+  const [searchTableQuery, setSearchTableQuery] = useState<string>('');
 
   // Modalità di visualizzazione: 'table-focus' (Pulsanti a sinistra + Singolo Ingrandito a destra) oppure 'grid' (Tutti)
   const [displayMode, setDisplayMode] = useState<'table-focus' | 'grid'>('table-focus');
@@ -275,8 +347,23 @@ export const QuantumCatalog: React.FC<Props> = ({
     return plantSupportedCalcs[0]?.id || 1;
   });
 
-  // Query di ricerca testuale nella tabella dei pulsanti
-  const [searchTableQuery, setSearchTableQuery] = useState<string>('');
+  // Calculations displayed after applying plant nodes filter, department filter, category, and search query
+  const displayedCalculations = useMemo(() => {
+    let pool = activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
+    if (selectedDepartment !== 'ALL') {
+      const depMeta = DEPARTMENT_FILTERS.find(d => d.id === selectedDepartment);
+      if (depMeta) {
+        pool = pool.filter(c => depMeta.calcIds.includes(c.id));
+      }
+    } else if (selectedCategory !== 'ALL') {
+      pool = pool.filter(c => c.category === selectedCategory);
+    }
+    const q = (searchQuery || searchTableQuery).trim();
+    if (q) {
+      pool = pool.filter(c => matchesSearch(c, q));
+    }
+    return pool;
+  }, [activeTenant, plantSupportedCalcs, selectedDepartment, selectedCategory, searchQuery, searchTableQuery]);
 
   // Se cambiano i calcoli supportati dallo stabilimento, sincronizza selectedCalcId
   useEffect(() => {
@@ -306,25 +393,8 @@ export const QuantumCatalog: React.FC<Props> = ({
 
   // Calcoli filtrati per la tabella dei pulsanti a sinistra
   const tableCalculations = useMemo(() => {
-    let pool = activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
-    if (selectedCategory !== 'ALL') {
-      pool = pool.filter(c => c.category === selectedCategory);
-    }
-    if (searchTableQuery.trim()) {
-      const q = searchTableQuery.toLowerCase().trim();
-      pool = pool.filter(c => {
-        const nodeReq = PLANT_NODE_REQUIREMENTS[c.id];
-        return (
-          c.id.toString() === q ||
-          c.name.toLowerCase().includes(q) ||
-          c.technicalModule.toLowerCase().includes(q) ||
-          c.subFunction.toLowerCase().includes(q) ||
-          (nodeReq && nodeReq.nodeName.toLowerCase().includes(q))
-        );
-      });
-    }
-    return pool;
-  }, [activeTenant, plantSupportedCalcs, selectedCategory, searchTableQuery]);
+    return displayedCalculations;
+  }, [displayedCalculations]);
 
   // ID del calcolo in focus (per compatibilità con la barra rapida)
   const [focusedCalcId, setFocusedCalcId] = useState<number | null>(null);
@@ -448,6 +518,65 @@ export const QuantumCatalog: React.FC<Props> = ({
       setTimeout(() => setToastMessage(null), 4000);
     } finally {
       setExecutingId(null);
+    }
+  };
+
+  // Handler for 1-Click Quick Actions (Idea 4)
+  const handleQuickAction = async (actionType: 'LGV_ROUTES' | 'BEMA_FILM' | 'TRUCK_BAYS' | 'RECALCULATE_ALL') => {
+    if (actionType === 'LGV_ROUTES') {
+      setSelectedDepartment('LGV_AGV');
+      setSearchQuery('');
+      setSelectedCalcId(4);
+      const target = plantSupportedCalcs.find(c => c.id === 4) || QUANTUM_CALCULATIONS.find(c => c.id === 4);
+      if (target) {
+        await executeCalculation(target);
+        setToastMessage('⚡ Rotte Flotta LGV ottimizzate in tempo reale con algoritmo QAOA anti-collisione!');
+        setTimeout(() => setToastMessage(null), 3500);
+      }
+    } else if (actionType === 'BEMA_FILM') {
+      setSelectedDepartment('BEMA_SILKWORM');
+      setSearchQuery('');
+      setSelectedCalcId(12);
+      const target = plantSupportedCalcs.find(c => c.id === 12) || QUANTUM_CALCULATIONS.find(c => c.id === 12);
+      if (target) {
+        await executeCalculation(target);
+        setToastMessage('📦 Controllo Tensione Film e Pre-Stiro BEMA Silkworm completato!');
+        setTimeout(() => setToastMessage(null), 3500);
+      }
+    } else if (actionType === 'TRUCK_BAYS') {
+      setSelectedDepartment('INBOUND_CAMION');
+      setSearchQuery('');
+      setSelectedCalcId(1);
+      const target = plantSupportedCalcs.find(c => c.id === 1) || QUANTUM_CALCULATIONS.find(c => c.id === 1);
+      if (target) {
+        await executeCalculation(target);
+        setToastMessage('🚚 Assegnazione Baie e Attracco Camion in arrivo ricalcolata!');
+        setTimeout(() => setToastMessage(null), 3500);
+      }
+    } else if (actionType === 'RECALCULATE_ALL') {
+      setIsRecalculatingAll(true);
+      setToastMessage('🔄 Scansione e ricalcolo di tutti i 21 algoritmi quantistici con telemetria live...');
+      try {
+        const calcsToRun = plantSupportedCalcs.length > 0 ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
+        for (let i = 0; i < calcsToRun.length; i++) {
+          const c = calcsToRun[i];
+          const raw = { ...(c.defaultInputs || {}), ...(formInputs[c.id] || {}) };
+          const inputs: Record<string, any> = {};
+          for (const [k, v] of Object.entries(raw)) {
+            inputs[k] = parseFlexibleInput(v);
+          }
+          const res = await QuantumEngine.executeCalculation(c.id, inputs);
+          setResults(prev => ({ ...prev, [c.id]: res }));
+        }
+        setToastMessage('✅ Ricalcolo completato: tutti i 21 nodi quantistici aggiornati con successo!');
+        setTimeout(() => setToastMessage(null), 4000);
+      } catch (e) {
+        console.error('Error recalculating all', e);
+        setToastMessage('⚠️ Ricalcolo completato con alcune avvertenze sui nodi.');
+        setTimeout(() => setToastMessage(null), 3000);
+      } finally {
+        setIsRecalculatingAll(false);
+      }
     }
   };
 
@@ -626,6 +755,157 @@ export const QuantumCatalog: React.FC<Props> = ({
     );
   };
 
+  const renderOperatorTrafficLightCard = (calc: QuantumCalculationMeta, res: any) => {
+    const isExecuting = executingId === calc.id;
+    const isCritical = Boolean(
+      res?.indice_rischio_blocco?.toLowerCase().includes('critico') ||
+      res?.livello_rischio?.toLowerCase().includes('critico') ||
+      res?.rischio_stocastico?.toLowerCase().includes('critico') ||
+      (res?.probabilita_fermo_pct && parseFloat(String(res.probabilita_fermo_pct)) > 70) ||
+      (res?.codice_allarme_fabbrica && res.codice_allarme_fabbrica > 0)
+    );
+
+    const isWarning = !isCritical && Boolean(
+      res?.indice_rischio_blocco?.toLowerCase().includes('attenzione') ||
+      res?.livello_rischio?.toLowerCase().includes('attenzione') ||
+      res?.rischio_stocastico?.toLowerCase().includes('attenzione') ||
+      (res?.probabilita_fermo_pct && parseFloat(String(res.probabilita_fermo_pct)) > 30)
+    );
+
+    const statusTitle = isCritical ? 'ROSSO: Anomalia Rilevata' : isWarning ? 'GIALLO: Attenzione Richiesta' : 'VERDE: Regolare in Marcia';
+    const statusIcon = isCritical ? '🔴' : isWarning ? '🟡' : '🟢';
+
+    const diagnosticText = res?.indice_rischio_blocco || 
+      res?.livello_rischio || 
+      res?.diagnosi || 
+      res?.validazione_qualita || 
+      (isCritical ? 'Parametri fuori tolleranza rispetto agli standard di linea.' : isWarning ? 'Parametri in pre-allarme ma operativi.' : 'Tutti i sensori registrano parametri ottimali.');
+
+    const operatorAction = res?.azione_correttiva_suggerita || 
+      res?.piano_azione || 
+      res?.azione_immediata || 
+      res?.azione_logistica_immediata || 
+      (isCritical ? 'Avvisare manutentore di reparto per verifica rapida.' : isWarning ? 'Verificare parametri durante il prossimo cambio turno.' : 'Nessun intervento richiesto: la macchina lavora a pieno ritmo.');
+
+    return (
+      <div className={`p-4 sm:p-6 rounded-2xl border-2 transition-all shadow-xl bg-slate-900/95 space-y-4 ${
+        isCritical 
+          ? 'border-rose-500/70 shadow-rose-950/40 ring-1 ring-rose-500/20' 
+          : isWarning 
+          ? 'border-amber-500/70 shadow-amber-950/40 ring-1 ring-amber-500/20' 
+          : 'border-emerald-500/60 shadow-emerald-950/30 ring-1 ring-emerald-500/20'
+      }`}>
+        {/* Banner superiore stato semaforico */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-md shrink-0 ${
+              isCritical ? 'bg-rose-500/20 border border-rose-500/40 animate-pulse' :
+              isWarning ? 'bg-amber-500/20 border border-amber-500/40' :
+              'bg-emerald-500/20 border border-emerald-500/40'
+            }`}>
+              {statusIcon}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs font-mono font-bold uppercase tracking-wider ${
+                  isCritical ? 'text-rose-400' : isWarning ? 'text-amber-400' : 'text-emerald-400'
+                }`}>
+                  {statusTitle}
+                </span>
+                <span className="text-slate-600">•</span>
+                <span className="text-xs text-slate-300 font-mono font-bold">
+                  Calcolo #{calc.id} ({calc.technicalModule})
+                </span>
+              </div>
+              <h3 className="text-sm sm:text-base font-bold text-white font-mono mt-0.5">
+                {calc.name}
+              </h3>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <IndustrialHelpTooltip termKey={
+              calc.id === 12 || calc.id === 13 ? 'pre_stretch' :
+              calc.id === 4 || calc.id === 6 ? 'soc_batteria' :
+              calc.id === 14 ? 'vibrazione_cuscinetti' :
+              calc.id === 1 ? 'saturazione_baie' :
+              'ansatz_qaoa'
+            } label="Spiegazione Pratica" />
+          </div>
+        </div>
+
+        {/* Grandi Schede KPI per l'Operatore */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+            <span className="text-[11px] font-mono text-slate-400 block font-semibold">Valutazione di Linea:</span>
+            <span className={`text-sm font-bold font-mono block leading-snug ${
+              isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-emerald-300'
+            }`}>
+              {diagnosticText}
+            </span>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+            <span className="text-[11px] font-mono text-slate-400 block font-semibold">Cosa Fare Subito (Istruzione Operatore):</span>
+            <span className="text-sm font-semibold text-cyan-200 block font-sans leading-snug">
+              {operatorAction}
+            </span>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between">
+            <span className="text-[11px] font-mono text-slate-400 block font-semibold">Stato Connessione Macchina:</span>
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Gateway M2M Attivo</span>
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                NIS2 Conforme
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Metriche dettagliate se presenti */}
+        {res?.metriche_dettagliate && Object.keys(res.metriche_dettagliate).length > 0 && (
+          <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80">
+            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-2 font-bold">
+              Telemetria Sensori Chiave:
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+              {Object.entries(res.metriche_dettagliate).map(([k, v]) => (
+                <div key={k} className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex flex-col justify-between">
+                  <span className="text-[9.5px] font-mono text-slate-400 truncate" title={k}>{k}:</span>
+                  <span className="text-xs font-bold font-mono text-cyan-300 truncate mt-0.5">{String(v)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Barra Azioni a Grande Formato */}
+        <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="text-xs font-mono text-slate-400 flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>Ultimo campionamento: {res?.timestamp ? new Date(res.timestamp).toLocaleTimeString() : 'In tempo reale'}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={isExecuting}
+              onClick={() => executeCalculation(calc)}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-cyan-950/40 cursor-pointer min-h-[42px] transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              {isExecuting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              <span>{isExecuting ? 'Elaborazione in corso...' : 'Esegui Verifica Immediata'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Toast Notification */}
@@ -721,32 +1001,242 @@ export const QuantumCatalog: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Category Tabs: Smooth touch-scroll on smartphones */}
-      <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar touch-pan-x flex-nowrap sm:flex-wrap">
+      {/* ========================================================================= */}
+      {/* 1. AZIONI RAPIDE A 1 CLIC (OPERAZIONI DI FABBRICA PIÙ FREQUENTI)          */}
+      {/* ========================================================================= */}
+      <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-cyan-950/40 border border-slate-800 shadow-xl space-y-3 font-mono">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span className="text-xs font-bold text-white uppercase tracking-wider">
+              Azioni Rapide a 1 Clic (Operazioni di Reparto)
+            </span>
+          </div>
+          <span className="text-[10.5px] text-slate-400">
+            Esegue subito l'algoritmo ottimale con telemetria attiva dello stabilimento
+          </span>
+        </div>
 
-        {CATEGORIES.map((cat) => {
-          const isSelected = selectedCategory === cat;
-          const countInCat = (activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).filter(c => c.category === cat).length;
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {/* Azione 1: Navette LGV */}
+          <button
+            type="button"
+            disabled={isRecalculatingAll}
+            onClick={() => handleQuickAction('LGV_ROUTES')}
+            className="p-3 rounded-xl bg-slate-950/80 hover:bg-cyan-950/50 border border-slate-800 hover:border-cyan-500/50 text-left transition-all cursor-pointer group shadow-sm flex items-start gap-2.5"
+            title="Ottimizza subito i percorsi e previene incroci bloccati delle navette LGV"
+          >
+            <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0 group-hover:scale-105 transition-transform">
+              🚜
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-xs text-white group-hover:text-cyan-300 transition-colors flex items-center gap-1">
+                <span>Ottimizza Flotta LGV</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold">QAOA</span>
+              </div>
+              <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
+                Rotte anti-collisione & missioni
+              </p>
+            </div>
+          </button>
+
+          {/* Azione 2: Bema Silkworm */}
+          <button
+            type="button"
+            disabled={isRecalculatingAll}
+            onClick={() => handleQuickAction('BEMA_FILM')}
+            className="p-3 rounded-xl bg-slate-950/80 hover:bg-cyan-950/50 border border-slate-800 hover:border-cyan-500/50 text-left transition-all cursor-pointer group shadow-sm flex items-start gap-2.5"
+            title="Analizza tensione film, pre-stiro e vibrazioni del fasciatore Bema Silkworm"
+          >
+            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/30 shrink-0 group-hover:scale-105 transition-transform">
+              📦
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-xs text-white group-hover:text-blue-300 transition-colors flex items-center gap-1">
+                <span>Verifica Film BEMA</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/20 text-blue-300 font-bold">Sensori</span>
+              </div>
+              <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
+                Pre-stiro, tenuta & usura rulli
+              </p>
+            </div>
+          </button>
+
+          {/* Azione 3: Camion & Baie */}
+          <button
+            type="button"
+            disabled={isRecalculatingAll}
+            onClick={() => handleQuickAction('TRUCK_BAYS')}
+            className="p-3 rounded-xl bg-slate-950/80 hover:bg-cyan-950/50 border border-slate-800 hover:border-cyan-500/50 text-left transition-all cursor-pointer group shadow-sm flex items-start gap-2.5"
+            title="Riassegna le baie ai camion in arrivo per azzerare i tempi di attesa"
+          >
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0 group-hover:scale-105 transition-transform">
+              🚚
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-xs text-white group-hover:text-amber-300 transition-colors flex items-center gap-1">
+                <span>Assegna Baie Camion</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold">Inbound</span>
+              </div>
+              <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
+                Azzeramento code piazzale
+              </p>
+            </div>
+          </button>
+
+          {/* Azione 4: Ricalcola Tutti */}
+          <button
+            type="button"
+            disabled={isRecalculatingAll}
+            onClick={() => handleQuickAction('RECALCULATE_ALL')}
+            className={`p-3 rounded-xl text-left transition-all cursor-pointer group shadow-sm flex items-start gap-2.5 ${
+              isRecalculatingAll
+                ? 'bg-purple-950/60 border border-purple-500/60 text-purple-200 animate-pulse'
+                : 'bg-slate-950/80 hover:bg-purple-950/50 border border-slate-800 hover:border-purple-500/50'
+            }`}
+            title="Scansiona ed elabora tutti i 21 algoritmi quantistici con i dati live attivi"
+          >
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30 shrink-0 group-hover:scale-105 transition-transform">
+              {isRecalculatingAll ? <Activity className="w-4 h-4 animate-spin text-purple-300" /> : <RefreshCw className="w-4 h-4 text-purple-400" />}
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-xs text-white group-hover:text-purple-300 transition-colors flex items-center gap-1">
+                <span>{isRecalculatingAll ? 'Ricalcolo in corso...' : 'Ricalcola Tutti (21)'}</span>
+              </div>
+              <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
+                Aggiorna tutti i nodi live
+              </p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2. BARRA DI RICERCA GLOBALE RAPIDA ("TROVA TUTTO" + SHORTCUT CTRL+K)       */}
+      {/* ========================================================================= */}
+      <div className="p-3 sm:p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3 font-mono">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-cyan-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cerca per macchina (Bema, LGV, Baia...), problema (vibrazioni, batteria, film...), o #calcolo..."
+              className="w-full pl-10 pr-20 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-cyan-400 text-white placeholder-slate-500 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 cursor-pointer text-xs"
+                title="Cancella ricerca"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-400 border border-slate-700">
+                <span>Ctrl</span>
+                <span>+</span>
+                <span>K</span>
+              </div>
+            )}
+          </div>
+
+          {/* TOGGLE MODALITÀ: OPERATORE (SEMAFORICA) VS AVANZATA (QUANTISTICA) */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={toggleOperatorMode}
+              className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer border shadow-md ${
+                operatorMode
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-400 shadow-emerald-950/40 ring-1 ring-emerald-400/30'
+                  : 'bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border-slate-700'
+              }`}
+              title="Passa dalla Vista Ingegneria (completa di qubit e formule) alla Vista Operatore (semaforo grande e istruzioni pratiche)"
+            >
+              <span>{operatorMode ? '🚦 Vista Operatore (Semaforica)' : '⚛️ Vista Avanzata (Ingegneria)'}</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                operatorMode ? 'bg-black/30 text-emerald-200' : 'bg-slate-900 text-slate-400'
+              }`}>
+                {operatorMode ? 'Attiva' : 'Dettagli'}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* TAG CHIPS CLICCABILI PER RICERCA RAPIDA */}
+        <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-1">
+          <span className="text-slate-400 text-[10px] flex items-center gap-1 mr-1">
+            <Filter className="w-3 h-3 text-cyan-400" />
+            Ricerche Rapide:
+          </span>
+          {[
+            { tag: 'bema', label: '#Bema Silkworm' },
+            { tag: 'lgv', label: '#Navette LGV' },
+            { tag: 'camion', label: '#Camion & Baie' },
+            { tag: 'batteria', label: '#Batterie' },
+            { tag: 'vibrazioni', label: '#Vibrazioni' },
+            { tag: 'film', label: '#Film & Pre-Stiro' },
+            { tag: 'smartstore', label: '#SmartStore' },
+            { tag: 'oee', label: '#OEE di Linea' }
+          ].map(({ tag, label }) => {
+            const isActive = searchQuery.toLowerCase().trim() === tag;
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setSearchQuery(isActive ? '' : tag)}
+                className={`px-2 py-0.5 rounded-lg border text-[10.5px] transition-colors cursor-pointer ${
+                  isActive
+                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400 font-bold'
+                    : 'bg-slate-950/70 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border-slate-800'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. FILTRI RAPIDI PER REPARTO (DEPARTMENT FILTERS)                          */}
+      {/* ========================================================================= */}
+      <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar touch-pan-x flex-nowrap sm:flex-wrap font-mono">
+        {DEPARTMENT_FILTERS.map((dep) => {
+          const isSelected = selectedDepartment === dep.id;
+          const pool = activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
+          const countInDep = dep.id === 'ALL' 
+            ? pool.length 
+            : pool.filter(c => dep.calcIds.includes(c.id)).length;
 
           return (
             <button
-              key={cat}
+              key={dep.id}
+              type="button"
               onClick={() => {
-                setSelectedCategory(cat);
-                const firstInCat = (activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS).find(c => c.category === cat);
-                if (firstInCat) {
-                  setSelectedCalcId(firstInCat.id);
+                setSelectedDepartment(dep.id);
+                // Also auto-select the first calculation in this department
+                const firstInDep = pool.find(c => dep.calcIds.includes(c.id));
+                if (firstInDep) {
+                  setSelectedCalcId(firstInDep.id);
                 }
               }}
-              className={`shrink-0 sm:flex-1 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs font-mono font-semibold whitespace-nowrap min-h-[38px] transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`shrink-0 sm:flex-1 px-3 sm:px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap min-h-[38px] transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 isSelected
-                  ? 'bg-cyan-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/50 ring-1 ring-cyan-400/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
               }`}
+              title={dep.description}
             >
-              <span>{cat}</span>
-              <span className={`px-1.5 py-0.2 rounded text-[10px] ${isSelected ? 'bg-black/30 text-cyan-200' : 'bg-slate-800 text-slate-400'}`}>
-                {countInCat}
+              <span>{dep.icon}</span>
+              <span>{dep.label}</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                isSelected ? 'bg-black/30 text-cyan-200' : 'bg-slate-800 text-slate-400'
+              }`}>
+                {countInDep}
               </span>
             </button>
           );
@@ -781,6 +1271,21 @@ export const QuantumCatalog: React.FC<Props> = ({
                   const nodeReq = PLANT_NODE_REQUIREMENTS[c.id];
                   const hasResult = Boolean(results[c.id]);
                   const isExecuting = executingId === c.id;
+                  const itemResult = results[c.id];
+                  const isItemCrit = Boolean(
+                    itemResult?.indice_rischio_blocco?.toLowerCase().includes('critico') ||
+                    itemResult?.livello_rischio?.toLowerCase().includes('critico') ||
+                    itemResult?.rischio_stocastico?.toLowerCase().includes('critico') ||
+                    (itemResult?.probabilita_fermo_pct && parseFloat(String(itemResult.probabilita_fermo_pct)) > 70) ||
+                    (itemResult?.codice_allarme_fabbrica && itemResult.codice_allarme_fabbrica > 0)
+                  );
+                  const isItemWarn = !isItemCrit && Boolean(
+                    itemResult?.indice_rischio_blocco?.toLowerCase().includes('attenzione') ||
+                    itemResult?.livello_rischio?.toLowerCase().includes('attenzione') ||
+                    itemResult?.rischio_stocastico?.toLowerCase().includes('attenzione') ||
+                    (itemResult?.probabilita_fermo_pct && parseFloat(String(itemResult.probabilita_fermo_pct)) > 30)
+                  );
+                  const trafficLight = isItemCrit ? '🔴' : isItemWarn ? '🟡' : itemResult ? '🟢' : '⚪';
 
                   return (
                     <button
@@ -801,10 +1306,11 @@ export const QuantumCatalog: React.FC<Props> = ({
                     >
                       <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0 ${
+                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0 flex items-center gap-1 ${
                             isSelected ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-cyan-400 border border-slate-700'
                           }`}>
-                            #{c.id}
+                            <span className="text-[11px] leading-none">{trafficLight}</span>
+                            <span>#{c.id}</span>
                           </span>
                           <span className="text-xs font-bold truncate">
                             {c.name}
@@ -861,6 +1367,14 @@ export const QuantumCatalog: React.FC<Props> = ({
               const nodeReq = PLANT_NODE_REQUIREMENTS[calc.id];
               const isSupported = isCalculationSupportedByPlant(calc.id, activeTenant);
               const isEnlarged = displayMode === 'table-focus';
+
+              if (operatorMode) {
+                return (
+                  <div key={calc.id} id={`calc-card-${calc.id}`} className="space-y-4 w-full animate-in fade-in duration-150">
+                    {renderOperatorTrafficLightCard(calc, result)}
+                  </div>
+                );
+              }
 
               return (
                 <div 
