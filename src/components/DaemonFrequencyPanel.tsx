@@ -27,7 +27,8 @@ import {
   WifiOff,
   Globe,
   Signal,
-  CheckCircle
+  CheckCircle,
+  Lock
 } from 'lucide-react';
 import { FactoryTenant, UserAccount } from '../types/quantum';
 
@@ -68,6 +69,8 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
   const [browserSimCount, setBrowserSimCount] = useState<number>(0);
 
   const serverOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const isOperator = currentUser.ruolo === 'Operatore di Linea' || currentUser.ruolo?.toLowerCase().includes('operatore');
+  const isManagerOrAdmin = currentUser.ruolo === 'Amministratore' || currentUser.ruolo === 'Responsabile di Stabilimento';
 
   // Function to query active hardware client connection status
   const fetchGatewayStatus = React.useCallback(() => {
@@ -273,6 +276,7 @@ import time
 import socket
 import platform
 import json
+import uuid
 import requests
 
 print("==============================================================================")
@@ -281,7 +285,7 @@ print("  Modulo di Telemetria Hardware per PC di Stabilimento Elettric80")
 print("==============================================================================")
 
 SERVER_URL = os.environ.get("JOKER80_URL", "${serverOrigin}")
-GATEWAY_KEY = os.environ.get("INDUSTRIAL_GATEWAY_KEY", "${activeTenant.id || 'JOKER80-NIS2-PEDRIGNANO-GW-2026'}")
+GATEWAY_KEY = os.environ.get("INDUSTRIAL_GATEWAY_KEY", "${activeTenant.wmsApiKey || `JOKER80-NIS2-${(activeTenant.id || 'PEDRIGNANO').toUpperCase()}-GW-2026`}")
 PLANT_NAME = os.environ.get("PLANT_NAME", "${activeTenant.nome}")
 PLANT_ID = os.environ.get("PLANT_ID", "${activeTenant.id}")
 INTERVAL_SEC = float(os.environ.get("TELEMETRY_INTERVAL_SEC", "${totalSeconds}"))
@@ -293,9 +297,33 @@ REAL_OS = os.environ.get("REAL_OS") or f"{platform.system()} {platform.release()
 REAL_ARCH = platform.machine() or "x64"
 PY_VER = f"Python {platform.python_version()}"
 
-# Cartella Spool per scambio file dati macchine con SM.I.LE80 o PLC
-SPOOL_DIR = os.environ.get("SPOOL_DIR") or os.path.join(os.getcwd(), "spool")
+def ottieni_mac_address():
+    try:
+        node = uuid.getnode()
+        mac_hex = '{:012x}'.format(node)
+        return ':'.join(mac_hex[i:i+2] for i in range(0, 12, 2)).upper()
+    except Exception:
+        return '00:00:00:00:00:00'
+
+REAL_MAC = ottieni_mac_address()
+
+# Cartelle Dati Locali e di Rete (Spool & Network Share)
+# Windows: C:\\JOKER80\\spool\\ e UNC \\\\server-stabilimento\\e80_export\\
+# Linux: /opt/smile80-daemon/spool/ e /mnt/server-stabilimento/e80_export/
+# macOS: ~/smile80-daemon/spool/ e /Volumes/e80_export/
+SPOOL_DIR = os.environ.get("SPOOL_DIR") or (
+    "C:\\\\JOKER80\\\\spool" if platform.system() == "Windows"
+    else os.path.expanduser("~/smile80-daemon/spool") if platform.system() == "Darwin"
+    else "/opt/smile80-daemon/spool"
+)
 os.makedirs(SPOOL_DIR, exist_ok=True)
+
+NETWORK_SHARE_DIR = os.environ.get("NETWORK_SHARE_DIR") or (
+    r"\\\\server-stabilimento\\e80_export" if platform.system() == "Windows"
+    else "/Volumes/e80_export" if platform.system() == "Darwin"
+    else "/mnt/server-stabilimento/e80_export"
+)
+
 SAMPLE_FILE = os.path.join(SPOOL_DIR, "esempio_dati_macchine.json")
 if not os.path.exists(SAMPLE_FILE):
     try:
@@ -330,9 +358,11 @@ if not os.path.exists(SAMPLE_FILE):
 
 print(f"  Stabilimento:  {PLANT_NAME}")
 print(f"  PC Hostname:   {REAL_HOST}")
+print(f"  MAC Address:   {REAL_MAC}")
 print(f"  Sistema:       {REAL_OS} ({REAL_ARCH})")
 print(f"  Runtime:       {PY_VER}")
-print(f"  Cartella Dati: {SPOOL_DIR}")
+print(f"  Spool Locale:  {SPOOL_DIR}")
+print(f"  Rete Export:   {NETWORK_SHARE_DIR}")
 print(f"  Destinazione:  {PUSH_ENDPOINT}")
 print(f"  Intervallo:    {INTERVAL_SEC} secondi")
 print("==============================================================================\\n")
@@ -342,17 +372,23 @@ def invia_handshake():
         "clientType": "PHYSICAL_PC_DAEMON",
         "isPhysicalPC": True,
         "hostname": REAL_HOST,
+        "macAddress": REAL_MAC,
         "os": REAL_OS,
         "plantId": PLANT_ID,
         "plantName": PLANT_NAME,
+        "spoolPath": SPOOL_DIR,
+        "networkSharePath": NETWORK_SHARE_DIR,
         "nodeMetadata": {
             "hostname": REAL_HOST,
+            "macAddress": REAL_MAC,
             "os": f"Windows IPC ({REAL_OS})" if "Windows" in REAL_OS else REAL_OS,
             "arch": REAL_ARCH,
             "pythonVersion": PY_VER,
             "clientType": "PHYSICAL_PC_DAEMON",
             "plantId": PLANT_ID,
-            "plantName": PLANT_NAME
+            "plantName": PLANT_NAME,
+            "spoolPath": SPOOL_DIR,
+            "networkSharePath": NETWORK_SHARE_DIR
         }
     }
     headers = {
@@ -374,29 +410,36 @@ def invia_handshake():
                     srv_msg = data["message"]
             except Exception:
                 pass
-            print(f"[{t_str}] [HANDSHAKE OK 200] PC '{REAL_HOST}' CONNESSO E RICONOSCIUTO AL CLOUD JOKER 80!")
+            print(f"[{t_str}] [HANDSHAKE OK 200] PC '{REAL_HOST}' (MAC: {REAL_MAC}) RICONOSCIUTO AL CLOUD JOKER 80!")
         else:
             print(f"[{t_str}] Risposta Handshake Server: HTTP {res.status_code}")
     except Exception as e:
         print(f"[AVVISO] Handshake iniziale non riuscito: {e}")
 
 def invia_telemetria(ciclo=1):
+    global INTERVAL_SEC
     t_str = time.strftime("%H:%M:%S")
 
-    # Controlla presenza file con dati reali delle macchine nella cartella spool
+    # Scansione file dati reali: prima spool locale, poi cartella di rete
     fonte_dati = "Diagnostica Hardware"
     custom_data = None
-    for nome_f in ["dati_macchine.json", "plant_telemetry.json", "bema_status.json"]:
-        p = os.path.join(SPOOL_DIR, nome_f)
-        if os.path.exists(p):
-            try:
-                with open(p, "r", encoding="utf-8") as f_in:
-                    custom_data = json.load(f_in)
-                    if isinstance(custom_data, dict):
-                        fonte_dati = f"File Spool ({nome_f})"
-                        break
-            except Exception:
-                pass
+    candidati = ["dati_macchine.json", "plant_telemetry.json", "bema_status.json", "e80_export.json"]
+    for dir_path in [SPOOL_DIR, NETWORK_SHARE_DIR]:
+        if not os.path.exists(dir_path):
+            continue
+        for nome_f in candidati:
+            p = os.path.join(dir_path, nome_f)
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f_in:
+                        custom_data = json.load(f_in)
+                        if isinstance(custom_data, dict):
+                            fonte_dati = f"{nome_f} [{dir_path}]"
+                            break
+                except Exception:
+                    pass
+        if custom_data:
+            break
 
     rpm = round(34.2 + ((ciclo * 0.3) % 2.5), 1)
     temp = round(51.4 + ((ciclo * 0.2) % 3.0), 1)
@@ -407,22 +450,28 @@ def invia_telemetria(ciclo=1):
         "clientType": "PHYSICAL_PC_DAEMON",
         "isPhysicalPC": True,
         "gateway_key": GATEWAY_KEY,
+        "macAddress": REAL_MAC,
         "plantId": PLANT_ID,
         "plantName": PLANT_NAME,
+        "spoolPath": SPOOL_DIR,
+        "networkSharePath": NETWORK_SHARE_DIR,
         "macchinarioId": "bema-silkworm-01",
         "nomeMacchinario": f"Fasciatore BEMA Silkworm ({PLANT_NAME})",
         "tipoMacchina": "BEMA_FASCIATORE",
         "stato": "IN_MARCIA",
         "timestamp": time.time(),
-        "info": f"PC: {REAL_HOST} - {REAL_OS} M2M [{fonte_dati}]",
+        "info": f"PC: {REAL_HOST} [MAC: {REAL_MAC}] - {REAL_OS} M2M [{fonte_dati}]",
         "nodeMetadata": {
             "hostname": REAL_HOST,
+            "macAddress": REAL_MAC,
             "os": f"Windows IPC ({REAL_OS})" if "Windows" in REAL_OS else REAL_OS,
-            "system": "Windows",
+            "system": platform.system(),
             "arch": REAL_ARCH,
             "pythonVersion": PY_VER,
             "ciclo": ciclo,
-            "fonteDati": fonte_dati
+            "fonteDati": fonte_dati,
+            "plantId": PLANT_ID,
+            "plantName": PLANT_NAME
         },
         "parametri": {
             "velocitaRotazioneRpm": rpm,
@@ -432,7 +481,8 @@ def invia_telemetria(ciclo=1):
             "pressioneAriaBar": 6.2,
             "tensioneFilmPreStiroPct": 295,
             "cadenzaConfigurataSec": INTERVAL_SEC,
-            "pcHostSorgente": REAL_HOST
+            "pcHostSorgente": REAL_HOST,
+            "macAddress": REAL_MAC
         },
         "lgv": {
             "id": "LGV-04",
@@ -480,8 +530,15 @@ def invia_telemetria(ciclo=1):
             pkt_id = f"pkt-{int(time.time())}"
             try:
                 data = res.json()
-                if isinstance(data, dict) and "packetId" in data:
-                    pkt_id = data["packetId"]
+                if isinstance(data, dict):
+                    if "packetId" in data:
+                        pkt_id = data["packetId"]
+                    # Sincronizzazione dinamica automatica della frequenza inviata dal cloud
+                    if "configuredIntervalSec" in data:
+                        nuovo_sec = float(data["configuredIntervalSec"])
+                        if nuovo_sec > 0 and abs(nuovo_sec - INTERVAL_SEC) > 0.01:
+                            print(f"[{t_str}] [SINCRONIZZAZIONE CADENZA] Nuova frequenza cloud applicata in tempo reale: {nuovo_sec}s")
+                            INTERVAL_SEC = nuovo_sec
             except Exception:
                 pass
             print(f"[{t_str}] [OK 200] Pacchetto #{ciclo} inviato (Lat: {ms}ms) | Fonte: {fonte_dati} | BEMA: {rpm} RPM, {temp}°C | ID: {pkt_id}")
@@ -522,7 +579,7 @@ ExecStart=/opt/smile80-daemon/venv/bin/python3 /opt/smile80-daemon/smile80_daemo
 Restart=always
 RestartSec=5
 Environment=JOKER80_URL=${serverOrigin}
-Environment=INDUSTRIAL_GATEWAY_KEY=${activeTenant.id || 'JOKER80-NIS2-PEDRIGNANO-GW-2026'}
+Environment=INDUSTRIAL_GATEWAY_KEY=${activeTenant.wmsApiKey || `JOKER80-NIS2-${(activeTenant.id || 'PEDRIGNANO').toUpperCase()}-GW-2026`}
 Environment=PLANT_NAME=${activeTenant.nome}
 Environment=PLANT_ID=${activeTenant.id}
 Environment=TELEMETRY_INTERVAL_SEC=${totalSeconds}
@@ -549,7 +606,7 @@ WantedBy=multi-user.target`;
         <key>JOKER80_URL</key>
         <string>${serverOrigin}</string>
         <key>INDUSTRIAL_GATEWAY_KEY</key>
-        <string>${activeTenant.id || 'JOKER80-NIS2-PEDRIGNANO-GW-2026'}</string>
+        <string>${activeTenant.wmsApiKey || `JOKER80-NIS2-${(activeTenant.id || 'PEDRIGNANO').toUpperCase()}-GW-2026`}</string>
         <key>PLANT_NAME</key>
         <string>${activeTenant.nome}</string>
         <key>PLANT_ID</key>
@@ -655,7 +712,7 @@ echo ===========================================================================
 echo.
 
 set "JOKER80_URL=${serverOrigin}"
-set "INDUSTRIAL_GATEWAY_KEY=${activeTenant.id || 'JOKER80-NIS2-PEDRIGNANO-GW-2026'}"
+set "INDUSTRIAL_GATEWAY_KEY=${activeTenant.wmsApiKey || `JOKER80-NIS2-${(activeTenant.id || 'PEDRIGNANO').toUpperCase()}-GW-2026`}"
 set "TELEMETRY_INTERVAL_SEC=${totalSeconds}"
 set "PYTHONUNBUFFERED=1"
 
@@ -843,6 +900,18 @@ services:
                 <span className="text-cyan-400 text-[11px]">Totale calcolato: {totalSeconds} secondi</span>
               </label>
 
+              {isOperator && (
+                <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/40 text-xs font-mono flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold text-amber-300">Accesso Sola Lettura (Operatore di Linea)</div>
+                    <p className="text-[11px] text-slate-300 font-sans leading-relaxed">
+                      In conformità alle direttive di sicurezza industriale NIS2, la modifica della frequenza di campionamento e il download dei file demone di sistema (.BAT, .SH, .PY) sono riservati al <strong>Responsabile di Stabilimento</strong> e all'<strong>Amministratore</strong>. Come operatore puoi consultare i 21 calcoli e i dati telemetrici live in tempo reale.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Valore Numerico */}
                 <div className="space-y-1.5">
@@ -850,8 +919,9 @@ services:
                   <div className="flex items-center">
                     <button
                       type="button"
+                      disabled={isOperator}
                       onClick={() => setFrequencyValue(prev => Math.max(1, prev - 1))}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-l-xl font-mono font-bold text-sm cursor-pointer min-h-[42px]"
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 rounded-l-xl font-mono font-bold text-sm cursor-pointer disabled:cursor-not-allowed min-h-[42px]"
                       title="Diminuisci"
                     >
                       -
@@ -860,14 +930,16 @@ services:
                       type="number"
                       min="1"
                       max="9999"
+                      disabled={isOperator}
                       value={frequencyValue}
                       onChange={(e) => setFrequencyValue(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      className="w-full text-center py-2 bg-slate-900 border-y border-slate-700 text-white font-mono font-bold text-base focus:outline-none focus:border-cyan-500 min-h-[42px]"
+                      className="w-full text-center py-2 bg-slate-900 border-y border-slate-700 text-white font-mono font-bold text-base focus:outline-none focus:border-cyan-500 disabled:opacity-60 min-h-[42px]"
                     />
                     <button
                       type="button"
+                      disabled={isOperator}
                       onClick={() => setFrequencyValue(prev => prev + 1)}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-r-xl font-mono font-bold text-sm cursor-pointer min-h-[42px]"
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 rounded-r-xl font-mono font-bold text-sm cursor-pointer disabled:cursor-not-allowed min-h-[42px]"
                       title="Aumenta"
                     >
                       +
@@ -879,9 +951,10 @@ services:
                 <div className="space-y-1.5">
                   <span className="text-[11px] font-mono text-slate-400">Unità di tempo:</span>
                   <select
+                    disabled={isOperator}
                     value={frequencyUnit}
                     onChange={(e) => setFrequencyUnit(e.target.value as FrequencyUnit)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-xs focus:outline-none focus:border-cyan-500 cursor-pointer min-h-[42px]"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-xs focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[42px]"
                   >
                     <option value="seconds">Secondi (Alta Frequenza)</option>
                     <option value="minutes">Minuti (Cadenza Standard)</option>
@@ -891,26 +964,38 @@ services:
                 </div>
               </div>
 
-              {/* Pulsante di Salvataggio */}
+              {/* Pulsante di Salvataggio e Info Propagazione */}
               <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => handleSaveConfig()}
-                  disabled={isSaving}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50 min-h-[44px]"
+                  disabled={isSaving || isOperator}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                 >
                   {isSaving ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  <span>Salva e Applica Frequenza</span>
+                  <span>{isOperator ? 'Modifica Riservata ai Responsabili' : 'Salva e Applica Frequenza'}</span>
                 </button>
 
                 <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                   <span>Sincronizzazione automatica M2M (Zero Downtime)</span>
                 </div>
+              </div>
+
+              {/* Box Spiegazione Propagazione Frequenza */}
+              <div className="p-3 rounded-xl bg-cyan-950/20 border border-cyan-500/30 text-xs font-mono space-y-1.5">
+                <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                  <Activity className="w-4 h-4 text-cyan-400" />
+                  <span>Propagazione Dinamica al File .BAT, Python e ai PC Attivi ({totalSeconds}s)</span>
+                </div>
+                <p className="text-[11px] text-slate-300 font-sans leading-relaxed">
+                  ✓ <strong>Nei file scaricabili (.BAT, .PY, .SH):</strong> La frequenza di <span className="text-cyan-300 font-bold font-mono">{frequencyValue} {frequencyUnit} ({totalSeconds}s)</span> viene inserita in tempo reale nel codice sorgente dei file generati per questo stabilimento.<br />
+                  ✓ <strong>Sui PC già attivi in fabbrica:</strong> Non è necessario riscaricare il file! Il demone Python riceve la cadenza configurata nel pacchetto di risposta cloud e si sincronizza a caldo in automatico.
+                </p>
               </div>
 
               {/* Feedback Alert */}
@@ -1790,8 +1875,8 @@ python smile80_daemon.py
           </div>
         )}
 
-        {/* SCHEDE DIAGNOSTICHE DETTAGLIATE HARDWARE PC */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* SCHEDE DIAGNOSTICHE DETTAGLIATE HARDWARE PC (6 CARDS) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {/* Card 1: Computer Hostname */}
           <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
             <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
@@ -1808,7 +1893,38 @@ python smile80_daemon.py
             </span>
           </div>
 
-          {/* Card 2: Sistema Operativo Reale */}
+          {/* Card 2: MAC Address Hardware & Stabilimento */}
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+            <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
+              <span className="flex items-center gap-1">
+                <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                <span>MAC Address Hardware</span>
+              </span>
+              {gatewayClient?.macAddress && gatewayClient.macAddress !== 'N/D' && (
+                <button
+                  type="button"
+                  onClick={() => handleCopy(gatewayClient.macAddress, 'mac-copy')}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  title="Copia MAC Address"
+                >
+                  {copiedKey === 'mac-copy' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedKey === 'mac-copy' ? 'Copiato' : 'Copia'}</span>
+                </button>
+              )}
+            </div>
+            <div className="text-sm font-bold text-emerald-300 font-mono tracking-wider truncate">
+              {gatewayClient?.macAddress && gatewayClient.macAddress !== 'N/D' ? (
+                gatewayClient.macAddress
+              ) : (
+                <span className="text-slate-500 font-normal italic">Rilevamento hardware...</span>
+              )}
+            </div>
+            <span className="text-[10px] text-cyan-400/90 font-mono block truncate">
+              Stabilimento: <strong>{gatewayClient?.plantName || activeTenant.nome}</strong>
+            </span>
+          </div>
+
+          {/* Card 3: Sistema Operativo Reale */}
           <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
             <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
               <span>Sistema Operativo Riconosciuto</span>
@@ -1824,7 +1940,7 @@ python smile80_daemon.py
             </span>
           </div>
 
-          {/* Card 3: Indirizzo IP Sorgente & Canale M2M */}
+          {/* Card 4: Indirizzo IP Sorgente & Canale M2M */}
           <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
             <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
               <span>Indirizzo IP Sorgente PC</span>
@@ -1840,7 +1956,24 @@ python smile80_daemon.py
             </span>
           </div>
 
-          {/* Card 4: Ultimo Battito & Pacchetti Reali */}
+          {/* Card 5: Cartelle Spool & Rete E80 */}
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+            <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
+              <span className="flex items-center gap-1">
+                <Folder className="w-3.5 h-3.5 text-purple-400" />
+                <span>Cartella Dati Spool & Rete</span>
+              </span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300">Auto-Scan</span>
+            </div>
+            <div className="text-xs font-bold text-purple-300 font-mono truncate" title={gatewayClient?.spoolPath || 'C:\\JOKER80\\spool'}>
+              {gatewayClient?.spoolPath || 'Locale: spool/'}
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono block truncate" title={gatewayClient?.networkSharePath || '\\\\server-stabilimento\\e80_export'}>
+              Rete: {gatewayClient?.networkSharePath || '\\\\server-stabilimento\\e80_export'}
+            </span>
+          </div>
+
+          {/* Card 6: Ultimo Battito & Pacchetti Reali */}
           <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
             <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
               <span>Ultimo Battito (Heartbeat)</span>

@@ -80,23 +80,26 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
     return [currentUser.azienda || activeTenant.azienda || 'Barilla G. e R. Fratelli'];
   }, [isAdmin, tenants, currentUser.azienda, activeTenant.azienda]);
 
-  // Plants available for this user within the selected company
+  // Plants available for this user (all authorized plants for Admin or permitted in allowedTenantIds)
   const availablePlants = useMemo(() => {
-    const companyTenants = tenants.filter(t => t.azienda === selectedAzienda);
-    if (isAdmin) return companyTenants;
-    // Non-admin can only see their permitted plants
-    if (currentUser.allowedTenantIds && currentUser.allowedTenantIds.length > 0) {
-      return companyTenants.filter(t => currentUser.allowedTenantIds!.includes(t.id));
+    let pool: FactoryTenant[] = [];
+    if (isAdmin) {
+      pool = tenants;
+    } else if (currentUser.allowedTenantIds && currentUser.allowedTenantIds.length > 0) {
+      pool = tenants.filter(t => currentUser.allowedTenantIds!.includes(t.id));
+    } else if (currentUser.tenantId) {
+      pool = tenants.filter(t => t.id === currentUser.tenantId);
+    } else {
+      pool = tenants.filter(t => t.azienda === (currentUser.azienda || activeTenant.azienda));
     }
-    if (currentUser.tenantId) {
-      return companyTenants.filter(t => t.id === currentUser.tenantId);
-    }
-    return companyTenants;
-  }, [tenants, selectedAzienda, isAdmin, currentUser]);
+    return pool;
+  }, [tenants, isAdmin, currentUser, activeTenant.azienda]);
 
   const [selectedPlantId, setSelectedPlantId] = useState<string>(() => {
     return activeTenant.id;
   });
+  const [isPlantDropdownOpen, setIsPlantDropdownOpen] = useState(false);
+  const [isMachineDropdownOpen, setIsMachineDropdownOpen] = useState(false);
 
   // Keep selectedPlantId synchronized with available plants
   useEffect(() => {
@@ -333,50 +336,144 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Selettore Stabilimento (se livello 'stabilimento' o 'macchinario') */}
+          {/* Selettore Stabilimento a comparsa a scalare (se livello 'stabilimento' o 'macchinario') */}
           {(scopeLevel === 'stabilimento' || scopeLevel === 'macchinario') && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 relative">
               <span className="text-[11px] text-slate-400">Stabilimento:</span>
               {availablePlants.length > 1 ? (
-                <select
-                  value={selectedPlantId}
-                  onChange={e => {
-                    const newId = e.target.value;
-                    setSelectedPlantId(newId);
-                    const found = tenants.find(t => t.id === newId);
-                    if (found && onSelectTenant) {
-                      onSelectTenant(found);
-                    }
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 font-bold text-xs focus:outline-none focus:border-cyan-500 max-w-[260px]"
-                >
-                  {availablePlants.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.nome.includes(' - ') ? p.nome.split(' - ')[1] : p.nome}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPlantDropdownOpen(!isPlantDropdownOpen);
+                      setIsMachineDropdownOpen(false);
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-cyan-500/50 hover:border-cyan-400 text-cyan-300 font-bold text-xs shadow-md transition-all cursor-pointer group"
+                    title="Clicca per aprire il menu a comparsa degli stabilimenti autorizzati"
+                  >
+                    <Factory className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="truncate max-w-[190px]">
+                      {selectedPlantTenant.nome.includes(' - ') ? selectedPlantTenant.nome.split(' - ')[1] : selectedPlantTenant.nome}
+                    </span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      #{selectedPlantTenant.numeroStabilimento || 1}
+                    </span>
+                    <ChevronDown className={`w-3.5 h-3.5 text-cyan-400 transition-transform duration-200 ${isPlantDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isPlantDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setIsPlantDropdownOpen(false)} />
+                      <div className="absolute left-0 top-full mt-1.5 z-40 w-72 rounded-xl bg-slate-900 border border-cyan-500/50 shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-150 font-mono">
+                        <div className="px-2.5 py-1 text-[10px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+                          <span>Stabilimenti Abilitati</span>
+                          <span className="text-cyan-400 font-bold">{availablePlants.length}</span>
+                        </div>
+                        <div className="max-h-56 overflow-y-auto space-y-1 scrollbar-thin">
+                          {availablePlants.map(p => {
+                            const isSelected = p.id === selectedPlantId;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedPlantId(p.id);
+                                  setIsPlantDropdownOpen(false);
+                                  if (onSelectTenant) onSelectTenant(p);
+                                }}
+                                className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-all flex items-center justify-between cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/50 font-bold shadow-sm' 
+                                    : 'text-slate-300 hover:bg-slate-800 hover:text-white border border-transparent'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <div className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-cyan-400 animate-pulse' : 'bg-slate-500'}`} />
+                                  <div className="truncate">
+                                    <div className="text-xs truncate">{p.nome.includes(' - ') ? p.nome.split(' - ')[1] : p.nome}</div>
+                                    <div className="text-[10px] text-slate-400 truncate">{p.sito || p.azienda}</div>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-cyan-300 border border-slate-800 shrink-0 font-bold">
+                                  #{p.numeroStabilimento || 1}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               ) : (
-                <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold">
+                <span className="px-2.5 py-1 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold flex items-center gap-1.5">
+                  <Factory className="w-3.5 h-3.5 text-cyan-400" />
                   {availablePlants[0]?.nome.includes(' - ') ? availablePlants[0]?.nome.split(' - ')[1] : (availablePlants[0]?.nome || activeTenant.nome)}
                 </span>
               )}
             </div>
           )}
 
-          {/* Selettore Macchinario / Nodo (se livello 'macchinario') */}
+          {/* Selettore Macchinario / Nodo a comparsa a scalare (se livello 'macchinario') */}
           {scopeLevel === 'macchinario' && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 relative">
               <span className="text-[11px] text-slate-400">Macchinario:</span>
-              <select
-                value={selectedMachineKey}
-                onChange={e => setSelectedMachineKey(e.target.value)}
-                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-emerald-500 max-w-[280px]"
-              >
-                {availableMachines.map(m => (
-                  <option key={m.key} value={m.key}>{m.label}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMachineDropdownOpen(!isMachineDropdownOpen);
+                    setIsPlantDropdownOpen(false);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 font-bold text-xs shadow-md transition-all cursor-pointer group"
+                  title="Clicca per aprire il menu a comparsa dei macchinari"
+                >
+                  <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="truncate max-w-[210px]">
+                    {currentMachineDef.label.split('(')[0].trim()}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-emerald-400 transition-transform duration-200 ${isMachineDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isMachineDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setIsMachineDropdownOpen(false)} />
+                    <div className="absolute left-0 top-full mt-1.5 z-40 w-72 rounded-xl bg-slate-900 border border-emerald-500/50 shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-150 font-mono">
+                      <div className="px-2.5 py-1 text-[10px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+                        <span>Nodi e Macchine ({availableMachines.length})</span>
+                      </div>
+                      <div className="max-h-56 overflow-y-auto space-y-1 scrollbar-thin">
+                        {availableMachines.map(m => {
+                          const isSelected = m.key === selectedMachineKey;
+                          return (
+                            <button
+                              key={m.key}
+                              type="button"
+                              onClick={() => {
+                                setSelectedMachineKey(m.key);
+                                setIsMachineDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-all flex items-center justify-between cursor-pointer ${
+                                isSelected 
+                                  ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/50 font-bold shadow-sm' 
+                                  : 'text-slate-300 hover:bg-slate-800 hover:text-white border border-transparent'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <div className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                                <div className="truncate">
+                                  <div className="text-xs truncate">{m.label.split('(')[0].trim()}</div>
+                                  <div className="text-[10px] text-slate-400 truncate">{m.desc || m.key}</div>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           )}
 

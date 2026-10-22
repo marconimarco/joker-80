@@ -450,6 +450,7 @@ async function startServer() {
         receivedAt: record.receivedAt,
         authType: record.authType,
         isPhysicalPC: record.isPhysicalPC,
+        configuredIntervalSec: telemetryConfig.intervalSeconds,
         mtlsSecurity: {
           active: mtlsStatus.configured,
           protocol: 'TLSv1.3 Strict',
