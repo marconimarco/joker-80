@@ -509,13 +509,51 @@ export const AdminControlPanel: React.FC<Props> = ({
     reader.readAsDataURL(pfxFile);
   };
 
+  // User company and scoped plants for Responsabile di Stabilimento
+  const userAzienda = (currentUser.azienda || activeTenant.azienda || '').trim();
+
+  // Scoped tenants: if Responsabile di Stabilimento, strictly only plants belonging to their company (and within their allowedTenantIds if defined)
+  const scopedTenants = React.useMemo(() => {
+    if (!isResponsabile) return tenants;
+    const cleanUserAzienda = userAzienda.toLowerCase();
+    return tenants.filter(t => {
+      const cleanTenantAzienda = (t.azienda || '').toLowerCase().trim();
+      const sameCompany = cleanUserAzienda ? cleanTenantAzienda === cleanUserAzienda : false;
+      if (!sameCompany) return false;
+      if (currentUser.allowedTenantIds && currentUser.allowedTenantIds.length > 0) {
+        return currentUser.allowedTenantIds.includes(t.id);
+      }
+      return currentUser.tenantId ? t.id === currentUser.tenantId : true;
+    });
+  }, [isResponsabile, tenants, currentUser, userAzienda]);
+
   // Company / Establishment Hierarchy Filter
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState<string>('all');
 
-  const companies = Array.from(new Set(tenants.map(t => t.azienda || 'Azienda Industriale'))).filter(Boolean);
-  const displayedTenants = selectedCompanyFilter === 'all'
-    ? tenants
-    : tenants.filter(t => (t.azienda || '').toLowerCase() === selectedCompanyFilter.toLowerCase());
+  const companies = React.useMemo(() => {
+    if (isResponsabile) {
+      return [userAzienda || 'Barilla G. e R. Fratelli'];
+    }
+    return Array.from(new Set(tenants.map(t => t.azienda || 'Azienda Industriale'))).filter(Boolean);
+  }, [isResponsabile, userAzienda, tenants]);
+
+  const displayedTenants = React.useMemo(() => {
+    const baseList = isResponsabile ? scopedTenants : tenants;
+    if (selectedCompanyFilter === 'all') {
+      return baseList;
+    }
+    return baseList.filter(t => (t.azienda || '').toLowerCase() === selectedCompanyFilter.toLowerCase());
+  }, [isResponsabile, scopedTenants, tenants, selectedCompanyFilter]);
+
+  // Ensure active plant is within scopedTenants if user is Responsabile
+  useEffect(() => {
+    if (isResponsabile && scopedTenants.length > 0) {
+      const isValid = scopedTenants.some(t => t.id === activeTenant.id);
+      if (!isValid) {
+        onSelectTenant(scopedTenants[0]);
+      }
+    }
+  }, [isResponsabile, scopedTenants, activeTenant.id, onSelectTenant]);
 
   // Discovery & Plant Edit/Create Form State
   const [selectedExistingTenantId, setSelectedExistingTenantId] = useState<string | null>(() => activeTenant.id || null);
@@ -1187,7 +1225,7 @@ export const AdminControlPanel: React.FC<Props> = ({
               }`}
             >
               <Zap className="w-3.5 h-3.5 shrink-0" />
-              <span>{isResponsabile ? `Stabilimenti & Nodi Società (${tenants.filter(t => (t.azienda || '').toLowerCase() === (currentUser.azienda || activeTenant.azienda || '').toLowerCase()).length})` : `Connessione Rapida & Sedi (${tenants.length})`}</span>
+              <span>{isResponsabile ? `Stabilimenti & Nodi Società (${scopedTenants.length})` : `Connessione Rapida & Sedi (${tenants.length})`}</span>
             </button>
           </div>
 
@@ -1221,10 +1259,12 @@ export const AdminControlPanel: React.FC<Props> = ({
               <div>
                 <span className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
                   <Building className="w-4 h-4 text-cyan-400" />
-                  Gestione Multi-Impianto & Stabilimenti Industriali
+                  {isResponsabile ? `Gestione Stabilimenti • ${userAzienda}` : 'Gestione Multi-Impianto & Stabilimenti Industriali'}
                 </span>
                 <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-                  Visualizzazione separata per sezione: consulta le aziende, esplora gli stabilimenti o registra un nuovo impianto.
+                  {isResponsabile 
+                    ? `Accesso circoscritto agli stabilimenti autorizzati per ${userAzienda} con isolamento multi-tenant garantito.`
+                    : 'Visualizzazione globale amministratore: consulta le aziende, esplora gli stabilimenti o registra un nuovo impianto.'}
                 </p>
               </div>
 
@@ -1238,10 +1278,10 @@ export const AdminControlPanel: React.FC<Props> = ({
                       ? 'bg-purple-600 text-white shadow-sm border border-purple-400/40'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
                   }`}
-                  title="Visualizza solo l'elenco di tutte le aziende e società registrate"
+                  title={isResponsabile ? `Visualizza il riepilogo della tua società (${userAzienda})` : "Visualizza l'elenco di tutte le aziende e società registrate"}
                 >
                   <Building2 className="w-3.5 h-3.5 text-purple-300" />
-                  <span>Tutte le aziende</span>
+                  <span>{isResponsabile ? 'La tua Società' : 'Tutte le aziende'}</span>
                   <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
                     {companies.length}
                   </span>
@@ -1255,12 +1295,12 @@ export const AdminControlPanel: React.FC<Props> = ({
                       ? 'bg-cyan-600 text-white shadow-sm border border-cyan-400/40'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
                   }`}
-                  title="Visualizza solo l'elenco di tutti gli stabilimenti registrati"
+                  title={isResponsabile ? `Visualizza gli stabilimenti di ${userAzienda}` : "Visualizza l'elenco di tutti gli stabilimenti registrati"}
                 >
                   <Factory className="w-3.5 h-3.5 text-cyan-300" />
-                  <span>Tutti gli stabilimenti</span>
+                  <span>{isResponsabile ? `Stabilimenti (${scopedTenants.length})` : 'Tutti gli stabilimenti'}</span>
                   <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
-                    {tenants.length}
+                    {scopedTenants.length}
                   </span>
                 </button>
 
@@ -1304,13 +1344,13 @@ export const AdminControlPanel: React.FC<Props> = ({
                   </div>
 
                   <span className="text-[10px] font-mono text-slate-500">
-                    Totale Stabilimenti nel Network: <strong className="text-cyan-400">{tenants.length}</strong>
+                    Totale Stabilimenti {isResponsabile ? `di ${userAzienda}` : 'nel Network'}: <strong className="text-cyan-400">{scopedTenants.length}</strong>
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {companies.map(comp => {
-                    const companyTenants = tenants.filter(t => (t.azienda || '').toLowerCase() === comp.toLowerCase());
+                    const companyTenants = (isResponsabile ? scopedTenants : tenants).filter(t => (t.azienda || '').toLowerCase() === comp.toLowerCase());
                     const companyNodes = companyTenants.reduce((acc, t) => acc + (t.plantTopology?.macchinari?.length || 0), 0);
                     const assignedUsers = users.filter(u => 
                       companyTenants.some(t => (t.operatoriAssegnati || []).includes(u.id) || u.tenantId === t.id)
@@ -1420,22 +1460,34 @@ export const AdminControlPanel: React.FC<Props> = ({
                       <Filter className="w-3 h-3 text-cyan-400" /> Filtra:
                     </span>
 
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCompanyFilter('all')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5 ${
-                        selectedCompanyFilter === 'all'
-                          ? 'bg-cyan-600 text-white border-cyan-400 shadow-xs'
-                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                      }`}
-                    >
-                      <span>Tutte le Società</span>
-                      <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
-                        {tenants.length}
-                      </span>
-                    </button>
+                    {!isResponsabile && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCompanyFilter('all')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all shrink-0 cursor-pointer border flex items-center gap-1.5 ${
+                          selectedCompanyFilter === 'all'
+                            ? 'bg-cyan-600 text-white border-cyan-400 shadow-xs'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        <span>Tutte le Società</span>
+                        <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
+                          {tenants.length}
+                        </span>
+                      </button>
+                    )}
 
-                    {companies.map(comp => {
+                    {isResponsabile && (
+                      <div className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 shrink-0 shadow-xs">
+                        <Building className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Stabilimenti {userAzienda}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px]">
+                          {scopedTenants.length}
+                        </span>
+                      </div>
+                    )}
+
+                    {!isResponsabile && companies.map(comp => {
                       const count = tenants.filter(t => (t.azienda || '').toLowerCase() === comp.toLowerCase()).length;
                       const isSelected = selectedCompanyFilter.toLowerCase() === comp.toLowerCase();
                       return (
@@ -1892,19 +1944,26 @@ export const AdminControlPanel: React.FC<Props> = ({
                   <input
                     type="text"
                     required
-                    list="companies-datalist"
+                    disabled={isResponsabile}
+                    list={!isResponsabile ? "companies-datalist" : undefined}
                     placeholder="Es. Barilla G. e R. Fratelli, Nestlé, Ferrero..."
-                    value={plantAzienda}
+                    value={isResponsabile ? userAzienda : plantAzienda}
                     onChange={e => setPlantAzienda(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-purple-500 focus:outline-none text-slate-100 placeholder:text-slate-600 font-mono"
+                    className={`w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-600 font-mono ${
+                      isResponsabile ? 'opacity-85 bg-slate-900/90 cursor-not-allowed border-amber-500/30' : 'focus:border-purple-500 focus:outline-none'
+                    }`}
                   />
-                  <datalist id="companies-datalist">
-                    {companies.map(c => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
+                  {!isResponsabile && (
+                    <datalist id="companies-datalist">
+                      {companies.map(c => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
+                  )}
                   <p className="text-[10px] text-slate-500 font-mono">
-                    Digita il nome della società capogruppo o selezionala dall'elenco esistente.
+                    {isResponsabile 
+                      ? `Come Responsabile, puoi registrare e gestire esclusivamente stabilimenti per la società ${userAzienda}.`
+                      : "Digita il nome della società capogruppo o selezionala dall'elenco esistente."}
                   </p>
                 </div>
 
@@ -2976,7 +3035,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                   onChange={e => setNewOpTenantId(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:border-purple-500 focus:outline-none text-slate-100"
                 >
-                  {tenants.map(t => (
+                  {(isResponsabile ? scopedTenants : tenants).map(t => (
                     <option key={t.id} value={t.id}>{t.nome}</option>
                   ))}
                 </select>
@@ -3087,8 +3146,10 @@ export const AdminControlPanel: React.FC<Props> = ({
                   onChange={e => setOperatorFilterTenant(e.target.value)}
                   className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none"
                 >
-                  <option value="all">Tutti gli Stabilimenti</option>
-                  {tenants.map(t => (
+                  <option value="all">
+                    {isResponsabile ? `Tutti gli Stabilimenti ${userAzienda}` : 'Tutti gli Stabilimenti'}
+                  </option>
+                  {(isResponsabile ? scopedTenants : tenants).map(t => (
                     <option key={t.id} value={t.id}>{t.nome}</option>
                   ))}
                 </select>
@@ -4145,19 +4206,22 @@ export const AdminControlPanel: React.FC<Props> = ({
                 </label>
                 <select
                   value={permAzienda}
+                  disabled={isResponsabile}
                   onChange={e => {
                     const newAz = e.target.value;
                     setPermAzienda(newAz);
                     // Select first plant of that company
-                    const firstOfCo = tenants.find(t => (t.azienda || '').toLowerCase() === newAz.toLowerCase());
+                    const firstOfCo = (isResponsabile ? scopedTenants : tenants).find(t => (t.azienda || '').toLowerCase() === newAz.toLowerCase());
                     if (firstOfCo) {
                       setPermTenantId(firstOfCo.id);
                       setPermAllowedTenantIds([firstOfCo.id]);
                     }
                   }}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-purple-500 cursor-pointer"
+                  className={`w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-purple-500 cursor-pointer ${
+                    isResponsabile ? 'opacity-85 bg-slate-900/90 cursor-not-allowed border-amber-500/30' : ''
+                  }`}
                 >
-                  {Array.from(new Set(tenants.map(t => t.azienda).filter(Boolean))).map(az => (
+                  {(isResponsabile ? [userAzienda] : Array.from(new Set(tenants.map(t => t.azienda).filter(Boolean)))).map(az => (
                     <option key={az} value={az}>{az}</option>
                   ))}
                 </select>
@@ -4179,7 +4243,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                   }}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
                 >
-                  {tenants.map(t => (
+                  {(isResponsabile ? scopedTenants : tenants).map(t => (
                     <option key={t.id} value={t.id}>{t.nome} ({t.azienda || 'Azienda'})</option>
                   ))}
                 </select>
@@ -4195,7 +4259,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                   L'utente vedrà in alto lo stabilimento attivo e potrà selezionare tra questi stabilimenti appartenenti alla società <strong>{permAzienda}</strong>.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  {tenants
+                  {(isResponsabile ? scopedTenants : tenants)
                     .filter(t => !permAzienda || (t.azienda || '').toLowerCase() === permAzienda.toLowerCase())
                     .map(t => {
                       const isAllowed = permAllowedTenantIds.includes(t.id) || t.id === permTenantId;

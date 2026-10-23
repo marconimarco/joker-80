@@ -19,7 +19,7 @@ print("  JOKER 80 - SM.I.LE80 Industrial Gateway Telemetry Daemon (M2M)")
 print("  Modulo di Telemetria Hardware per PC di Stabilimento Elettric80")
 print("==============================================================================")
 
-SERVER_URL = os.environ.get("JOKER80_URL", "https://ais-dev-j3xz33kaggpbtbgebgxqfs-71198816019.us-west1.run.app")
+SERVER_URL = os.environ.get("JOKER80_URL", "http://localhost:3000")
 ENDPOINT = f"{SERVER_URL}/api/telemetry/push"
 HANDSHAKE_ENDPOINT = f"{SERVER_URL}/api/telemetry/handshake"
 GATEWAY_KEY = os.environ.get("INDUSTRIAL_GATEWAY_KEY", "JOKER80-NIS2-PEDRIGNANO-GW-2026")

@@ -104,10 +104,27 @@ export default function App() {
   useEffect(() => {
     const currentTenants = AuthStorage.getTenants();
     setTenants(currentTenants);
-    if (currentUser?.tenantId) {
+
+    if (currentUser && currentUser.ruolo !== 'Amministratore') {
+      const userAzienda = (currentUser.azienda || '').toLowerCase().trim();
+      const isCurrentActiveValid = activeTenant && (
+        (currentUser.allowedTenantIds && currentUser.allowedTenantIds.includes(activeTenant.id)) ||
+        ((activeTenant.azienda || '').toLowerCase().trim() === userAzienda)
+      );
+      if (!isCurrentActiveValid) {
+        const fallbackTenant = currentTenants.find(t => 
+          (currentUser.allowedTenantIds && currentUser.allowedTenantIds.includes(t.id)) ||
+          ((t.azienda || '').toLowerCase().trim() === userAzienda)
+        );
+        if (fallbackTenant) {
+          setActiveTenant(fallbackTenant);
+        }
+      }
+    } else if (currentUser?.tenantId) {
       const match = currentTenants.find(t => t.id === currentUser.tenantId);
       if (match) setActiveTenant(match);
     }
+
     // If logged-in user is not admin, prevent access to chat terminal
     // Responsabile di Stabilimento can access admin view for their company operators and node permissions
     if (currentUser && currentUser.ruolo !== 'Amministratore') {
@@ -115,14 +132,23 @@ export default function App() {
         setActiveView('catalog');
       }
     }
-  }, [currentUser, activeView]);
+  }, [currentUser, activeView, activeTenant]);
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
     const allTenants = AuthStorage.getTenants();
     setTenants(allTenants);
 
-    if (user.tenantId) {
+    if (user.ruolo !== 'Amministratore') {
+      const userAzienda = (user.azienda || '').toLowerCase().trim();
+      const permittedTenant = allTenants.find(t => 
+        (user.allowedTenantIds && user.allowedTenantIds.includes(t.id)) ||
+        (user.tenantId && t.id === user.tenantId) ||
+        ((t.azienda || '').toLowerCase().trim() === userAzienda)
+      ) || allTenants[0];
+      setActiveTenant(permittedTenant);
+      runAutoTelemetryScan(permittedTenant);
+    } else if (user.tenantId) {
       const match = allTenants.find(t => t.id === user.tenantId);
       if (match) {
         setActiveTenant(match);

@@ -196,10 +196,10 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess, onLockPreAccess })
                 <button
                   type="button"
                   onClick={() => handleQuickLogin('admin', 'admin')}
-                  className="p-2.5 rounded-lg bg-purple-950/30 hover:bg-purple-900/40 border border-purple-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
+                  className="p-2.5 rounded-lg bg-purple-950/30 hover:bg-purple-900/40 border border-purple-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer sm:col-span-2"
                 >
                   <div>
-                    <div className="font-bold text-purple-300">Amministratore Globale</div>
+                    <div className="font-bold text-purple-300">Amministratore Globale (Tutti gli Impianti & Tutte le Società)</div>
                     <div className="text-[10px] text-slate-400">user: <code className="text-purple-200">admin</code> | pass: <code className="text-purple-200">admin</code></div>
                   </div>
                   <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-purple-400 transition-colors" />
@@ -209,50 +209,54 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess, onLockPreAccess })
                 <button
                   type="button"
                   onClick={() => handleQuickLogin('resp_barilla', 'barilla')}
-                  className="p-2.5 rounded-lg bg-amber-950/30 hover:bg-amber-900/40 border border-amber-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
-                >
-                  <div>
-                    <div className="font-bold text-amber-300">Responsabile Barilla (Multi-Sito)</div>
-                    <div className="text-[10px] text-slate-400">user: <code className="text-amber-200">resp_barilla</code> | pass: <code className="text-amber-200">barilla</code></div>
-                  </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition-colors" />
-                </button>
-
-                {/* Operator Barilla */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('op_barilla', 'barilla')}
                   className="p-2.5 rounded-lg bg-blue-950/30 hover:bg-blue-900/40 border border-blue-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
                 >
                   <div>
-                    <div className="font-bold text-blue-300">Operatore Barilla (Pedrignano)</div>
-                    <div className="text-[10px] text-slate-400">user: <code className="text-blue-200">op_barilla</code> | pass: <code className="text-blue-200">barilla</code></div>
+                    <div className="font-bold text-blue-300">Resp. Barilla (Ing. Giovanni)</div>
+                    <div className="text-[10px] text-slate-400">Solo Barilla (Pedrignano, Novara, Foggia)</div>
+                    <div className="text-[10px] text-slate-400">user: <code className="text-blue-200">resp_barilla</code> | pass: <code className="text-blue-200">barilla</code></div>
                   </div>
                   <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors" />
                 </button>
 
-                {/* Operator Nestlé */}
+                {/* Responsabile Nestlé */}
                 <button
                   type="button"
-                  onClick={() => handleQuickLogin('op_nestle', 'nestle')}
+                  onClick={() => handleQuickLogin('resp_nestle', 'nestle')}
                   className="p-2.5 rounded-lg bg-red-950/30 hover:bg-red-900/40 border border-red-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
                 >
                   <div>
-                    <div className="font-bold text-red-300">Operatore Nestlé (Assago)</div>
-                    <div className="text-[10px] text-slate-400">user: <code className="text-red-200">op_nestle</code> | pass: <code className="text-red-200">nestle</code></div>
+                    <div className="font-bold text-red-300">Resp. Nestlé (Dott.ssa Conti)</div>
+                    <div className="text-[10px] text-slate-400">Solo Nestlé (Assago, Benevento, Perugia)</div>
+                    <div className="text-[10px] text-slate-400">user: <code className="text-red-200">resp_nestle</code> | pass: <code className="text-red-200">nestle</code></div>
                   </div>
                   <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-red-400 transition-colors" />
                 </button>
 
-                {/* Operator Sant'Anna */}
+                {/* Responsabile Ferrero */}
                 <button
                   type="button"
-                  onClick={() => handleQuickLogin('op_santanna', 'santanna')}
-                  className="p-2.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer sm:col-span-2"
+                  onClick={() => handleQuickLogin('resp_ferrero', 'ferrero')}
+                  className="p-2.5 rounded-lg bg-amber-950/30 hover:bg-amber-900/40 border border-amber-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
                 >
                   <div>
-                    <div className="font-bold text-emerald-300">Operatore Sant'Anna (Vinadio)</div>
-                    <div className="text-[10px] text-slate-400">user: <code className="text-emerald-200">op_santanna</code> | pass: <code className="text-emerald-200">santanna</code></div>
+                    <div className="font-bold text-amber-300">Resp. Ferrero (Ing. Ferrero)</div>
+                    <div className="text-[10px] text-slate-400">Solo Ferrero (Alba, Pozzuolo)</div>
+                    <div className="text-[10px] text-slate-400">user: <code className="text-amber-200">resp_ferrero</code> | pass: <code className="text-amber-200">ferrero</code></div>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition-colors" />
+                </button>
+
+                {/* Responsabile Sant'Anna */}
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('resp_santanna', 'santanna')}
+                  className="p-2.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
+                >
+                  <div>
+                    <div className="font-bold text-emerald-300">Resp. Sant'Anna (Ing. Bertone)</div>
+                    <div className="text-[10px] text-slate-400">Solo Sant'Anna (Vinadio, Lanzo)</div>
+                    <div className="text-[10px] text-slate-400">user: <code className="text-emerald-200">resp_santanna</code> | pass: <code className="text-emerald-200">santanna</code></div>
                   </div>
                   <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
                 </button>

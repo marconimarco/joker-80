@@ -488,8 +488,16 @@ async function startServer() {
         ? 'Responsabile Sistemi Navette LGV/AGV e Logistica Industriale'
         : 'Ingegnere Senior di Automazione e Gemello Digitale Elettric80 / SM.I.LE80';
 
-      // 1. Try Gemini 3.8 Flash via @google/genai if API key is present
-      if (process.env.GEMINI_API_KEY) {
+      // 1. Assistente Vocale: Prova Gemini 3.8 Flash solo se configurato con chiave reale e non in modalità offline
+      const hasRealGeminiKey = Boolean(
+        process.env.GEMINI_API_KEY &&
+        process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY' &&
+        process.env.GEMINI_API_KEY !== 'none' &&
+        process.env.OFFLINE_MODE !== 'true' &&
+        process.env.CUBA_MINSAP_OFFLINE !== 'true'
+      );
+
+      if (hasRealGeminiKey) {
         try {
           const ai = new GoogleGenAI();
           const systemInstruction = `Sei ${personaName}, una persona reale e ${personaRole} presso l'impianto ${activePlant}.

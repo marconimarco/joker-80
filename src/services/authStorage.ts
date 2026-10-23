@@ -40,13 +40,55 @@ export const INITIAL_USERS: UserAccount[] = [
     nomeCompleto: 'Dott.ssa Elena Conti (Resp. Stabilimenti)',
     ruolo: 'Responsabile di Stabilimento',
     password: 'nestle',
-    lineaAssegnata: 'Direzione Operativa Impianti Nestlé',
+    lineaAssegnata: 'Direzione Operativa Impianti Nestlé (Assago, Benevento, Perugia)',
     tenantId: 'nestle',
     azienda: 'Nestlé Italiana',
     allowedTenantIds: ['nestle', 'nestle-benevento', 'nestle-perugia'],
     allowedMachineIds: ['BEMA_FASCIATORE', 'FLOTTA_LGV', 'SMARTSTORE', 'BAIE_INBOUND_OUTBOUND', 'ISOLA_ROBOT', 'RAPTOR'],
     attivo: true,
     createdAt: '2026-01-15'
+  },
+  {
+    id: 'usr-resp-ferrero',
+    username: 'resp_ferrero',
+    nomeCompleto: 'Ing. Roberto Ferrero (Resp. Stabilimenti)',
+    ruolo: 'Responsabile di Stabilimento',
+    password: 'ferrero',
+    lineaAssegnata: 'Coordinamento Impianti Ferrero (Alba & Pozzuolo)',
+    tenantId: 'ferrero-alba',
+    azienda: 'Ferrero S.p.A.',
+    allowedTenantIds: ['ferrero-alba', 'ferrero-pozzuolo'],
+    allowedMachineIds: ['BEMA_FASCIATORE', 'FLOTTA_LGV', 'SMARTSTORE', 'BAIE_INBOUND_OUTBOUND', 'ISOLA_ROBOT', 'WOODPECKER', 'RAPTOR', 'QUALITA_TRACCIABILITA'],
+    attivo: true,
+    createdAt: '2026-02-15'
+  },
+  {
+    id: 'usr-op-ferrero',
+    username: 'op_ferrero',
+    nomeCompleto: 'Marco Ferri (Op. Confezionamento & AGV)',
+    ruolo: 'Operatore di Linea',
+    password: 'ferrero',
+    lineaAssegnata: 'Linea Confezionamento & Navette AGV Alba',
+    tenantId: 'ferrero-alba',
+    azienda: 'Ferrero S.p.A.',
+    allowedTenantIds: ['ferrero-alba'],
+    allowedMachineIds: ['BEMA_FASCIATORE', 'FLOTTA_LGV', 'SMARTSTORE'],
+    attivo: true,
+    createdAt: '2026-02-15'
+  },
+  {
+    id: 'usr-resp-santanna',
+    username: 'resp_santanna',
+    nomeCompleto: 'Ing. Matteo Bertone (Resp. Stabilimenti)',
+    ruolo: 'Responsabile di Stabilimento',
+    password: 'santanna',
+    lineaAssegnata: 'Direzione Operativa Impianti Vinadio & Lanzo',
+    tenantId: 'santanna',
+    azienda: 'Acqua Sant\'Anna',
+    allowedTenantIds: ['santanna', 'santanna-lanzo'],
+    allowedMachineIds: ['BEMA_FASCIATORE', 'FLOTTA_LGV', 'SMARTSTORE', 'BAIE_INBOUND_OUTBOUND', 'ISOLA_ROBOT', 'RAPTOR'],
+    attivo: true,
+    createdAt: '2026-02-10'
   },
   {
     id: 'usr-op-barilla',
@@ -289,7 +331,49 @@ export const INITIAL_TENANTS: FactoryTenant[] = [
     createdAt: '2026-02-22'
   },
 
-  // 4. GRANAROLO GROUP
+  // 4. FERRERO S.P.A.
+  {
+    id: 'ferrero-alba',
+    nome: 'Ferrero - Stabilimento Alba',
+    azienda: 'Ferrero S.p.A.',
+    numeroStabilimento: 1,
+    sito: 'Alba, Cuneo (CN)',
+    endpoint: 'https://ferrero-alba.smile80.net/cudaq',
+    plcIp: '10.30.10.50:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'NVIDIA Grace Hopper QPU Cluster',
+    logoColor: '#d97706',
+    plantTopology: {
+      ...TOPOLOGY_BARILLA,
+      qubitCapacity: 72,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: ['op_ferrero'],
+    createdAt: '2026-02-15'
+  },
+  {
+    id: 'ferrero-pozzuolo',
+    nome: 'Ferrero - Stabilimento Pozzuolo Martesana',
+    azienda: 'Ferrero S.p.A.',
+    numeroStabilimento: 2,
+    sito: 'Pozzuolo Martesana, Milano (MI)',
+    endpoint: 'https://ferrero-pozzuolo.smile80.net/cudaq',
+    plcIp: '10.30.20.50:502',
+    protocol: 'REST_HTTPS',
+    connectionStatus: 'CONNESSO',
+    qpuTarget: 'Simulatore CUDA-Q TensorNet',
+    logoColor: '#b45309',
+    plantTopology: {
+      ...TOPOLOGY_BARILLA_NOVARA,
+      qubitCapacity: 64,
+      lastSyncTimestamp: new Date().toISOString()
+    },
+    operatoriAssegnati: ['op_ferrero'],
+    createdAt: '2026-02-20'
+  },
+
+  // 5. GRANAROLO GROUP
   {
     id: 'granarolo-bologna',
     nome: 'Granarolo - Stabilimento Cadriano (Bologna)',

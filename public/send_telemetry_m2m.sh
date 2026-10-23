@@ -2,7 +2,7 @@
 # JOKER 80 - Script M2M per PC / IPC di Stabilimento
 # Invia la telemetria verso il Quantum Control Panel
 
-TARGET_URL="${JOKER80_URL:-https://ais-dev-j3xz33kaggpbtbgebgxqfs-71198816019.us-west1.run.app}"
+TARGET_URL="${JOKER80_URL:-http://localhost:3000}"
 GATEWAY_KEY="${INDUSTRIAL_GATEWAY_KEY:-JOKER80-NIS2-PEDRIGNANO-GW-2026}"
 
 echo "=== JOKER 80: Invio Telemetria da PC di Fabbrica ==="
