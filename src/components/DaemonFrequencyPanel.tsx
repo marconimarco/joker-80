@@ -28,7 +28,8 @@ import {
   Globe,
   Signal,
   CheckCircle,
-  Lock
+  Lock,
+  Key
 } from 'lucide-react';
 import { FactoryTenant, UserAccount } from '../types/quantum';
 
@@ -37,6 +38,8 @@ interface Props {
   currentUser: UserAccount;
   telemetryHistory: any[];
   onRefreshTelemetry: () => void;
+  availableTenants?: FactoryTenant[];
+  onSelectTenant?: (tenant: FactoryTenant) => void;
 }
 
 type FrequencyUnit = 'seconds' | 'minutes' | 'hours' | 'days';
@@ -46,7 +49,9 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
   activeTenant,
   currentUser,
   telemetryHistory,
-  onRefreshTelemetry
+  onRefreshTelemetry,
+  availableTenants,
+  onSelectTenant
 }) => {
   // Frequency Configuration State
   const [frequencyValue, setFrequencyValue] = useState<number>(5);
@@ -863,77 +868,128 @@ services:
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* ========================================================================= */}
-      {/* GUIDA VISUALE RAPIDA: COLLEGA IL TUO STABILIMENTO IN 3 PASSI              */}
+      {/* GUIDA VISUALE UNIFICATA: COLLEGA IL TUO STABILIMENTO IN 3 PASSI           */}
       {/* ========================================================================= */}
       <div className="bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 border-2 border-cyan-500/50 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-cyan-500/30 pb-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-cyan-500/30 pb-4">
+          <div className="flex items-start gap-3">
             <div className="p-3 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shrink-0 shadow-lg shadow-cyan-500/20">
               <Laptop className="w-6 h-6 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-bold text-white font-mono tracking-tight flex items-center gap-2">
-                  <span>Guida Rapida: Collega il PC dello Stabilimento in 3 Passi</span>
+                  <span>Guida Connessione Hardware: Collega il PC dello Stabilimento</span>
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
                   Zero Configurazione Manuale
                 </span>
               </div>
               <p className="text-xs text-slate-300 font-sans mt-0.5">
-                Segui questi 3 semplici passaggi per agganciare il computer fisico di stabilimento alla telemetria quantistica di <strong>{activeTenant.nome}</strong>.
+                Scarica i 2 file necessari (Demone + Certificato) per collegare in sicurezza i PC di stabilimento alla telemetria quantistica.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-xs font-mono font-bold flex items-center gap-2 border shadow-sm ${
+          {/* SELETTORE STABILIMENTO TARGET + STATO HARDWARE */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-cyan-500/40">
+              <span className="text-[11px] font-mono text-slate-400 font-bold shrink-0">Stabilimento:</span>
+              {availableTenants && availableTenants.length > 0 && onSelectTenant ? (
+                <select
+                  value={activeTenant.id}
+                  onChange={e => {
+                    const found = availableTenants.find(t => t.id === e.target.value);
+                    if (found) onSelectTenant(found);
+                  }}
+                  className="bg-transparent text-cyan-200 font-mono font-bold text-xs focus:outline-none cursor-pointer max-w-[240px] truncate"
+                >
+                  {availableTenants.map(t => (
+                    <option key={t.id} value={t.id} className="bg-slate-900 text-slate-100">
+                      {t.azienda ? `${t.azienda} - ` : ''}{t.nome} (#{t.numeroStabilimento || 1})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-cyan-300 font-mono font-bold text-xs truncate max-w-[200px]">
+                  {activeTenant.nome}
+                </span>
+              )}
+            </div>
+
+            <span className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-2 border shadow-sm ${
               gatewayClient?.mac || gatewayClient?.hostname
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse'
                 : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
             }`}>
               <span className={`w-2 h-2 rounded-full ${gatewayClient?.mac || gatewayClient?.hostname ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'}`} />
-              <span>{gatewayClient?.mac || gatewayClient?.hostname ? 'PC Fisico Connesso' : 'In attesa di primo PC...'}</span>
+              <span>{gatewayClient?.mac || gatewayClient?.hostname ? 'PC Fisico Connesso' : 'In attesa primo PC...'}</span>
             </span>
           </div>
         </div>
 
         {/* 3 SCHEDE STEP-BY-STEP */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* STEP 1: SCARICA IL PACCHETTO */}
+          {/* STEP 1: SCARICA I 2 FILE (DEMONE + CERTIFICATO) */}
           <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-3 relative overflow-hidden group hover:border-cyan-500/50 transition-colors">
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 font-mono font-bold text-xs flex items-center justify-center">
                   1
                 </span>
                 <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider">
-                  Download File
+                  2 File Richiesti
                 </span>
               </div>
               <h4 className="text-sm font-bold text-white font-mono">
-                1. Scarica per il tuo Sistema
+                1. Scarica i 2 File Necessari
               </h4>
-              <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                Il file contiene già la chiave di sicurezza NIS2, l'ID stabilimento (<code className="text-cyan-300">{activeTenant.id}</code>) e la cadenza impostata.
-              </p>
+              
+              <div className="space-y-2 text-[11px] font-sans text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                <div>
+                  <strong className="text-cyan-300 font-mono block">1. File Demone (.BAT / .SH):</strong>
+                  Contiene lo script Python con loop di telemetria, porte IPC e cartelle di spool locali.
+                </div>
+                <div>
+                  <strong className="text-purple-300 font-mono block">2. File Certificato NIS2 (.PFX):</strong>
+                  Identità crittografica univoca dello stabilimento <code className="text-slate-200">{activeTenant.id}</code> per l'autenticazione mTLS.
+                </div>
+              </div>
             </div>
 
             <div className="space-y-1.5 pt-2">
               <button
                 type="button"
                 disabled={isOperator}
-                onClick={() => downloadAsBlob(windowsBatFullContent, 'install_e80_windows.bat')}
-                className="w-full py-2 px-3 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                onClick={() => downloadAsBlob(windowsBatFullContent, `avvia_gateway_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.bat`)}
+                className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                title={`Scarica file demone per ${activeTenant.nome}`}
               >
                 <span className="flex items-center gap-1.5">
                   <HardDrive className="w-3.5 h-3.5" />
-                  <span>Scarica per Windows (.bat)</span>
+                  <span>1. Scarica Demone (.BAT)</span>
                 </span>
                 <Download className="w-3.5 h-3.5 shrink-0" />
               </button>
 
-              <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                disabled={isOperator}
+                onClick={() => {
+                  const certText = `-----BEGIN JOKER 80 INDUSTRIAL GATEWAY CERTIFICATE-----\nPlant-ID: ${activeTenant.id}\nPlant-Name: ${activeTenant.nome}\nCompany: ${activeTenant.azienda || 'Azienda'}\nEndpoint: ${activeTenant.endpoint}\nKey: ${activeTenant.wmsApiKey || `JOKER80-NIS2-${(activeTenant.id || 'GW').toUpperCase()}-2026`}\nSecurity: NIS2 / IEC 62443 Certified\n-----END JOKER 80 INDUSTRIAL GATEWAY CERTIFICATE-----\n`;
+                  downloadAsBlob(certText, `certificato_nis2_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.pfx.txt`);
+                }}
+                className="w-full py-2 px-3 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                title={`Scarica certificato crittografico mTLS per ${activeTenant.nome}`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-purple-400" />
+                  <span>2. Scarica Certificato NIS2 (.PFX)</span>
+                </span>
+                <Download className="w-3.5 h-3.5 shrink-0" />
+              </button>
+
+              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                 <button
                   type="button"
                   disabled={isOperator}
@@ -1013,10 +1069,10 @@ services:
                 </span>
               </div>
               <h4 className="text-sm font-bold text-white font-mono">
-                3. Handshake M2M & MAC Address
+                3. Handshake & Associazione Automatica
               </h4>
               <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                Il computer interroga la scheda di rete fisica, invia il MAC Address e si associa a questo stabilimento in totale sicurezza.
+                <strong>Come avviene l'associazione:</strong> All'avvio, il demone rileva il MAC Address fisico e il nome del PC. Convalida il certificato con il cloud JOKER 80 e associa istantaneamente e in modo permanente il computer a questo stabilimento.
               </p>
             </div>
 

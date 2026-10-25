@@ -93,6 +93,9 @@ export const AdminControlPanel: React.FC<Props> = ({
   onSwitchToOperator
 }) => {
   const isResponsabile = currentUser.ruolo === 'Responsabile di Stabilimento';
+  const serverOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => new Date().toLocaleTimeString('it-IT'));
+
   const [activeTab, setActiveTab] = useState<'discovery' | 'topology' | 'operators' | 'mtls' | 'daemon_frequency'>(() => {
     return currentUser.ruolo === 'Responsabile di Stabilimento' ? 'operators' : 'discovery';
   });
@@ -512,6 +515,31 @@ export const AdminControlPanel: React.FC<Props> = ({
   // User company and scoped plants for Responsabile di Stabilimento
   const userAzienda = (currentUser.azienda || activeTenant.azienda || '').trim();
 
+  // Helper to strictly test if a user belongs to a specific company
+  const isUserInCompany = React.useCallback((user: UserAccount, targetCompany: string): boolean => {
+    if (!targetCompany) return false;
+    const targetClean = targetCompany.toLowerCase().trim();
+    const userAz = (user.azienda || '').toLowerCase().trim();
+    if (userAz) {
+      if (userAz === targetClean || userAz.includes(targetClean) || targetClean.includes(userAz)) return true;
+    }
+    const userTenant = tenants.find(t => t.id === user.tenantId);
+    if (userTenant?.azienda) {
+      const tAz = userTenant.azienda.toLowerCase().trim();
+      if (tAz === targetClean || tAz.includes(targetClean) || targetClean.includes(tAz)) return true;
+    }
+    if (user.allowedTenantIds && user.allowedTenantIds.length > 0) {
+      for (const tid of user.allowedTenantIds) {
+        const matchT = tenants.find(t => t.id === tid);
+        if (matchT?.azienda) {
+          const tAz = matchT.azienda.toLowerCase().trim();
+          if (tAz === targetClean || tAz.includes(targetClean) || targetClean.includes(tAz)) return true;
+        }
+      }
+    }
+    return false;
+  }, [tenants]);
+
   // Scoped tenants: if Responsabile di Stabilimento, strictly only plants belonging to their company (and within their allowedTenantIds if defined)
   const scopedTenants = React.useMemo(() => {
     if (!isResponsabile) return tenants;
@@ -717,15 +745,24 @@ export const AdminControlPanel: React.FC<Props> = ({
   const [newOpRuolo, setNewOpRuolo] = useState<UserRole>('Operatore di Linea');
   const [newOpPassword, setNewOpPassword] = useState('linea2026');
   const [newOpLinea, setNewOpLinea] = useState('Linea 1 - Inbound & Scarico Baie');
-  const [newOpTenantId, setNewOpTenantId] = useState(activeTenant.id);
+  const [newOpTenantId, setNewOpTenantId] = useState(() => (isResponsabile ? scopedTenants[0]?.id : activeTenant.id) || activeTenant.id);
   const [newOpSuccess, setNewOpSuccess] = useState<string | null>(null);
   const [operatorFilterTenant, setOperatorFilterTenant] = useState<string>('all');
+
+  // Auto-align newOpTenantId with scopedTenants if user is Responsabile
+  useEffect(() => {
+    if (isResponsabile && scopedTenants.length > 0) {
+      if (!scopedTenants.some(t => t.id === newOpTenantId)) {
+        setNewOpTenantId(scopedTenants[0].id);
+      }
+    }
+  }, [isResponsabile, scopedTenants, newOpTenantId]);
 
   // Handle Selecting an Existing Saved Plant to load into Form
   const handleSelectExistingTenant = (tenant: FactoryTenant) => {
     setSelectedExistingTenantId(tenant.id);
     setIsEditingMode(true);
-    setPlantAzienda(tenant.azienda || 'Azienda');
+    setPlantAzienda(isResponsabile ? userAzienda : (tenant.azienda || 'Azienda'));
     setPlantNumeroStabilimento(tenant.numeroStabilimento || 1);
     setPlantNome(tenant.nome);
     setPlantSito(tenant.sito);
@@ -758,7 +795,7 @@ export const AdminControlPanel: React.FC<Props> = ({
     setIsEditingMode(false);
     // Suggest next establishment number for the company
     const currentComp = isResponsabile
-      ? (currentUser.azienda || activeTenant.azienda || 'Azienda')
+      ? userAzienda
       : (selectedCompanyFilter !== 'all' ? selectedCompanyFilter : plantAzienda);
     const sameCompTenants = tenants.filter(t => (t.azienda || '').toLowerCase() === currentComp.toLowerCase());
     setPlantAzienda(currentComp);
@@ -785,6 +822,7 @@ export const AdminControlPanel: React.FC<Props> = ({
 
   const handleCreateQuickOperatorForPlant = (tenant: FactoryTenant) => {
     if (!quickOpUsername.trim() || !quickOpPassword.trim() || !quickOpNome.trim()) return;
+    const assignedAzienda = tenant.azienda || (isResponsabile ? userAzienda : 'Barilla G. e R. Fratelli');
     const newOp: UserAccount = {
       id: `usr-op-${Date.now()}`,
       username: quickOpUsername.trim(),
@@ -792,6 +830,9 @@ export const AdminControlPanel: React.FC<Props> = ({
       nomeCompleto: quickOpNome.trim(),
       ruolo: 'Operatore di Linea',
       tenantId: tenant.id,
+      azienda: assignedAzienda,
+      allowedTenantIds: [tenant.id],
+      allowedMachineIds: PLANT_MACHINERY_NODES.map(m => m.key),
       lineaAssegnata: quickOpLinea.trim() || `Linea Generale - ${tenant.nome}`,
       attivo: true,
       createdAt: new Date().toISOString().split('T')[0]
@@ -812,7 +853,7 @@ export const AdminControlPanel: React.FC<Props> = ({
     AuthStorage.saveTenants(updatedTenants);
     onUpdateTenants(updatedTenants);
 
-    setQuickOpFeedback(`✅ Operatore "${newOp.nomeCompleto}" (@${newOp.username}) creato e assegnato a ${tenant.nome}!`);
+    setQuickOpFeedback(`✅ Operatore "${newOp.nomeCompleto}" (@${newOp.username}) creato e assegnato a ${tenant.nome} (${assignedAzienda})!`);
     setQuickOpUsername('');
     setQuickOpPassword('');
     setQuickOpNome('');
@@ -910,10 +951,11 @@ export const AdminControlPanel: React.FC<Props> = ({
         uniqueId
       );
 
+      const finalAzienda = isResponsabile ? userAzienda : (plantAzienda.trim() || 'Nuova Società');
       const newTenant: FactoryTenant = {
         id: uniqueId,
         nome: plantNome.trim(),
-        azienda: plantAzienda.trim() || (isResponsabile ? (currentUser.azienda || 'Azienda') : 'Nuova Società'),
+        azienda: finalAzienda,
         numeroStabilimento: Number(plantNumeroStabilimento) || 1,
         sito: plantSito.trim() || 'Stabilimento Industriale',
         endpoint: plantEndpoint.trim(),
@@ -939,6 +981,17 @@ export const AdminControlPanel: React.FC<Props> = ({
           }
         }
       });
+
+      // Se responsabile, assegna automaticamente anche al responsabile stesso il nuovo stabilimento
+      if (isResponsabile && currentUser) {
+        const curAllowed = currentUser.allowedTenantIds || (currentUser.tenantId ? [currentUser.tenantId] : []);
+        if (!curAllowed.includes(uniqueId)) {
+          const updatedResp: UserAccount = { ...currentUser, allowedTenantIds: [...curAllowed, uniqueId] };
+          AuthStorage.updateUser(updatedResp);
+          AuthStorage.setCurrentUser(updatedResp);
+        }
+      }
+
       setUsers(AuthStorage.getUsers());
 
       const allTenants = AuthStorage.getTenants();
@@ -989,7 +1042,7 @@ export const AdminControlPanel: React.FC<Props> = ({
       
       const result = await PlantAutoDiscoveryService.discoverAndConnectPlant({
         nome: plantNome,
-        azienda: plantAzienda,
+        azienda: isResponsabile ? userAzienda : plantAzienda,
         numeroStabilimento: Number(plantNumeroStabilimento) || 1,
         sito: plantSito || 'Stabilimento di Produzione',
         endpoint: plantEndpoint,
@@ -1007,6 +1060,16 @@ export const AdminControlPanel: React.FC<Props> = ({
       onUpdateTenants(updatedTenants);
       setUsers(updatedUsers);
       onSelectTenant(result.tenant);
+
+      // Se responsabile, assegna automaticamente anche al responsabile stesso il nuovo stabilimento
+      if (isResponsabile && currentUser) {
+        const curAllowed = currentUser.allowedTenantIds || (currentUser.tenantId ? [currentUser.tenantId] : []);
+        if (!curAllowed.includes(result.tenant.id)) {
+          const updatedResp: UserAccount = { ...currentUser, allowedTenantIds: [...curAllowed, result.tenant.id] };
+          AuthStorage.updateUser(updatedResp);
+          AuthStorage.setCurrentUser(updatedResp);
+        }
+      }
 
       setDiscoveryResult(result);
       setSelectedExistingTenantId(result.tenant.id);
@@ -1032,10 +1095,15 @@ export const AdminControlPanel: React.FC<Props> = ({
       if (activeTenant.id === tenant.id) {
         onSelectTenant(updated);
       }
+      const nowStr = new Date().toLocaleTimeString('it-IT');
+      setLastSyncTime(nowStr);
+      setTopologyToast(`Telemetria SM.I.LE80 sincronizzata alle ore ${nowStr}`);
+      setTimeout(() => setTopologyToast(null), 3500);
     } finally {
       setIsSyncing(null);
     }
   };
+
 
   // Delete Tenant
   const handleDeleteTenant = (id: string, nome: string) => {
@@ -1070,46 +1138,65 @@ export const AdminControlPanel: React.FC<Props> = ({
       return;
     }
 
-    const targetTenant = tenants.find(t => t.id === newOpTenantId);
+    const availablePool = isResponsabile ? scopedTenants : tenants;
+    const targetTenant = availablePool.find(t => t.id === newOpTenantId) || availablePool[0];
+    if (!targetTenant) {
+      alert('Seleziona uno stabilimento valido per la tua società.');
+      return;
+    }
+
+    const assignedAzienda = isResponsabile ? userAzienda : (targetTenant?.azienda || 'Barilla G. e R. Fratelli');
     const created = AuthStorage.addUser({
       username: newOpUsername.trim(),
       nomeCompleto: newOpNomeCompleto.trim(),
       ruolo: newOpRuolo,
       password: newOpPassword.trim() || 'linea2026',
       lineaAssegnata: newOpLinea,
-      tenantId: newOpTenantId,
-      azienda: targetTenant?.azienda,
-      allowedTenantIds: [newOpTenantId],
+      tenantId: targetTenant.id,
+      azienda: assignedAzienda,
+      allowedTenantIds: [targetTenant.id],
       allowedMachineIds: PLANT_MACHINERY_NODES.map(m => m.key),
       attivo: true
     });
 
     const updatedUsers = AuthStorage.getUsers();
     setUsers(updatedUsers);
-    setNewOpSuccess(`${newOpRuolo === 'Responsabile di Stabilimento' ? 'Responsabile' : 'Operatore'} "${created.nomeCompleto}" (${created.username}) abilitato all'accesso per lo stabilimento selezionato!`);
+    setNewOpSuccess(`${newOpRuolo === 'Responsabile di Stabilimento' ? 'Responsabile' : 'Operatore'} "${created.nomeCompleto}" (${created.username}) abilitato all'accesso per ${targetTenant.nome} (${assignedAzienda})!`);
     setNewOpUsername('');
     setNewOpNomeCompleto('');
     setTimeout(() => setNewOpSuccess(null), 5000);
   };
 
   const handleOpenPermissionsModal = (op: UserAccount) => {
+    if (isResponsabile && !isUserInCompany(op, userAzienda)) {
+      alert(`Accesso non autorizzato: come Responsabile di ${userAzienda} puoi visualizzare e gestire esclusivamente gli operatori del tuo gruppo.`);
+      return;
+    }
     setEditingPermissionsUser(op);
     setPermRuolo(op.ruolo);
     const assignedTenant = tenants.find(t => t.id === op.tenantId);
-    setPermAzienda(op.azienda || assignedTenant?.azienda || 'Barilla G. e R. Fratelli');
-    setPermTenantId(op.tenantId || tenants[0]?.id || '');
+    setPermAzienda(isResponsabile ? userAzienda : (op.azienda || assignedTenant?.azienda || 'Barilla G. e R. Fratelli'));
+    setPermTenantId(op.tenantId || (isResponsabile ? scopedTenants[0]?.id : tenants[0]?.id) || '');
     setPermAllowedTenantIds(op.allowedTenantIds || (op.tenantId ? [op.tenantId] : []));
     setPermAllowedMachines(op.allowedMachineIds || PLANT_MACHINERY_NODES.map(m => m.key));
   };
 
   const handleSavePermissions = () => {
     if (!editingPermissionsUser) return;
+    const finalAzienda = isResponsabile ? userAzienda : permAzienda;
+    const finalAllowedTenants = isResponsabile
+      ? permAllowedTenantIds.filter(tid => scopedTenants.some(st => st.id === tid))
+      : permAllowedTenantIds;
+    const finalPrimaryTenant = isResponsabile && !scopedTenants.some(st => st.id === permTenantId)
+      ? (scopedTenants[0]?.id || permTenantId)
+      : permTenantId;
+
     const updated: UserAccount = {
       ...editingPermissionsUser,
       ruolo: permRuolo,
-      azienda: permAzienda,
-      tenantId: permTenantId,
-      allowedTenantIds: permAllowedTenantIds,
+      azienda: finalAzienda,
+      tenantId: finalPrimaryTenant,
+      allowedTenantIds: finalAllowedTenants.length > 0 ? finalAllowedTenants : [finalPrimaryTenant],
       allowedMachineIds: permAllowedMachines
     };
     AuthStorage.updateUser(updated);
@@ -1122,6 +1209,11 @@ export const AdminControlPanel: React.FC<Props> = ({
       alert('Non puoi eliminare l\'amministratore principale.');
       return;
     }
+    const targetUser = users.find(u => u.id === id);
+    if (isResponsabile && targetUser && !isUserInCompany(targetUser, userAzienda)) {
+      alert(`Operazione non consentita: puoi rimuovere solo operatori della società ${userAzienda}.`);
+      return;
+    }
     if (window.confirm(`Rimuovere l'utente ${username}?`)) {
       AuthStorage.deleteUser(id);
       setUsers(AuthStorage.getUsers());
@@ -1129,6 +1221,11 @@ export const AdminControlPanel: React.FC<Props> = ({
   };
 
   const handleToggleUserActive = (id: string) => {
+    const targetUser = users.find(u => u.id === id);
+    if (isResponsabile && targetUser && !isUserInCompany(targetUser, userAzienda)) {
+      alert(`Operazione non consentita: puoi modificare lo stato solo di operatori della società ${userAzienda}.`);
+      return;
+    }
     const updated = users.map(u => {
       if (u.id === id && u.username !== 'admin') {
         return { ...u, attivo: !u.attivo };
@@ -1142,12 +1239,18 @@ export const AdminControlPanel: React.FC<Props> = ({
   const filteredOperators = users.filter(u => {
     if (u.ruolo === 'Amministratore') return false;
     if (isResponsabile) {
-      const respAzienda = (currentUser.azienda || activeTenant.azienda || '').toLowerCase().trim();
-      const userAzienda = (u.azienda || '').toLowerCase().trim();
-      if (respAzienda && userAzienda && respAzienda !== userAzienda) return false;
+      if (!isUserInCompany(u, userAzienda)) return false;
     }
-    if (operatorFilterTenant === 'all') return true;
-    return u.tenantId === operatorFilterTenant;
+    if (operatorFilterTenant === 'all') {
+      if (isResponsabile) {
+        const opTenant = u.tenantId;
+        const allowed = u.allowedTenantIds || (opTenant ? [opTenant] : []);
+        const scopedIds = scopedTenants.map(t => t.id);
+        return allowed.some(id => scopedIds.includes(id)) || scopedIds.includes(opTenant || '');
+      }
+      return true;
+    }
+    return u.tenantId === operatorFilterTenant || (u.allowedTenantIds && u.allowedTenantIds.includes(operatorFilterTenant));
   });
 
   return (
@@ -1248,6 +1351,7 @@ export const AdminControlPanel: React.FC<Props> = ({
           </div>
         </div>
       </div>
+
 
       {/* TAB 1: CONNESSIONE RAPIDA, AUTO-DISCOVERY & SEDI */}
       {activeTab === 'discovery' && (
@@ -1734,53 +1838,23 @@ export const AdminControlPanel: React.FC<Props> = ({
                               <span>{t.protocol || 'REST_HTTPS'}</span>
                             </div>
 
-                            {/* CANALE DI COMUNICAZIONE MQTLS "METTIAMOCI IN CONTATTO" DELLO STABILIMENTO */}
-                            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
-                              <div className="flex items-center justify-between gap-1 text-[10px] font-mono">
-                                <span className="flex items-center gap-1.5 font-bold text-slate-300">
-                                  <Shield className="w-3 h-3 text-cyan-400" />
-                                  Canale MQTLS Stabilimento:
-                                </span>
-                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                                  mtlsStatus?.configured
-                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                }`}>
-                                  {mtlsStatus?.configured ? 'MQTLS ATTIVO' : 'IN ATTESA PFX'}
-                                </span>
+                            {/* CANALE GATEWAY MQTLS & LINK DIRETTO */}
+                            <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between gap-2 text-[10px] font-mono">
+                              <div className="flex items-center gap-1.5 text-slate-300">
+                                <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                <span>Gateway mTLS: <strong className="text-slate-100">{t.protocol || 'REST_HTTPS'}</strong></span>
                               </div>
-
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveTab('daemon_frequency')}
-                                  className="px-2 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-[10px] font-mono font-semibold flex items-center gap-1 transition-all cursor-pointer"
-                                  title={`Frequenza di scansione e script PC per ${t.nome}`}
-                                >
-                                  <Clock className="w-2.5 h-2.5" />
-                                  <span>Frequenza & Script PC</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveTab('mtls')}
-                                  className="px-2 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-semibold flex items-center gap-1 transition-all cursor-pointer"
-                                  title={`Carica certificato .pfx per ${t.nome}`}
-                                >
-                                  <UploadCloud className="w-2.5 h-2.5" />
-                                  <span>Carica .PFX</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenCsvModalForPlant ? onOpenCsvModalForPlant(t) : null}
-                                  className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-semibold flex items-center gap-1 transition-all cursor-pointer"
-                                  title={`Carica file CSV per ${t.nome}`}
-                                >
-                                  <FileText className="w-2.5 h-2.5" />
-                                  <span>Carica CSV</span>
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onSelectTenant(t);
+                                  setActiveTab('daemon_frequency');
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                                title={`Apri la guida e scarica il demone per ${t.nome} nella pagina Gateway Demoni`}
+                              >
+                                <span>🚀 Gateway Demone →</span>
+                              </button>
                             </div>
                           </div>
 
@@ -2570,52 +2644,37 @@ export const AdminControlPanel: React.FC<Props> = ({
                     </button>
                   </div>
 
-                  {/* CANALE DI COMUNICAZIONE MQTLS DELLO STABILIMENTO */}
-                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 font-mono text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-300 font-bold flex items-center gap-1.5">
-                        <Shield className="w-3.5 h-3.5 text-cyan-400" />
-                        Canale MQTLS Stabilimento:
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        mtlsStatus?.configured ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      }`}>
-                        {mtlsStatus?.configured ? 'MQTLS ATTIVO' : 'IN ATTESA PFX'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('daemon_frequency')}
-                        className="px-2.5 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
-                        title="Frequenza di campionamento e script PC per questo stabilimento"
-                      >
-                        <Clock className="w-3 h-3" />
-                        <span>Frequenza & Script PC</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('mtls')}
-                        className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
-                        title="Carica certificato .PFX per questo stabilimento"
-                      >
-                        <UploadCloud className="w-3 h-3" />
-                        <span>Carica .PFX</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const target = (selectedExistingTenantId && tenants.find(t => t.id === selectedExistingTenantId)) || activeTenant;
-                          onOpenCsvModalForPlant ? onOpenCsvModalForPlant(target) : null;
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
-                        title="Carica file CSV per questo stabilimento"
-                      >
-                        <FileText className="w-3 h-3 text-emerald-400" />
-                        <span>Carica CSV</span>
-                      </button>
-                    </div>
-                  </div>
+                  {/* GATEWAY STATUS & LINK AL PANNELLO DEDICATO */}
+                  {(() => {
+                    const currentTargetPlant = (selectedExistingTenantId && tenants.find(t => t.id === selectedExistingTenantId)) || activeTenant;
+                    return (
+                      <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 font-mono text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-200 font-bold flex items-center gap-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                            Gateway Stabilimento & NIS2:
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            NIS2 PRONTO
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Il download del demone di avvio (.BAT) e del certificato crittografico mTLS avviene nella console <strong>Gateway Demoni & Sicurezza NIS2</strong>.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelectTenant(currentTargetPlant);
+                            setActiveTab('daemon_frequency');
+                          }}
+                          className="w-full py-2 px-3 rounded-xl bg-blue-600/25 hover:bg-blue-600/40 text-blue-200 border border-blue-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                        >
+                          <Terminal className="w-3.5 h-3.5 text-blue-400" />
+                          <span>Vai a Gateway Demoni ({currentTargetPlant.nome}) →</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
                     <button
@@ -2665,14 +2724,22 @@ export const AdminControlPanel: React.FC<Props> = ({
                 </div>
               </div>
 
-              <button
-                onClick={() => handleResync(activeTenant)}
-                disabled={isSyncing === activeTenant.id}
-                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-xs font-mono border border-slate-700 flex items-center gap-2 transition-colors cursor-pointer self-start sm:self-auto"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing === activeTenant.id ? 'animate-spin' : ''}`} />
-                <span>Aggiorna Dati da SM.I.LE80</span>
-              </button>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 self-start sm:self-auto">
+                <div className="text-[11px] font-mono text-slate-400 text-left sm:text-right">
+                  <span className="text-slate-500">Ultimo sync telemetria: </span>
+                  <strong className="text-emerald-400 font-bold">{lastSyncTime}</strong>
+                </div>
+
+                <button
+                  onClick={() => handleResync(activeTenant)}
+                  disabled={isSyncing === activeTenant.id}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 text-xs font-mono border border-slate-700 flex items-center gap-2 transition-colors cursor-pointer"
+                  title="Interroga istantaneamente il gateway SM.I.LE80 e riallinea lo stato live delle macchine"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing === activeTenant.id ? 'animate-spin' : ''}`} />
+                  <span>Aggiorna Dati da SM.I.LE80</span>
+                </button>
+              </div>
             </div>
 
             {/* QPU Dimensioning & Hamiltonian Matrix Spec */}
@@ -3025,6 +3092,38 @@ export const AdminControlPanel: React.FC<Props> = ({
             )}
 
             <form onSubmit={handleCreateManualOperator} className="space-y-4 text-xs font-mono">
+              {/* Azienda / Società */}
+              {isResponsabile ? (
+                <div className="space-y-1">
+                  <label className="text-slate-300 flex items-center gap-1 font-bold">
+                    <Building2 className="w-3.5 h-3.5 text-purple-400" />
+                    Azienda di Appartenenza (Vincolata al tuo Profilo)
+                  </label>
+                  <div className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-amber-500/40 text-amber-300 font-bold flex items-center justify-between">
+                    <span>{userAzienda}</span>
+                    <span className="text-[10px] text-amber-400 font-mono px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                      RISERVATA {userAzienda.split(' ')[0]}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono">
+                    Come Responsabile puoi abilitare e gestire esclusivamente operatori della società {userAzienda}.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-slate-300 flex items-center gap-1 font-bold">
+                    <Building2 className="w-3.5 h-3.5 text-purple-400" />
+                    Azienda di Appartenenza (Globale Admin)
+                  </label>
+                  <div className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 font-bold flex items-center justify-between">
+                    <span>{tenants.find(t => t.id === newOpTenantId)?.azienda || 'Azienda Industriale'}</span>
+                    <span className="text-[10px] text-cyan-400 font-mono px-2 py-0.5 rounded bg-cyan-500/10">
+                      AUTO-ALLINEATA
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <label className="text-slate-300 flex items-center gap-1 font-bold">
                   <Building2 className="w-3.5 h-3.5 text-purple-400" />
@@ -3927,6 +4026,8 @@ export const AdminControlPanel: React.FC<Props> = ({
           activeTenant={activeTenant}
           currentUser={currentUser}
           telemetryHistory={telemetryHistory}
+          availableTenants={isResponsabile ? scopedTenants : tenants}
+          onSelectTenant={onSelectTenant}
           onRefreshTelemetry={() => {
             fetch('/api/telemetry/latest')
               .then(r => r.json())
@@ -4030,7 +4131,12 @@ export const AdminControlPanel: React.FC<Props> = ({
             {/* Assegna Altri Operatori Esistenti */}
             {(() => {
               const currentOps = plantForOperatorsModal.operatoriAssegnati || [];
-              const availableOtherOps = users.filter(u => u.ruolo !== 'Amministratore' && !currentOps.includes(u.username) && !currentOps.includes(u.id));
+              const targetCompany = plantForOperatorsModal.azienda || userAzienda;
+              const availableOtherOps = users.filter(u => {
+                if (u.ruolo === 'Amministratore') return false;
+                if (currentOps.includes(u.username) || currentOps.includes(u.id)) return false;
+                return isUserInCompany(u, targetCompany);
+              });
               if (availableOtherOps.length === 0) return null;
 
               return (
@@ -4376,17 +4482,25 @@ export const AdminControlPanel: React.FC<Props> = ({
               </button>
 
               <div className="flex items-center gap-2">
-                {onSwitchToOperator && (
+                {onSwitchToOperator && (!isResponsabile || isUserInCompany(editingPermissionsUser, userAzienda)) && (
                   <button
                     type="button"
                     onClick={() => {
+                      const finalAzienda = isResponsabile ? userAzienda : permAzienda;
+                      const finalAllowedTenants = isResponsabile
+                        ? permAllowedTenantIds.filter(tid => scopedTenants.some(st => st.id === tid))
+                        : permAllowedTenantIds;
+                      const finalPrimaryTenant = isResponsabile && !scopedTenants.some(st => st.id === permTenantId)
+                        ? (scopedTenants[0]?.id || permTenantId)
+                        : permTenantId;
+
                       handleSavePermissions();
                       const updated: UserAccount = {
                         ...editingPermissionsUser,
                         ruolo: permRuolo,
-                        azienda: permAzienda,
-                        tenantId: permTenantId,
-                        allowedTenantIds: permAllowedTenantIds,
+                        azienda: finalAzienda,
+                        tenantId: finalPrimaryTenant,
+                        allowedTenantIds: finalAllowedTenants.length > 0 ? finalAllowedTenants : [finalPrimaryTenant],
                         allowedMachineIds: permAllowedMachines
                       };
                       onSwitchToOperator(updated);

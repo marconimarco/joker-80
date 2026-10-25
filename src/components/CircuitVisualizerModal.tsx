@@ -1,14 +1,22 @@
 import React from 'react';
 import { QuantumCalculationMeta } from '../types/quantum';
-import { X, Cpu, Zap, Lock, Unlock, Code2, Layers } from 'lucide-react';
+import { X, Cpu, Zap, Lock, Unlock, Code2, Layers, FileCode } from 'lucide-react';
 
 interface Props {
   calculation: QuantumCalculationMeta | null;
   onClose: () => void;
   lastState?: string;
+  isAdmin?: boolean;
+  onOpenPythonCode?: (calc: QuantumCalculationMeta) => void;
 }
 
-export const CircuitVisualizerModal: React.FC<Props> = ({ calculation, onClose, lastState }) => {
+export const CircuitVisualizerModal: React.FC<Props> = ({ 
+  calculation, 
+  onClose, 
+  lastState,
+  isAdmin = false,
+  onOpenPythonCode
+}) => {
   if (!calculation) return null;
 
   const isLocked = calculation.entanglement === 'OBBLIGATORIO';
@@ -204,10 +212,24 @@ export const CircuitVisualizerModal: React.FC<Props> = ({ calculation, onClose, 
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-slate-950 flex items-center justify-end">
+        <div className="px-6 py-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between gap-3">
+          {isAdmin && onOpenPythonCode ? (
+            <button
+              type="button"
+              onClick={() => onOpenPythonCode(calculation)}
+              className="px-3.5 py-2 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              title={`Visualizza codice Python CUDA-Q per il Calcolo #${calculation.id}`}
+            >
+              <FileCode className="w-4 h-4 text-emerald-400" />
+              <span>Visualizza Codice Python CUDA-Q</span>
+            </button>
+          ) : (
+            <div />
+          )}
+
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition-colors"
+            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition-colors cursor-pointer"
           >
             Chiudi Dettagli Circuito
           </button>

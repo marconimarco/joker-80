@@ -812,13 +812,24 @@ Tutti i **21 Calcoli Quantistici CUDA-Q** sono pre-caricati e attivi nel core:`
                           NUCLEO QUANTISTICO CUDA-Q
                         </span>
                         {msg.calcolo_id && (
-                          <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold flex items-center gap-1 border ${
-                            msg.entanglement === 'OBBLIGATORIO' 
-                              ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' 
-                              : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                          }`}>
-                            {msg.entanglementSymbol} Calcolo [{msg.calcolo_id}]
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold flex items-center gap-1 border ${
+                              msg.entanglement === 'OBBLIGATORIO' 
+                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' 
+                                : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            }`}>
+                              {msg.entanglementSymbol} Calcolo [{msg.calcolo_id}]
+                            </span>
+                            {msg.entanglement === 'OBBLIGATORIO' && calcMeta?.crossCategoryDetails ? (
+                              <span className="px-2 py-0.5 rounded text-[10.5px] font-mono font-bold bg-amber-950/70 text-amber-300 border border-amber-500/30 hidden sm:inline-flex items-center gap-1">
+                                <span>🔒 Unisce: {calcMeta.category.replace(/^\d+\.\s*/, '')} ⟷ {calcMeta.crossCategoryDetails.crossedWith.replace(/^\d+\.\s*/, '')}</span>
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-900 text-slate-400 border border-slate-800 hidden sm:inline-flex items-center gap-1">
+                                <span>🔓 Locale ({calcMeta?.technicalModule || 'Singolo Reparto'})</span>
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}

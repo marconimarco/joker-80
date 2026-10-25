@@ -41,11 +41,14 @@ import {
   Search,
   LayoutList,
   Grid,
-  RefreshCw
+  RefreshCw,
+  FileCode,
+  Code2
 } from 'lucide-react';
 import { PlantTelemetryTrendCharts } from './PlantTelemetryTrendCharts';
 import { getUserPermittedCalculations, PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
 import { PlantTelemetryHistoryService } from '../services/plantTelemetryHistory';
+import { QuantumPythonCodeModal } from './QuantumPythonCodeModal';
 import { UserAccount } from '../types/quantum';
 import { AutoScanSummary } from '../services/plantTelemetryScanner';
 import { IndustrialHelpTooltip } from './IndustrialHelpTooltip';
@@ -170,6 +173,7 @@ export const QuantumCatalog: React.FC<Props> = ({
   const [executingId, setExecutingId] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [selectedCpuCalc, setSelectedCpuCalc] = useState<QuantumCalculationMeta | null>(null);
+  const [selectedPythonCalc, setSelectedPythonCalc] = useState<QuantumCalculationMeta | null>(null);
   const [hoveredCalcId, setHoveredCalcId] = useState<number | null>(null);
 
   // Helper to format any input value for UI display
@@ -677,6 +681,17 @@ export const QuantumCatalog: React.FC<Props> = ({
                 QPU: {res.tempo_simulazione_qpu_ms}ms
               </span>
             )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setSelectedPythonCalc(calc)}
+                className="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-500/50 flex items-center gap-1 cursor-pointer transition-colors text-[10px] font-bold"
+                title={`Visualizza codice Python CUDA-Q del Calcolo #${calc.id} (Solo Amministratore)`}
+              >
+                <FileCode className="w-3 h-3 text-emerald-400" />
+                <span>Codice Python</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => copyResult(calc.id, res)}
@@ -834,6 +849,24 @@ export const QuantumCatalog: React.FC<Props> = ({
           </div>
         </div>
 
+        {/* Banner Reparti Uniti per Operatore */}
+        {calc.entanglement === 'OBBLIGATORIO' && calc.crossCategoryDetails ? (
+          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-mono flex items-center justify-between flex-wrap gap-2">
+            <span className="flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span><strong>🔒 REPARTI UNITI:</strong> [{calc.category}] ⟷ [{calc.crossCategoryDetails.crossedWith}]</span>
+            </span>
+            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold text-[10px]">
+              {calc.crossCategoryDetails.modules}
+            </span>
+          </div>
+        ) : (
+          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800 text-slate-400 text-xs font-mono flex items-center gap-1.5">
+            <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span><strong>🔓 CALCOLO LOCALE:</strong> Solo [{calc.category}] ({calc.technicalModule})</span>
+          </div>
+        )}
+
         {/* Grandi Schede KPI per l'Operatore */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
@@ -891,6 +924,17 @@ export const QuantumCatalog: React.FC<Props> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setSelectedPythonCalc(calc)}
+                className="px-3.5 py-2.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer min-h-[42px] transition-all shadow-xs"
+                title={`Visualizza codice Python CUDA-Q del Calcolo #${calc.id} (Solo Amministratore)`}
+              >
+                <FileCode className="w-4 h-4 text-emerald-400" />
+                <span>Codice Python</span>
+              </button>
+            )}
             <button
               type="button"
               disabled={isExecuting}
@@ -1137,6 +1181,21 @@ export const QuantumCatalog: React.FC<Props> = ({
                           {isExecuting ? '● In Esecuzione' : hasResult ? '✓ Dati Pronti' : 'In attesa'}
                         </span>
                       </div>
+
+                      {/* Info Reparti Uniti per Calcoli con Lucchetto Chiuso 🔒 vs Singolo Reparto 🔓 */}
+                      {c.entanglement === 'OBBLIGATORIO' && c.crossCategoryDetails ? (
+                        <div className="text-[9.5px] font-mono text-amber-300/90 flex items-center gap-1 truncate pt-0.5 border-t border-slate-800/60 mt-0.5">
+                          <Lock className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                          <span className="truncate">
+                            Unisce: <strong className="text-amber-200">{c.crossCategoryDetails.modules}</strong> ({c.crossCategoryDetails.crossedWith.replace(/^\d+\.\s*/, '')})
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-[9.5px] font-mono text-emerald-400/70 flex items-center gap-1 truncate pt-0.5 border-t border-slate-800/60 mt-0.5">
+                          <Unlock className="w-2.5 h-2.5 text-emerald-400/80 shrink-0" />
+                          <span className="truncate">Locale: solo {c.technicalModule}</span>
+                        </div>
+                      )}
                     </button>
                   );
                 })
@@ -1227,23 +1286,8 @@ export const QuantumCatalog: React.FC<Props> = ({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center flex-wrap gap-1.5 text-xs font-mono">
-                    <span className={`px-2 py-0.5 text-[11px] font-mono font-bold rounded-md border flex items-center gap-1 ${
-                      isLocked
-                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/10'
-                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                    }`}>
-                      {isLocked ? (
-                        <>
-                          <span className="font-extrabold text-amber-200">[+]</span>
-                          <Lock className="w-3 h-3" />
-                        </>
-                      ) : (
-                        <>
-                          <span className="font-extrabold text-emerald-300">[-]</span>
-                          <Unlock className="w-3 h-3" />
-                        </>
-                      )}
-                      Calcolo [{calc.id}] {isLocked ? 'INCROCIATO' : 'LOCALE'}
+                    <span className="px-2 py-0.5 text-[11px] font-mono font-bold rounded-md border bg-slate-800 text-cyan-300 border-slate-700 flex items-center gap-1 shadow-xs">
+                      Calcolo #{calc.id}
                     </span>
                     <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-cyan-400 border border-slate-700 font-bold">
                       {calc.technicalModule}
@@ -1292,16 +1336,17 @@ export const QuantumCatalog: React.FC<Props> = ({
                       )}
                     </div>
 
-                    {/* [+] Incrociato con sulla stessa riga */}
-                    {calc.isCrossCategory && calc.crossCategoryDetails && (
-                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-[11px] font-mono text-amber-300">
-                        <span className="font-semibold text-[10px]">
-                          [+] Incrociato con: {calc.crossCategoryDetails.crossedWith}
-                        </span>
-                        <span className="text-[9px] text-amber-400/80 px-1 py-0.2 rounded bg-amber-500/20 font-bold">
-                          {calc.crossCategoryDetails.modules}
-                        </span>
-                      </div>
+                    {/* Pulsante Codice Python CUDA-Q (Riservato Solo ad Amministratore Globale) */}
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPythonCalc(calc)}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white transition-all cursor-pointer shadow-xs flex items-center gap-1.5 text-[11px] font-mono font-bold"
+                        title={`Visualizza codice Python CUDA-Q per il Calcolo #${calc.id} (Riservato Amministratore)`}
+                      >
+                        <FileCode className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Codice Python</span>
+                      </button>
                     )}
                   </div>
 
@@ -1338,6 +1383,59 @@ export const QuantumCatalog: React.FC<Props> = ({
                   </p>
                 </div>
               </div>
+
+              {/* BANNER ESPLICITO REPARTI UNITI DALL'ENTANGLEMENT (Lucchetto Chiuso 🔒 vs Lucchetto Aperto 🔓) */}
+              {isLocked ? (
+                <div className="p-2.5 sm:p-3 rounded-xl bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/30 border border-amber-500/50 shadow-sm font-mono text-xs space-y-1.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-black text-[10.5px] flex items-center gap-1.5 shadow-xs">
+                        <Lock className="w-3.5 h-3.5 stroke-[2.5]" />
+                        LUCCHETTO CHIUSO: ENTANGLEMENT TRA REPARTI (CALCOLO INCROCIATO)
+                      </span>
+                      <span className="text-amber-300 font-bold text-[11px]">
+                        Unisce 2 o più reparti di stabilimento:
+                      </span>
+                    </div>
+                    {calc.crossCategoryDetails?.modules && (
+                      <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-[10px]">
+                        {calc.crossCategoryDetails.modules}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-amber-500/20 text-xs">
+                    <span className="px-2 py-0.5 rounded bg-slate-950 text-cyan-300 border border-slate-700 font-bold text-[11px]">
+                      {calc.category}
+                    </span>
+                    <span className="text-amber-400 font-black text-sm px-0.5">⟷</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-300 border border-amber-500/40 font-bold text-[11px]">
+                      {calc.crossCategoryDetails?.crossedWith}
+                    </span>
+                  </div>
+
+                  {calc.crossCategoryDetails?.parametersOrData && (
+                    <div className="text-[10.5px] text-slate-300 bg-slate-950/70 p-2 rounded-lg border border-slate-800/80 leading-relaxed">
+                      <span className="text-amber-400 font-semibold">Parametri accoppiati in Entanglement: </span>
+                      <span className="text-slate-200">{calc.crossCategoryDetails.parametersOrData}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-2 sm:p-2.5 rounded-xl bg-slate-950/70 border border-emerald-500/30 font-mono text-xs flex items-center justify-between flex-wrap gap-2 text-emerald-300">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-[10.5px] flex items-center gap-1">
+                      <Unlock className="w-3.5 h-3.5" />
+                      LUCCHETTO APERTO: CALCOLO LOCALE (NON INCROCIATO)
+                    </span>
+                    <span className="text-slate-300 text-[11px]">
+                      Circoscritto a un <strong>singolo reparto</strong>: 
+                      <strong className="text-emerald-300 ml-1">[{calc.category}] ({calc.technicalModule})</strong>
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 hidden sm:inline">Nessun accoppiamento esterno</span>
+                </div>
+              )}
 
               {/* RISULTATO DIAGNOSTICO IMMEDIATO (Visibile subito senza premere calcolo) */}
               <div className="space-y-1">
@@ -2152,18 +2250,36 @@ export const QuantumCatalog: React.FC<Props> = ({
                 Chiudi
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const target = selectedCpuCalc;
-                  setSelectedCpuCalc(null);
-                  onOpenCircuit(target);
-                }}
-                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-cyan-600/30 cursor-pointer"
-              >
-                <Layers className="w-4 h-4" />
-                <span>Visualizza Circuito CUDA-Q</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedCpuCalc;
+                      setSelectedCpuCalc(null);
+                      setSelectedPythonCalc(target);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/50 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+                    title="Visualizza codice Python CUDA-Q"
+                  >
+                    <FileCode className="w-4 h-4 text-emerald-400" />
+                    <span>Codice Python CUDA-Q</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = selectedCpuCalc;
+                    setSelectedCpuCalc(null);
+                    onOpenCircuit(target);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-cyan-600/30 cursor-pointer"
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>Visualizza Circuito CUDA-Q</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2273,6 +2389,14 @@ export const QuantumCatalog: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Modal Visualizzazione Codice Python CUDA-Q - Riservato Esclusivamente ad Amministratore */}
+      <QuantumPythonCodeModal
+        isOpen={Boolean(selectedPythonCalc)}
+        onClose={() => setSelectedPythonCalc(null)}
+        calculation={selectedPythonCalc}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 };

@@ -19,8 +19,8 @@ interface Props {
 }
 
 export const LoginModal: React.FC<Props> = ({ onLoginSuccess, onLockPreAccess }) => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin');
+  const [username, setUsername] = useState('resp_barilla');
+  const [password, setPassword] = useState('barilla');
   const [error, setError] = useState<string | null>(null);
   const [showQuickFill, setShowQuickFill] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -191,75 +191,136 @@ export const LoginModal: React.FC<Props> = ({ onLoginSuccess, onLockPreAccess })
             </div>
 
             {showQuickFill && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
-                {/* Admin */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('admin', 'admin')}
-                  className="p-2.5 rounded-lg bg-purple-950/30 hover:bg-purple-900/40 border border-purple-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer sm:col-span-2"
-                >
-                  <div>
-                    <div className="font-bold text-purple-300">Amministratore Globale (Tutti gli Impianti & Tutte le Società)</div>
-                    <div className="text-[10px] text-slate-400">user: <code className="text-purple-200">admin</code> | pass: <code className="text-purple-200">admin</code></div>
+              <div className="space-y-3 font-mono">
+                {/* 1. SEZIONE RESPONSABILI DI STABILIMENTO */}
+                <div>
+                  <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Responsabili di Stabilimento:</span>
                   </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-purple-400 transition-colors" />
-                </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {/* Responsabile Barilla */}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('resp_barilla', 'barilla')}
+                      className="p-2 rounded-lg bg-blue-950/40 hover:bg-blue-900/50 border border-blue-800/60 text-left transition-colors flex items-center justify-between group cursor-pointer shadow-xs"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="font-bold text-blue-300 text-[11px] truncate">Resp. Barilla (Ing. Giovanni)</div>
+                        <div className="text-[9.5px] text-slate-400 truncate">Pedrignano, Novara, Foggia</div>
+                        <div className="text-[9.5px] text-blue-400/80">user: <code className="text-blue-200">resp_barilla</code></div>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors shrink-0" />
+                    </button>
 
-                {/* Responsabile Barilla */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('resp_barilla', 'barilla')}
-                  className="p-2.5 rounded-lg bg-blue-950/30 hover:bg-blue-900/40 border border-blue-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
-                >
-                  <div>
-                    <div className="font-bold text-blue-300">Resp. Barilla (Ing. Giovanni)</div>
-                    <div className="text-[10px] text-slate-400">Solo Barilla (Pedrignano, Novara, Foggia)</div>
-                    <div className="text-[10px] text-slate-400">user: <code className="text-blue-200">resp_barilla</code> | pass: <code className="text-blue-200">barilla</code></div>
-                  </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors" />
-                </button>
+                    {/* Responsabile Nestlé */}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('resp_nestle', 'nestle')}
+                      className="p-2 rounded-lg bg-red-950/40 hover:bg-red-900/50 border border-red-800/60 text-left transition-colors flex items-center justify-between group cursor-pointer shadow-xs"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="font-bold text-red-300 text-[11px] truncate">Resp. Nestlé (Dott.ssa Conti)</div>
+                        <div className="text-[9.5px] text-slate-400 truncate">Assago, Benevento, Perugia</div>
+                        <div className="text-[9.5px] text-red-400/80">user: <code className="text-red-200">resp_nestle</code></div>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-red-400 transition-colors shrink-0" />
+                    </button>
 
-                {/* Responsabile Nestlé */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('resp_nestle', 'nestle')}
-                  className="p-2.5 rounded-lg bg-red-950/30 hover:bg-red-900/40 border border-red-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
-                >
-                  <div>
-                    <div className="font-bold text-red-300">Resp. Nestlé (Dott.ssa Conti)</div>
-                    <div className="text-[10px] text-slate-400">Solo Nestlé (Assago, Benevento, Perugia)</div>
-                    <div className="text-[10px] text-slate-400">user: <code className="text-red-200">resp_nestle</code> | pass: <code className="text-red-200">nestle</code></div>
-                  </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-red-400 transition-colors" />
-                </button>
+                    {/* Responsabile Ferrero */}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('resp_ferrero', 'ferrero')}
+                      className="p-2 rounded-lg bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/60 text-left transition-colors flex items-center justify-between group cursor-pointer shadow-xs"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="font-bold text-amber-300 text-[11px] truncate">Resp. Ferrero (Ing. Ferrero)</div>
+                        <div className="text-[9.5px] text-slate-400 truncate">Alba, Pozzuolo Martesana</div>
+                        <div className="text-[9.5px] text-amber-400/80">user: <code className="text-amber-200">resp_ferrero</code></div>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition-colors shrink-0" />
+                    </button>
 
-                {/* Responsabile Ferrero */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('resp_ferrero', 'ferrero')}
-                  className="p-2.5 rounded-lg bg-amber-950/30 hover:bg-amber-900/40 border border-amber-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
-                >
-                  <div>
-                    <div className="font-bold text-amber-300">Resp. Ferrero (Ing. Ferrero)</div>
-                    <div className="text-[10px] text-slate-400">Solo Ferrero (Alba, Pozzuolo)</div>
-                    <div className="text-[10px] text-slate-400">user: <code className="text-amber-200">resp_ferrero</code> | pass: <code className="text-amber-200">ferrero</code></div>
+                    {/* Responsabile Sant'Anna */}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('resp_santanna', 'santanna')}
+                      className="p-2 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-800/60 text-left transition-colors flex items-center justify-between group cursor-pointer shadow-xs"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="font-bold text-emerald-300 text-[11px] truncate">Resp. Sant'Anna (Ing. Bertone)</div>
+                        <div className="text-[9.5px] text-slate-400 truncate">Vinadio, Valli di Lanzo</div>
+                        <div className="text-[9.5px] text-emerald-400/80">user: <code className="text-emerald-200">resp_santanna</code></div>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors shrink-0" />
+                    </button>
                   </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition-colors" />
-                </button>
+                </div>
 
-                {/* Responsabile Sant'Anna */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('resp_santanna', 'santanna')}
-                  className="p-2.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/50 text-left transition-colors flex items-center justify-between group cursor-pointer"
-                >
-                  <div>
-                    <div className="font-bold text-emerald-300">Resp. Sant'Anna (Ing. Bertone)</div>
-                    <div className="text-[10px] text-slate-400">Solo Sant'Anna (Vinadio, Lanzo)</div>
-                    <div className="text-[10px] text-slate-400">user: <code className="text-emerald-200">resp_santanna</code> | pass: <code className="text-emerald-200">santanna</code></div>
+                {/* 2. SEZIONE OPERATORI DI LINEA */}
+                <div className="pt-2 border-t border-slate-800/60">
+                  <div className="text-[11px] font-bold text-cyan-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Operatori di Linea & Macchine:</span>
                   </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
-                </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {/* Operatore Barilla */}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('op_barilla', 'barilla')}
+                      className="p-2 rounded-lg bg-slate-950/70 hover:bg-slate-900 border border-slate-800 hover:border-blue-500/50 text-left transition-colors flex items-center justify-between group cursor-pointer shadow-xs"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="font-bold text-slate-200 group-hover:text-blue-300 text-[11px] truncate">Op. Barilla (Luca Rossi)</div>
+                        <div className="text-[9.5px] text-slate-400 truncate">Inbound & SmartStore • Pedrignano</div>
+                        <div className="text-[9.5px] text-slate-500">user: <code className="text-blue-300">op_barilla</code></div>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 transition-colors shrink-0" />
+                    </button>
+
+                    {/* Operatore Nestlé */}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('op_nestle', 'nestle')}
+                      className="p-2 rounded-lg bg-slate-950/70 hover:bg-slate-900 border border-slate-800 hover:border-red-500/50 text-left transition-colors flex items-center justify-between group cursor-pointer shadow-xs"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="font-bold text-slate-200 group-hover:text-red-300 text-[11px] truncate">Op. Nestlé (Matteo Ferrari)</div>
+                        <div className="text-[9.5px] text-slate-400 truncate">Fasciatori Bema & AGV • Assago</div>
+                        <div className="text-[9.5px] text-slate-500">user: <code className="text-red-300">op_nestle</code></div>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-red-400 transition-colors shrink-0" />
+                    </button>
+
+                    {/* Operatore Ferrero */}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('op_ferrero', 'ferrero')}
+                      className="p-2 rounded-lg bg-slate-950/70 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/50 text-left transition-colors flex items-center justify-between group cursor-pointer shadow-xs"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="font-bold text-slate-200 group-hover:text-amber-300 text-[11px] truncate">Op. Ferrero (Marco Ferri)</div>
+                        <div className="text-[9.5px] text-slate-400 truncate">Confezionamento & Navette • Alba</div>
+                        <div className="text-[9.5px] text-slate-500">user: <code className="text-amber-300">op_ferrero</code></div>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-amber-400 transition-colors shrink-0" />
+                    </button>
+
+                    {/* Operatore Sant'Anna */}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('op_santanna', 'santanna')}
+                      className="p-2 rounded-lg bg-slate-950/70 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/50 text-left transition-colors flex items-center justify-between group cursor-pointer shadow-xs"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="font-bold text-slate-200 group-hover:text-emerald-300 text-[11px] truncate">Op. Sant'Anna (Chiara Galli)</div>
+                        <div className="text-[9.5px] text-slate-400 truncate">Imbottigliamento & Fardelli • Vinadio</div>
+                        <div className="text-[9.5px] text-slate-500">user: <code className="text-emerald-300">op_santanna</code></div>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-emerald-400 transition-colors shrink-0" />
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

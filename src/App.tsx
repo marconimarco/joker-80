@@ -9,6 +9,7 @@ import { LoginModal } from './components/LoginModal';
 import { PreAccessGate } from './components/PreAccessGate';
 import { AdminControlPanel } from './components/AdminControlPanel';
 import { PlantCsvUploadModal } from './components/PlantCsvUploadModal';
+import { QuantumPythonCodeModal } from './components/QuantumPythonCodeModal';
 import { FactoryTenant, QuantumCalculationMeta, UserAccount } from './types/quantum';
 import { AuthStorage } from './services/authStorage';
 import { PlantTelemetryScanner, AutoScanSummary } from './services/plantTelemetryScanner';
@@ -57,6 +58,7 @@ export default function App() {
   // Circuit modal state
   const [selectedCircuitCalc, setSelectedCircuitCalc] = useState<QuantumCalculationMeta | null>(null);
   const [selectedCircuitState, setSelectedCircuitState] = useState<string | undefined>(undefined);
+  const [selectedPythonCalc, setSelectedPythonCalc] = useState<QuantumCalculationMeta | null>(null);
 
   const [voiceQueryToExecute, setVoiceQueryToExecute] = useState<string | null>(null);
   const [targetInspectCalcId, setTargetInspectCalcId] = useState<number | null>(null);
@@ -170,6 +172,12 @@ export default function App() {
   const handleLogout = () => {
     AuthStorage.logout();
     setCurrentUser(null);
+    try {
+      sessionStorage.removeItem('joker80_preaccess_unlocked');
+    } catch (e) {
+      console.error(e);
+    }
+    setIsPreAccessGranted(false);
     setActiveView('catalog');
   };
 
@@ -190,29 +198,15 @@ export default function App() {
     setTargetInspectCalcId(null);
   };
 
-  // Step 1: Pre-Access Gate requiring single master password 'nicopol'
-  if (!isPreAccessGranted) {
+  // Step 1: Pre-Access Gate with Password Verification & Immediate Access Role Selection (Responsabile / Operatore)
+  if (!isPreAccessGranted || !currentUser) {
     return (
       <div className="h-[100dvh] min-h-[100dvh] w-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-3 sm:p-4 overflow-y-auto selection:bg-cyan-500/30 selection:text-cyan-200">
-        <PreAccessGate onUnlock={() => setIsPreAccessGranted(true)} />
-      </div>
-    );
-  }
-
-  // Step 2: Main Authentication & Test Credentials Selection via LoginModal
-  if (!currentUser) {
-    return (
-      <div className="h-[100dvh] min-h-[100dvh] w-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-3 sm:p-4 overflow-y-auto selection:bg-cyan-500/30 selection:text-cyan-200">
-        <LoginModal 
-          onLoginSuccess={handleLoginSuccess} 
-          onLockPreAccess={() => {
-            try {
-              sessionStorage.removeItem('joker80_preaccess_unlocked');
-              sessionStorage.removeItem('joker80_legal_accepted');
-            } catch (e) {
-              console.error(e);
-            }
-            setIsPreAccessGranted(false);
+        <PreAccessGate 
+          onUnlock={() => setIsPreAccessGranted(true)}
+          onLoginWithUser={(user) => {
+            setIsPreAccessGranted(true);
+            handleLoginSuccess(user);
           }}
         />
       </div>
@@ -413,6 +407,19 @@ export default function App() {
         calculation={selectedCircuitCalc}
         lastState={selectedCircuitState}
         onClose={handleCloseCircuit}
+        isAdmin={isAdmin}
+        onOpenPythonCode={(calc) => {
+          handleCloseCircuit();
+          setSelectedPythonCalc(calc);
+        }}
+      />
+
+      {/* Modal for Python CUDA-Q Code (Strictly for Administrator) */}
+      <QuantumPythonCodeModal
+        isOpen={!!selectedPythonCalc}
+        onClose={() => setSelectedPythonCalc(null)}
+        calculation={selectedPythonCalc}
+        isAdmin={isAdmin}
       />
 
       {/* Desktop Footer status strip */}
