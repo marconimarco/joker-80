@@ -60,8 +60,8 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [savedConfig, setSavedConfig] = useState<any>(null);
 
-  // OS Documentation & Kit State
-  const [selectedOS, setSelectedOS] = useState<OSType>('linux');
+  // OS Documentation & Kit State (Default: Windows 10/11 IoT per PC industriali)
+  const [selectedOS, setSelectedOS] = useState<OSType>('windows');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Live Test Simulation State (Browser-side simulation)
@@ -635,6 +635,10 @@ WantedBy=multi-user.target`;
 set -e
 echo "[1/4] Creazione directory /opt/smile80-daemon e spool..."
 sudo mkdir -p /opt/smile80-daemon/spool
+if ls *.pfx* 1> /dev/null 2>&1; then
+    sudo cp *.pfx* /opt/smile80-daemon/ 2>/dev/null || true
+    echo "[OK] Certificato NIS2 rilevato e posizionato in /opt/smile80-daemon/"
+fi
 cd /opt/smile80-daemon
 python3 -m venv venv || virtualenv venv
 ./venv/bin/pip install requests
@@ -660,6 +664,11 @@ LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 
 mkdir -p "$INSTALL_DIR/spool"
 mkdir -p "$LAUNCH_AGENTS_DIR"
+
+if ls *.pfx* 1> /dev/null 2>&1; then
+    cp *.pfx* "$INSTALL_DIR/" 2>/dev/null || true
+    echo "[OK] Certificato NIS2 rilevato e posizionato in $INSTALL_DIR/"
+fi
 
 pip3 install --user requests || python3 -m pip install requests
 cat << 'EOF' > "$INSTALL_DIR/smile80_daemon.py"
@@ -708,11 +717,28 @@ color 0A
 :: FORZA POSIZIONAMENTO E CREAZIONE CARTELLA DEDICATA C:\\JOKER80 E SPOOL
 if not exist "C:\\JOKER80" mkdir "C:\\JOKER80" >nul 2>nul
 if not exist "C:\\JOKER80\\spool" mkdir "C:\\JOKER80\\spool" >nul 2>nul
+
+:: Rileva e copia automaticamente il certificato NIS2 scaricato al fianco del .bat (su USB, Desktop o Download)
+if exist "%~dp0*.pfx" copy /y "%~dp0*.pfx" "C:\\JOKER80\\" >nul 2>nul
+if exist "%~dp0*.pfx.txt" copy /y "%~dp0*.pfx.txt" "C:\\JOKER80\\" >nul 2>nul
+if exist "%~dp0certificato_nis2*.txt" copy /y "%~dp0certificato_nis2*.txt" "C:\\JOKER80\\" >nul 2>nul
+
 cd /d "C:\\JOKER80"
 
 echo ==============================================================================
 echo JOKER 80 - SM.I.LE80 Industrial Telemetry Daemon (Windows IPC)
 echo Cartella di lavoro: %CD%
+set "CERT_FOUND=0"
+if exist "certificato_nis2*.txt" set "CERT_FOUND=1"
+if exist "*.pfx" set "CERT_FOUND=1"
+if exist "*.pfx.txt" set "CERT_FOUND=1"
+
+if "%CERT_FOUND%"=="1" (
+    echo [OK NIS2] Certificato crittografico mTLS rilevato in C:\\JOKER80!
+) else (
+    echo [AVVISO] File certificato NIS2 non ancora presente in C:\\JOKER80.
+    echo          Salva il file certificato scaricato nella stessa cartella del file .bat.
+)
 echo ==============================================================================
 echo.
 
@@ -928,6 +954,117 @@ services:
           </div>
         </div>
 
+        {/* SELETTORE SISTEMA OPERATIVO UNIFICATO */}
+        <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Server className="w-4 h-4 text-cyan-400" />
+              <span>Seleziona il Sistema Operativo del Computer di Linea:</span>
+            </span>
+            <span className="text-[11px] font-mono text-cyan-300">
+              {selectedOS === 'windows' && '🪟 Windows 10/11 IoT Enterprise (Script Batch .BAT)'}
+              {selectedOS === 'linux' && '🐧 Linux Ubuntu / Debian / RHEL (Servizio di sistema systemd)'}
+              {selectedOS === 'mac' && '🍎 Apple macOS Silicon & Intel (Agente launchd daemon)'}
+              {selectedOS === 'docker' && '🐳 Docker / Podman (Container isolato multipiattaforma)'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-xs">
+            <button
+              type="button"
+              onClick={() => setSelectedOS('windows')}
+              className={`p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
+                selectedOS === 'windows'
+                  ? 'bg-cyan-500/25 text-white border-cyan-400 shadow-md ring-1 ring-cyan-500/50'
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+              }`}
+            >
+              <span>🪟 Windows (.bat)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedOS('linux')}
+              className={`p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
+                selectedOS === 'linux'
+                  ? 'bg-amber-500/25 text-white border-amber-400 shadow-md ring-1 ring-amber-500/50'
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+              }`}
+            >
+              <span>🐧 Linux (.sh)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedOS('mac')}
+              className={`p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
+                selectedOS === 'mac'
+                  ? 'bg-purple-500/25 text-white border-purple-400 shadow-md ring-1 ring-purple-500/50'
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+              }`}
+            >
+              <span>🍎 macOS (.sh)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedOS('docker')}
+              className={`p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
+                selectedOS === 'docker'
+                  ? 'bg-blue-500/25 text-white border-blue-400 shadow-md ring-1 ring-blue-500/50'
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+              }`}
+            >
+              <span>🐳 Docker (.yml)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* BANNER INEQUIVOCABILE: DOVE SALVARE IL CERTIFICATO NIS2 */}
+        <div className="p-4 rounded-xl bg-purple-950/40 border-2 border-purple-500/50 shadow-xl space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-500/30 pb-2">
+            <div className="flex items-center gap-2 text-purple-200 font-mono font-bold text-xs sm:text-sm">
+              <Key className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>📍 DOVE SALVARE IL FILE CERTIFICATO NIS2 (.PFX):</span>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
+              Regola Fondamentale: Stessa Cartella
+            </span>
+          </div>
+
+          <div className="text-xs text-slate-200 font-sans leading-relaxed space-y-2">
+            <p>
+              Salva entrambi i file scaricati (<strong>1. File Demone</strong> e <strong>2. File Certificato NIS2</strong>) nella <strong className="text-purple-300 font-mono bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-500/40">STESSA IDENTICA CARTELLA</strong> sul computer collegato ai macchinari dello stabilimento.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 font-mono text-[11px]">
+              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                <span className="text-cyan-300 font-bold flex items-center gap-1">
+                  <HardDrive className="w-3.5 h-3.5" />
+                  <span>Su Windows:</span>
+                </span>
+                <p className="text-[10.5px] text-slate-300 font-sans leading-relaxed">
+                  Salva entrambi i file in una cartella a piacere (es. sul <code>Desktop\JOKER80\</code>, in una chiavetta USB o direttamente in <code className="text-cyan-300">C:\JOKER80\</code>). Quando avvii il file <code className="text-cyan-300">.bat</code> come amministratore, rileverà e copierà automaticamente il certificato presente al suo fianco!
+                </p>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                <span className="text-amber-300 font-bold flex items-center gap-1">
+                  <Server className="w-3.5 h-3.5" />
+                  <span>Su Linux / macOS / Docker:</span>
+                </span>
+                <p className="text-[10.5px] text-slate-300 font-sans leading-relaxed">
+                  Salva entrambi i file nella cartella di installazione (es. <code className="text-amber-300">/opt/smile80-daemon/</code> su Linux, <code className="text-purple-300">~/smile80-daemon/</code> su macOS, o la directory del file <code className="text-blue-300">docker-compose.yml</code>).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-[10.5px] font-mono text-purple-300 bg-purple-900/20 p-2 rounded-lg border border-purple-500/30">
+              <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>
+                <strong>Non rinominare il file:</strong> Il demone identifica il certificato dal nome <code className="text-white">certificato_nis2_{activeTenant.id}.pfx.txt</code> o dall'estensione <code className="text-white">.pfx</code>.
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* 3 SCHEDE STEP-BY-STEP */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* STEP 1: SCARICA I 2 FILE (DEMONE + CERTIFICATO) */}
@@ -944,34 +1081,93 @@ services:
               <h4 className="text-sm font-bold text-white font-mono">
                 1. Scarica i 2 File Necessari
               </h4>
-              
-              <div className="space-y-2 text-[11px] font-sans text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+
+              {/* DESCRIZIONE DINAMICA DEI 2 FILE PER IL SISTEMA SELEZIONATO */}
+              <div className="space-y-2 text-[11px] font-sans text-slate-300 leading-relaxed bg-slate-900/70 p-2.5 rounded-lg border border-slate-800">
                 <div>
-                  <strong className="text-cyan-300 font-mono block">1. File Demone (.BAT / .SH):</strong>
-                  Contiene lo script Python con loop di telemetria, porte IPC e cartelle di spool locali.
+                  <strong className="text-cyan-300 font-mono block">
+                    1. File Demone {selectedOS === 'windows' ? 'Windows (.BAT)' : selectedOS === 'linux' ? 'Linux (.SH)' : selectedOS === 'mac' ? 'macOS (.SH)' : 'Docker (.YML)'}:
+                  </strong>
+                  {selectedOS === 'windows' && 'Script .BAT con watchdog, auto-riavvio cmd, venv Python isolato e cartella locale C:\\JOKER80\\spool.'}
+                  {selectedOS === 'linux' && 'Script .SH che crea il servizio di sistema systemd smile80-daemon.service e cartella /opt/smile80-daemon/spool.'}
+                  {selectedOS === 'mac' && 'Script .SH per Apple Mac che configura il demone permanente launchd (.plist) e spool locale ~/smile80-daemon/spool.'}
+                  {selectedOS === 'docker' && 'File docker-compose.yml pronto per containerizzazione Docker con montaggio volume e variabili NIS2.'}
                 </div>
                 <div>
                   <strong className="text-purple-300 font-mono block">2. File Certificato NIS2 (.PFX):</strong>
-                  Identità crittografica univoca dello stabilimento <code className="text-slate-200">{activeTenant.id}</code> per l'autenticazione mTLS.
+                  Identità crittografica univoca dello stabilimento <code className="text-slate-200">{activeTenant.id}</code> per l'autenticazione mTLS del computer.
                 </div>
               </div>
             </div>
 
-            <div className="space-y-1.5 pt-2">
-              <button
-                type="button"
-                disabled={isOperator}
-                onClick={() => downloadAsBlob(windowsBatFullContent, `avvia_gateway_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.bat`)}
-                className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
-                title={`Scarica file demone per ${activeTenant.nome}`}
-              >
-                <span className="flex items-center gap-1.5">
-                  <HardDrive className="w-3.5 h-3.5" />
-                  <span>1. Scarica Demone (.BAT)</span>
-                </span>
-                <Download className="w-3.5 h-3.5 shrink-0" />
-              </button>
+            {/* PULSANTI DI DOWNLOAD DINAMICI PER IL SO ATTIVO */}
+            <div className="space-y-2 pt-1">
+              {/* PULSANTE 1: DEMONE SPECIFICO PER IL SISTEMA SELEZIONATO */}
+              {selectedOS === 'windows' && (
+                <button
+                  type="button"
+                  disabled={isOperator}
+                  onClick={() => downloadAsBlob(windowsBatFullContent, `avvia_gateway_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.bat`)}
+                  className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                  title={`Scarica script demone Windows .BAT per ${activeTenant.nome}`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <HardDrive className="w-3.5 h-3.5" />
+                    <span>1. Scarica Demone Windows (.BAT)</span>
+                  </span>
+                  <Download className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              )}
 
+              {selectedOS === 'linux' && (
+                <button
+                  type="button"
+                  disabled={isOperator}
+                  onClick={() => downloadAsBlob(linuxInstallContent, `install_linux_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.sh`)}
+                  className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                  title={`Scarica script installatore Linux .SH per ${activeTenant.nome}`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Server className="w-3.5 h-3.5" />
+                    <span>1. Scarica Demone Linux (.SH)</span>
+                  </span>
+                  <Download className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              )}
+
+              {selectedOS === 'mac' && (
+                <button
+                  type="button"
+                  disabled={isOperator}
+                  onClick={() => downloadAsBlob(macInstallContent, `install_mac_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.sh`)}
+                  className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                  title={`Scarica script installatore macOS .SH per ${activeTenant.nome}`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Laptop className="w-3.5 h-3.5" />
+                    <span>1. Scarica Demone macOS (.SH)</span>
+                  </span>
+                  <Download className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              )}
+
+              {selectedOS === 'docker' && (
+                <button
+                  type="button"
+                  disabled={isOperator}
+                  onClick={() => downloadAsBlob(dockerComposeContent, `docker-compose_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.yml`, 'text/yaml;charset=utf-8')}
+                  className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                  title={`Scarica file docker-compose.yml per ${activeTenant.nome}`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>1. Scarica Docker Compose (.YML)</span>
+                  </span>
+                  <Download className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              )}
+
+              {/* PULSANTE 2: CERTIFICATO NIS2 mTLS (OBBLIGATORIO PER TUTTI I SISTEMI) */}
               <button
                 type="button"
                 disabled={isOperator}
@@ -989,32 +1185,23 @@ services:
                 <Download className="w-3.5 h-3.5 shrink-0" />
               </button>
 
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                <button
-                  type="button"
-                  disabled={isOperator}
-                  onClick={() => downloadAsBlob(linuxInstallContent, 'install_linux.sh')}
-                  className="py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[11px] font-bold flex items-center justify-center gap-1 transition-colors border border-slate-700 cursor-pointer disabled:opacity-40"
-                  title="Scarica installatore Linux"
-                >
-                  <Server className="w-3 h-3 text-amber-400" />
-                  <span>Linux (.sh)</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isOperator}
-                  onClick={() => downloadAsBlob(macInstallContent, 'install_mac.sh')}
-                  className="py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[11px] font-bold flex items-center justify-center gap-1 transition-colors border border-slate-700 cursor-pointer disabled:opacity-40"
-                  title="Scarica installatore Mac"
-                >
-                  <Laptop className="w-3 h-3 text-slate-300" />
-                  <span>Mac (.sh)</span>
-                </button>
-              </div>
+              {/* COPIA RAPIDA DEL CODICE NEGLI APPUNTI */}
+              <button
+                type="button"
+                onClick={() => {
+                  const code = selectedOS === 'windows' ? windowsBatFullContent : selectedOS === 'linux' ? linuxInstallContent : selectedOS === 'mac' ? macInstallContent : dockerComposeContent;
+                  handleCopy(code, 'quick-script-copy');
+                }}
+                className="w-full py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 font-mono text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                title="Copia l'intero contenuto dello script negli appunti per ispezione"
+              >
+                {copiedKey === 'quick-script-copy' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
+                <span>{copiedKey === 'quick-script-copy' ? 'Codice Copiato negli Appunti!' : 'Copia Codice Script Negli Appunti'}</span>
+              </button>
             </div>
           </div>
 
-          {/* STEP 2: AVVIA SUL PC DI FABBRICA */}
+          {/* STEP 2: AVVIA SUL PC DI FABBRICA (CON ISTRUZIONE TASTO DESTRO "RUN AS ADMINISTRATOR") */}
           <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-3 relative overflow-hidden group hover:border-cyan-500/50 transition-colors">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -1025,12 +1212,66 @@ services:
                   Esecuzione PC
                 </span>
               </div>
+              
               <h4 className="text-sm font-bold text-white font-mono">
-                2. Doppio Clic sul PC di Linea
+                {selectedOS === 'windows' && '2. Clic Destro: Esegui come Amministratore'}
+                {selectedOS === 'linux' && '2. Esegui con Privilegi Root (sudo)'}
+                {selectedOS === 'mac' && '2. Esegui da Terminale macOS'}
+                {selectedOS === 'docker' && '2. Avvia Container con Docker'}
               </h4>
-              <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                Copia il file sul computer collegato ai macchinari Elettric80 (tramite USB o rete interna) e fai doppio clic sul file scaricato.
+
+              <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                Copia i 2 file scaricati sul computer collegato ai macchinari Elettric80 (tramite chiavetta USB o cartella condivisa di stabilimento).
               </p>
+
+              {/* ISTRUZIONE DETTAGLIATA SPECIFICA PER SO */}
+              {selectedOS === 'windows' && (
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs font-sans space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-300 font-mono text-[11px]">
+                    <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>IMPORTANTE (Windows):</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    Fai <strong>clic con il pulsante destro del mouse</strong> sul file scaricato <code className="text-amber-100 font-mono bg-black/40 px-1 py-0.5 rounded">.bat</code> e seleziona <strong>"Esegui come amministratore"</strong> (<em>Run as administrator</em>).
+                  </p>
+                </div>
+              )}
+
+              {selectedOS === 'linux' && (
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs font-sans space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-300 font-mono text-[11px]">
+                    <Terminal className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>COMANDO TERMINALE LINUX:</span>
+                  </div>
+                  <code className="text-[11px] block bg-black/60 p-1.5 rounded text-cyan-300 font-mono select-all">
+                    chmod +x install_linux_*.sh && sudo ./install_linux_*.sh
+                  </code>
+                </div>
+              )}
+
+              {selectedOS === 'mac' && (
+                <div className="p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/40 text-purple-200 text-xs font-sans space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-purple-300 font-mono text-[11px]">
+                    <Terminal className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>COMANDO TERMINALE MAC:</span>
+                  </div>
+                  <code className="text-[11px] block bg-black/60 p-1.5 rounded text-cyan-300 font-mono select-all">
+                    chmod +x install_mac_*.sh && ./install_mac_*.sh
+                  </code>
+                </div>
+              )}
+
+              {selectedOS === 'docker' && (
+                <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/40 text-blue-200 text-xs font-sans space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-blue-300 font-mono text-[11px]">
+                    <Layers className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span>COMANDO DOCKER:</span>
+                  </div>
+                  <code className="text-[11px] block bg-black/60 p-1.5 rounded text-cyan-300 font-mono select-all">
+                    docker compose up -d
+                  </code>
+                </div>
+              )}
             </div>
 
             <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300 space-y-1">
@@ -1357,538 +1598,7 @@ services:
         </div>
       </div>
 
-      {/* 2. SEZIONE RISOLUTIVA: SE IL PC DELLO STABILIMENTO NON HA WINDOWS MA LINUX O MAC APPLE */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5">
-        <div className="border-b border-slate-800/80 pb-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 shrink-0">
-              <Server className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-bold text-white font-mono">
-                Se il Computer dello Stabilimento non ha Windows ma usa Linux o Mac Apple come si fa?
-              </h3>
-              <p className="text-xs text-slate-300 font-sans mt-1 leading-relaxed">
-                Negli impianti di automazione industriale (E80 Group, SM.I.LE80, Beckhoff, Siemens Box PC) è molto comune avere computer e IPC con <strong>Linux (Ubuntu, Debian, RHEL, Raspberry Pi CM4)</strong> oppure laptop dei collaudatori con <strong>macOS Apple (MacBook / Mac Mini con chip Apple Silicon M1/M2/M3/M4 o Intel)</strong>.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-3 p-3 rounded-xl bg-slate-950 border border-purple-500/30 text-xs font-mono text-purple-200">
-            <strong>Risposta Tecnica Immediata:</strong> A differenza di Windows (che usa i <em>Servizi di Windows</em> <code className="text-slate-400">services.msc</code>), Linux e macOS utilizzano i loro sistemi di init nativi di classe enterprise:
-            <ul className="mt-2 space-y-1 list-disc pl-5 text-slate-300 font-sans">
-              <li><strong>Su Linux (Ubuntu / Debian / RHEL):</strong> Si usa <strong>systemd</strong> tramite un file <code className="text-cyan-300 font-mono">.service</code> in <code className="text-cyan-300 font-mono">/etc/systemd/system/</code> con riavvio automatico <code className="text-cyan-300 font-mono">Restart=always</code> e avvio trasparente all'accensione del PC.</li>
-              <li><strong>Su Mac Apple (Apple Silicon & Intel):</strong> Si usa il framework nativo di Apple <strong>launchd</strong> tramite un file Property List <code className="text-cyan-300 font-mono">.plist</code> caricato con <code className="text-cyan-300 font-mono">launchctl</code>, che mantiene il processo sempre vivo in background.</li>
-              <li><strong>Su Container Docker:</strong> Immagine autonoma che gira identica su qualsiasi sistema operativo.</li>
-            </ul>
-          </div>
-        </div>
-
-        {/* SELETTORE SISTEMA OPERATIVO */}
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto no-scrollbar touch-pan-x flex-nowrap">
-          <button
-            type="button"
-            onClick={() => setSelectedOS('linux')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 min-h-[40px] ${
-              selectedOS === 'linux'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <span>🐧 Linux (Ubuntu / Debian / RHEL) - systemd</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedOS('mac')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 min-h-[40px] ${
-              selectedOS === 'mac'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <span>🍎 Mac Apple (Apple Silicon / Intel) - launchd</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedOS('windows')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 min-h-[40px] ${
-              selectedOS === 'windows'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <span>🪟 Windows 10/11 IoT (Batch / Service)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedOS('docker')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 min-h-[40px] ${
-              selectedOS === 'docker'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <span>🐳 Docker / Podman (Universale)</span>
-          </button>
-        </div>
-
-        {/* GUIDA E KIT PER LINUX */}
-        {selectedOS === 'linux' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h4 className="text-xs font-bold text-white font-mono flex items-center gap-2">
-                  <span>Guida Configurazione Linux IPC con systemd (Nativo)</span>
-                </h4>
-                <p className="text-[11px] text-slate-400">
-                  Compatibile con Ubuntu Server, Debian 11/12, Rocky Linux, RHEL 8/9, Raspberry Pi CM4 Industrial.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => downloadAsBlob(pythonDaemonContent, 'smile80_daemon.py')}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Scarica smile80_daemon.py</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadAsBlob(linuxServiceContent, 'smile80-daemon.service')}
-                  className="px-3 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Scarica smile80-daemon.service</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadAsBlob(linuxInstallContent, 'install_linux.sh')}
-                  className="px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Scarica install_linux.sh</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Box Cartella e Destinazione Linux */}
-            <div className="p-3.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2 text-xs font-mono">
-              <div className="flex items-center justify-between text-emerald-300">
-                <span className="font-bold flex items-center gap-1.5">
-                  <Folder className="w-4 h-4 text-emerald-400" />
-                  Cartella di Destinazione File su Linux: /opt/smile80-daemon/
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy('sudo mkdir -p /opt/smile80-daemon', 'linux-mkdir')}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer text-[10px]"
-                >
-                  {copiedKey === 'linux-mkdir' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'linux-mkdir' ? 'Copiato!' : 'Copia Comando'}</span>
-                </button>
-              </div>
-              <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-                1. Crea la cartella di sistema: <code className="text-cyan-300 font-mono">sudo mkdir -p /opt/smile80-daemon</code><br />
-                2. Sposta al suo interno i file scaricati (<code className="text-emerald-300 font-mono">smile80_daemon.py</code> e <code className="text-emerald-300 font-mono">smile80-daemon.service</code>).<br />
-                3. Oppure usa direttamente il comando di installazione automatica in 1-click qui sotto.
-              </p>
-            </div>
-
-            {/* Comando Rapido One-Liner */}
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono text-xs">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="font-bold text-amber-400">Comando Terminale Linux per Installazione Automatica (1-Click):</span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(`curl -fsSL "${serverOrigin}/api/daemon/download/linux-install" | sudo bash`, 'linux-cmd')}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                >
-                  {copiedKey === 'linux-cmd' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'linux-cmd' ? 'Copiato!' : 'Copia'}</span>
-                </button>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-cyan-300 overflow-x-auto whitespace-pre">
-                curl -fsSL "{serverOrigin}/api/daemon/download/linux-install" | sudo bash
-              </div>
-              <p className="text-[11px] text-slate-400 font-sans">
-                Questo comando crea l'ambiente virtuale Python in <code className="text-cyan-300 font-mono">/opt/smile80-daemon</code>, installa il modulo <code className="text-cyan-300 font-mono">requests</code>, configura il file unit di systemd con intervallo di <strong>{frequencyValue} {frequencyUnit} ({totalSeconds}s)</strong> e avvia il servizio permanentemente.
-              </p>
-            </div>
-
-            {/* File Service systemd anteprima */}
-            <div className="space-y-1.5 font-mono text-xs">
-              <div className="flex items-center justify-between text-slate-400">
-                <span>File Unit: <strong className="text-slate-200">/etc/systemd/system/smile80-daemon.service</strong></span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(linuxServiceContent, 'linux-service')}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                >
-                  {copiedKey === 'linux-service' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'linux-service' ? 'Copiato!' : 'Copia'}</span>
-                </button>
-              </div>
-              <pre className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 overflow-x-auto text-[11px] max-h-48">
-                {linuxServiceContent}
-              </pre>
-            </div>
-
-            {/* Comandi Utili per il Tecnico */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 font-mono text-xs">
-              <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 text-[10px] block">Verifica Stato Servizio:</span>
-                <code className="text-emerald-300 text-[11px] block mt-1">sudo systemctl status smile80-daemon</code>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 text-[10px] block">Log Live (Journal):</span>
-                <code className="text-cyan-300 text-[11px] block mt-1">sudo journalctl -u smile80-daemon -f</code>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 text-[10px] block">Riavvio Manuale:</span>
-                <code className="text-amber-300 text-[11px] block mt-1">sudo systemctl restart smile80-daemon</code>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* GUIDA E KIT PER MAC APPLE */}
-        {selectedOS === 'mac' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h4 className="text-xs font-bold text-white font-mono flex items-center gap-2">
-                  <span>Guida Configurazione Mac Apple (launchd Nativo)</span>
-                </h4>
-                <p className="text-[11px] text-slate-400">
-                  Compatibile con macOS Sonoma, Sequoia, Ventura su MacBook Air/Pro, Mac Mini (Apple Silicon M1/M2/M3/M4 & Intel).
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => downloadAsBlob(pythonDaemonContent, 'smile80_daemon.py')}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Scarica smile80_daemon.py</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadAsBlob(macPlistContent, 'com.smile80.joker80.daemon.plist')}
-                  className="px-3 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Scarica com.smile80.daemon.plist</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadAsBlob(macInstallContent, 'install_mac.sh')}
-                  className="px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Scarica install_mac.sh</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Box Cartella e Destinazione Mac */}
-            <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/30 space-y-2 text-xs font-mono">
-              <div className="flex items-center justify-between text-purple-300">
-                <span className="font-bold flex items-center gap-1.5">
-                  <Folder className="w-4 h-4 text-purple-400" />
-                  Cartella di Destinazione File su Mac: ~/smile80-daemon/
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy('mkdir -p ~/smile80-daemon', 'mac-mkdir')}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer text-[10px]"
-                >
-                  {copiedKey === 'mac-mkdir' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'mac-mkdir' ? 'Copiato!' : 'Copia Comando'}</span>
-                </button>
-              </div>
-              <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-                1. Crea la cartella nella home utente: <code className="text-cyan-300 font-mono">mkdir -p ~/smile80-daemon</code><br />
-                2. Inserisci al suo interno il file <code className="text-emerald-300 font-mono">smile80_daemon.py</code> scaricato.<br />
-                3. Oppure esegui il comando rapido a riga singola qui sotto che crea automaticamente cartella, ambiente e demone launchd Apple.
-              </p>
-            </div>
-
-            {/* Comando Rapido One-Liner per Mac */}
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono text-xs">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="font-bold text-amber-400">Comando Terminale Mac per Installazione Automatica (1-Click):</span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(`curl -fsSL "${serverOrigin}/api/daemon/download/mac-install" | bash`, 'mac-cmd')}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                >
-                  {copiedKey === 'mac-cmd' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'mac-cmd' ? 'Copiato!' : 'Copia'}</span>
-                </button>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-cyan-300 overflow-x-auto whitespace-pre">
-                curl -fsSL "{serverOrigin}/api/daemon/download/mac-install" | bash
-              </div>
-              <p className="text-[11px] text-slate-400 font-sans">
-                Apri l'app <strong>Terminale</strong> sul Mac (premi <kbd className="px-1 py-0.5 rounded bg-slate-800 text-slate-200 font-mono text-[10px]">CMD + Spazio</kbd> e digita "Terminale"). Incolla il comando: configurerà il demone launchd Apple in <code className="text-cyan-300 font-mono">~/Library/LaunchAgents/</code>.
-              </p>
-            </div>
-
-            {/* File Plist launchd anteprima */}
-            <div className="space-y-1.5 font-mono text-xs">
-              <div className="flex items-center justify-between text-slate-400">
-                <span>File Property List Apple: <strong className="text-slate-200">~/Library/LaunchAgents/com.smile80.joker80.daemon.plist</strong></span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(macPlistContent, 'mac-plist')}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                >
-                  {copiedKey === 'mac-plist' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'mac-plist' ? 'Copiato!' : 'Copia'}</span>
-                </button>
-              </div>
-              <pre className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 overflow-x-auto text-[11px] max-h-48">
-                {macPlistContent}
-              </pre>
-            </div>
-
-            {/* Comandi Utili Mac */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 font-mono text-xs">
-              <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 text-[10px] block">Log in Tempo Reale Mac:</span>
-                <code className="text-emerald-300 text-[11px] block mt-1">tail -f /tmp/smile80_daemon.log</code>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 text-[10px] block">Stato Processo launchd:</span>
-                <code className="text-cyan-300 text-[11px] block mt-1">launchctl list | grep smile80</code>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 text-[10px] block">Arresto Demone Mac:</span>
-                <code className="text-rose-300 text-[11px] block mt-1">launchctl unload ~/Library/LaunchAgents/com.smile80.joker80.daemon.plist</code>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* GUIDA E KIT PER WINDOWS */}
-        {selectedOS === 'windows' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h4 className="text-xs font-bold text-white font-mono flex items-center gap-2">
-                  <span>Guida per Windows 10/11 IoT Enterprise & Windows Server</span>
-                </h4>
-                <p className="text-[11px] text-slate-400">
-                  Esecuzione via script Batch o configurazione come Servizio Windows di background tramite NSSM.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => downloadAsBlob(windowsBatFullContent, 'start_daemon_windows.bat')}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-mono text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer min-h-[40px]"
-                  title="Scarica direttamente il file .bat pulito generato dal browser (Zero errori di cookie/login)"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Scarica start_daemon_windows.bat (Download Diretto)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleCopy(windowsBatFullContent, 'win-bat-code')}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[40px]"
-                  title="Copia l'intero contenuto del file BAT negli appunti per incollarlo in Blocco Note"
-                >
-                  {copiedKey === 'win-bat-code' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                  <span>{copiedKey === 'win-bat-code' ? 'Codice BAT Copiato!' : 'Copia Codice Script .BAT'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => downloadAsBlob(pythonDaemonContent, 'smile80_daemon.py')}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-                  title="Download opzionale dello script Python stand-alone"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>smile80_daemon.py (Opzionale)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Box Cartella e Destinazione Windows */}
-            <div className="p-4 rounded-xl bg-blue-950/20 border border-blue-500/30 space-y-3 text-xs font-mono">
-              <div className="flex items-center justify-between text-blue-300">
-                <span className="font-bold flex items-center gap-1.5">
-                  <HardDrive className="w-4 h-4 text-blue-400" />
-                  Cartella di Destinazione su Windows: C:\JOKER80\
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy('mkdir C:\\JOKER80', 'win-mkdir')}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer text-[10px]"
-                >
-                  {copiedKey === 'win-mkdir' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'win-mkdir' ? 'Copiato!' : 'Copia mkdir'}</span>
-                </button>
-              </div>
-
-              <div className="space-y-1.5 text-[11px] text-slate-300 font-sans leading-relaxed">
-                <div><strong>1. Crea la cartella in C:\:</strong> Nel disco locale principale crea la cartella <code className="text-cyan-300 font-mono font-bold">C:\JOKER80\</code>.</div>
-                <div><strong>2. Scarica e sposta il file BAT:</strong> Inserisci dentro <code className="text-cyan-300 font-mono">C:\JOKER80\</code> il file scaricato <code className="text-emerald-300 font-mono">start_daemon_windows.bat</code>.</div>
-                <div><strong>3. Doppio click per avviare:</strong> Fai doppio click su <code className="text-amber-300 font-mono font-bold">start_daemon_windows.bat</code>. Il file scrive e autoconfigura automaticamente <code className="text-cyan-300 font-mono">smile80_daemon.py</code> in locale ed esegue l'handshake immediato col cloud!</div>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-cyan-300 overflow-x-auto whitespace-pre text-[11px]">
-                mkdir C:\JOKER80
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono text-xs">
-              <span className="font-bold text-amber-400">Avvio Immediato in Prompt Comandi o PowerShell:</span>
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-cyan-300 overflow-x-auto whitespace-pre">
-                cd C:\JOKER80
-python -m pip install requests
-python smile80_daemon.py
-              </div>
-              <p className="text-[11px] text-slate-400 font-sans">
-                Per trasformarlo in un servizio Windows che parte all'avvio senza utente loggato, usa <code className="text-cyan-300 font-mono">nssm install Smile80Daemon python C:\JOKER80\smile80_daemon.py</code> oppure la Pianificazione Attività (Task Scheduler).
-              </p>
-            </div>
-
-            {/* SEZIONE GUIDA: PRODUZIONE REALE, CARTELLA SPOOL & MULTI-MACCHINA */}
-            <div className="p-4 rounded-xl bg-gradient-to-r from-purple-950/20 via-slate-900 to-slate-950 border border-purple-500/30 space-y-3 font-mono text-xs">
-              <div className="flex items-center gap-2 text-purple-300 font-bold border-b border-purple-500/20 pb-2">
-                <Layers className="w-4 h-4 text-purple-400" />
-                <span>Integrazione di Produzione Reale: Come fluiscono i dati dei macchinari verso il Cloud JOKER 80</span>
-              </div>
-
-              <div className="space-y-2 text-[11px] font-sans text-slate-300 leading-relaxed">
-                <p>
-                  <strong>1. Il file Python servirà ancora?</strong><br />
-                  <span className="text-slate-400">
-                    <strong className="text-emerald-400">SÌ, assolutamente.</strong> Lo script Python è il <strong className="text-white">Demone Edge Gateway</strong> ufficiale: è lui che garantisce la sicurezza NIS2, cifra la connessione in TLS 1.3, monitora la salute del PC e invia i pacchetti a intervalli regolari.
-                  </span>
-                </p>
-
-                <p>
-                  <strong>2. Dove prende i dati dei vari macchinari nello stabilimento?</strong><br />
-                  <span className="text-slate-400">
-                    Il demone crea in automatico la cartella <code className="text-cyan-300 font-mono">C:\JOKER80\spool\</code>. Se SM.I.LE80 o il software di linea esporta i dati dei macchinari in un file (es. <code className="text-amber-300 font-mono">dati_macchine.json</code> o <code className="text-amber-300 font-mono">bema_status.json</code>), lo script Python <strong>lo legge automaticamente a ogni ciclo</strong> e inoltra i dati reali al cloud!
-                  </span>
-                </p>
-
-                <p>
-                  <strong>3. Supporto Multi-Macchinario & Multi-Stabilimento:</strong><br />
-                  <span className="text-slate-400">
-                    In uno stabilimento con più fasciatori BEMA Silkworm, 12 navette LGV e baie SmartStore, lo script può leggere un unico file aggregato oppure essere replicato per linea specificando l'identificativo dello stabilimento attivo (es. <code className="text-cyan-300 font-mono">STABILIMENTO_ID=barilla-pedrignano</code>).
-                  </span>
-                </p>
-              </div>
-
-              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
-                <span className="text-[10px] text-slate-400 block font-mono">Esempio file generato in automatico: <strong className="text-cyan-300">C:\JOKER80\spool\esempio_dati_macchine.json</strong></span>
-                <pre className="text-[10px] text-emerald-400 font-mono overflow-x-auto p-2 bg-slate-900 rounded max-h-36">
-{`{
-  "stabilimento": "Stabilimento Barilla Pedrignano (PR)",
-  "macchinarioId": "bema-silkworm-01",
-  "nomeMacchinario": "Fasciatore Robotico BEMA Silkworm",
-  "stato": "IN_MARCIA",
-  "parametri": {
-    "velocitaRotazioneRpm": 34.8,
-    "temperaturaInverterC": 52.1,
-    "palletOra": 86,
-    "pressioneAriaBar": 6.2
-  },
-  "lgv": {
-    "id": "LGV-04",
-    "batteriaSoC": 88,
-    "missione": "Trasporto Pallet verso SmartStore"
-  }
-}`}
-                </pre>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* GUIDA DOCKER */}
-        {selectedOS === 'docker' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h4 className="text-xs font-bold text-white font-mono flex items-center gap-2">
-                  <span>Container Docker / Podman (Universale per Qualsiasi OS)</span>
-                </h4>
-                <p className="text-[11px] text-slate-400">
-                  Gira in container isolato su Linux, macOS (Docker Desktop / Colima) e Windows (WSL2).
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => downloadAsBlob(dockerComposeContent, 'docker-compose.yml')}
-                className="px-3 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Scarica docker-compose.yml</span>
-              </button>
-            </div>
-
-            {/* Box Cartella e Destinazione Docker */}
-            <div className="p-3.5 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-2 text-xs font-mono">
-              <div className="flex items-center justify-between text-cyan-300">
-                <span className="font-bold flex items-center gap-1.5">
-                  <Folder className="w-4 h-4 text-cyan-400" />
-                  Cartella di Destinazione Docker: /opt/smile80-docker/ (o ~/smile80-docker/)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy('mkdir -p ~/smile80-docker && cd ~/smile80-docker', 'docker-mkdir')}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer text-[10px]"
-                >
-                  {copiedKey === 'docker-mkdir' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'docker-mkdir' ? 'Copiato!' : 'Copia Comando'}</span>
-                </button>
-              </div>
-              <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-                1. Crea la cartella del container: <code className="text-cyan-300 font-mono">mkdir -p ~/smile80-docker</code><br />
-                2. Sposta al suo interno il file <code className="text-emerald-300 font-mono">docker-compose.yml</code> scaricato.<br />
-                3. Esegui il comando <code className="text-amber-300 font-mono">docker compose up -d</code> per avviare il demone isolato.
-              </p>
-            </div>
-
-            <div className="space-y-1.5 font-mono text-xs">
-              <div className="flex items-center justify-between text-slate-400">
-                <span>File: <strong className="text-slate-200">docker-compose.yml</strong></span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(dockerComposeContent, 'docker-compose')}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                >
-                  {copiedKey === 'docker-compose' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'docker-compose' ? 'Copiato!' : 'Copia'}</span>
-                </button>
-              </div>
-              <pre className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 overflow-x-auto text-[11px] max-h-44">
-                {dockerComposeContent}
-              </pre>
-              <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-cyan-300 text-[11px]">
-                Avvio: <code>docker compose up -d</code> | Log: <code>docker compose logs -f</code>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 3. SIMULATORE & FEED LIVE DEI PACCHETTI TELEMETRICI */}
+      {/* 2. SIMULATORE & FEED LIVE DEI PACCHETTI TELEMETRICI */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
           <div>
@@ -2030,7 +1740,7 @@ python smile80_daemon.py
         )}
       </div>
 
-      {/* 4. CONFERMA COLLEGAMENTO PC FISICO & HANDSHAKE HARDWARE LIVE */}
+      {/* 3. CONFERMA COLLEGAMENTO PC FISICO & HANDSHAKE HARDWARE LIVE */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
           <div className="flex items-start gap-3">
