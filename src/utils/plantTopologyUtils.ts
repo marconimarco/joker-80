@@ -9,6 +9,7 @@ import {
 } from '../types/quantum';
 import { PLANT_MACHINERY_NODES, isCalculationSupportedByPlant } from '../data/plantNodeCalculations';
 import { buildDeepDataForPlant, buildAgvDeepData } from '../services/plantAutoDiscovery';
+import { mapMachineTipoToNodeKey } from '../data/e80MachineryCatalog';
 
 /**
  * Returns which of the 8 macro-nodes are active for a given tenant.
@@ -21,14 +22,10 @@ export function getPlantActiveNodeKeys(plant?: FactoryTenant): string[] {
     // Check if first calc is supported or if any machine matches
     const isSupported = isCalculationSupportedByPlant(node.calcIds[0], plant);
     const hasMachine = plant.plantTopology.macchinari?.some(m => {
-      if (node.key === 'BEMA_FASCIATORE') return m.tipo === 'BEMA_FASCIATORE' || m.nome.toLowerCase().includes('bema') || m.nome.toLowerCase().includes('silkworm');
-      if (node.key === 'FLOTTA_LGV') return plant.plantTopology?.flottaAgv && plant.plantTopology.flottaAgv.length > 0;
-      if (node.key === 'SMARTSTORE') return m.tipo === 'TRASLOELEVATORE_SMARTSTORE' || m.nome.toLowerCase().includes('smartstore');
-      if (node.key === 'BAIE_INBOUND_OUTBOUND') return m.tipo === 'BAIA_CARICO' || (plant.plantTopology?.baie && plant.plantTopology.baie.length > 0);
-      if (node.key === 'ISOLA_ROBOT') return m.tipo === 'PALLETTIZZATORE' || m.tipo === 'ISOLA_ROBOT' || m.nome.toLowerCase().includes('robot');
-      if (node.key === 'WOODPECKER') return m.nome.toLowerCase().includes('woodpecker') || m.id.toLowerCase().includes('wood');
-      if (node.key === 'RAPTOR') return m.nome.toLowerCase().includes('raptor') || m.id.toLowerCase().includes('raptor');
-      if (node.key === 'QUALITA_TRACCIABILITA') return m.tipo === 'RULLIERA_INBOUND' || m.nome.toLowerCase().includes('qualit') || m.nome.toLowerCase().includes('tracciabilit');
+      const mappedKey = mapMachineTipoToNodeKey(m.tipo, m.nome);
+      if (mappedKey === node.key) return true;
+      if (node.key === 'FLOTTA_LGV') return (plant.plantTopology?.flottaAgv && plant.plantTopology.flottaAgv.length > 0) || false;
+      if (node.key === 'BAIE_INBOUND_OUTBOUND') return m.tipo === 'BAIA_CARICO' || (plant.plantTopology?.baie && plant.plantTopology.baie.length > 0) || false;
       return false;
     });
 
@@ -330,15 +327,7 @@ export function removeNodeFromPlant(plant: FactoryTenant, nodeKey: string): Fact
 
   // Filter out machinery corresponding to this node
   const updatedMachines = (plant.plantTopology?.macchinari || []).filter(m => {
-    if (nodeKey === 'BEMA_FASCIATORE') return m.tipo !== 'BEMA_FASCIATORE' && !m.nome.toLowerCase().includes('bema') && !m.nome.toLowerCase().includes('silkworm');
-    if (nodeKey === 'SMARTSTORE') return m.tipo !== 'TRASLOELEVATORE_SMARTSTORE' && !m.nome.toLowerCase().includes('smartstore');
-    if (nodeKey === 'BAIE_INBOUND_OUTBOUND') return m.tipo !== 'BAIA_CARICO';
-    if (nodeKey === 'ISOLA_ROBOT') return m.tipo !== 'PALLETTIZZATORE' && m.tipo !== 'ISOLA_ROBOT' && !m.nome.toLowerCase().includes('robot');
-    if (nodeKey === 'WOODPECKER') return !m.nome.toLowerCase().includes('woodpecker') && !m.id.toLowerCase().includes('wood');
-    if (nodeKey === 'RAPTOR') return !m.nome.toLowerCase().includes('raptor') && !m.id.toLowerCase().includes('raptor');
-    if (nodeKey === 'QUALITA_TRACCIABILITA') return m.tipo !== 'RULLIERA_INBOUND' && !m.nome.toLowerCase().includes('qualit');
-    if (nodeKey === 'FLOTTA_LGV') return !m.nome.toLowerCase().includes('lgv');
-    return true;
+    return mapMachineTipoToNodeKey(m.tipo, m.nome) !== nodeKey;
   });
 
   const updatedTopology = buildTopologyWithNodes(newNodes, updatedMachines, plant.id || plant.nome, {

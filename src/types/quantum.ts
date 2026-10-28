@@ -295,7 +295,15 @@ export interface PlantTrafficInfrastructureNode {
 export interface MachineAsset {
   id: string;
   nome: string;
-  tipo: 'BEMA_FASCIATORE' | 'PALLETTIZZATORE' | 'TRASLOELEVATORE_SMARTSTORE' | 'BAIA_CARICO' | 'RULLIERA_INBOUND' | 'ISOLA_ROBOT' | 'ALTRO';
+  tipo:
+    | 'BEMA_FASCIATORE'
+    | 'PALLETTIZZATORE'
+    | 'TRASLOELEVATORE_SMARTSTORE'
+    | 'BAIA_CARICO'
+    | 'RULLIERA_INBOUND'
+    | 'ISOLA_ROBOT'
+    | 'ALTRO'
+    | string;
   reparto: string;
   plcTag: string;
   stato: 'IN_MARCIA' | 'STANDBY' | 'ALLARME';

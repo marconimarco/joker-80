@@ -72,6 +72,11 @@ import {
   addMachineToPlant,
   removeMachineFromPlant
 } from '../utils/plantTopologyUtils';
+import { 
+  E80_MACHINERY_CATALOG, 
+  getE80MachineryByType, 
+  mapMachineTipoToNodeKey 
+} from '../data/e80MachineryCatalog';
 
 interface Props {
   tenants: FactoryTenant[];
@@ -633,16 +638,7 @@ export const AdminControlPanel: React.FC<Props> = ({
       const isPresent = prev.includes(nodeKey);
       const updated = isPresent ? prev.filter(k => k !== nodeKey) : [...prev, nodeKey];
       if (isPresent) {
-        setPlantCustomMachines(cur => cur.filter(m => {
-          if (nodeKey === 'BEMA_FASCIATORE') return m.tipo !== 'BEMA_FASCIATORE' && !m.nome.toLowerCase().includes('bema');
-          if (nodeKey === 'SMARTSTORE') return m.tipo !== 'TRASLOELEVATORE_SMARTSTORE';
-          if (nodeKey === 'BAIE_INBOUND_OUTBOUND') return m.tipo !== 'BAIA_CARICO';
-          if (nodeKey === 'ISOLA_ROBOT') return m.tipo !== 'ISOLA_ROBOT' && m.tipo !== 'PALLETTIZZATORE';
-          if (nodeKey === 'WOODPECKER') return !m.nome.toLowerCase().includes('woodpecker');
-          if (nodeKey === 'RAPTOR') return !m.nome.toLowerCase().includes('raptor');
-          if (nodeKey === 'QUALITA_TRACCIABILITA') return m.tipo !== 'RULLIERA_INBOUND';
-          return true;
-        }));
+        setPlantCustomMachines(cur => cur.filter(m => mapMachineTipoToNodeKey(m.tipo, m.nome) !== nodeKey));
       } else {
         const newMac = buildDefaultMachineForNode(nodeKey, plantNome || 'PLANT', plantCustomMachines.length + 1);
         setPlantCustomMachines(cur => [...cur, newMac]);
@@ -703,14 +699,8 @@ export const AdminControlPanel: React.FC<Props> = ({
 
     if (addMachineTarget === 'form') {
       setPlantCustomMachines(prev => [...prev, newMachine]);
-      const matchingNode = PLANT_MACHINERY_NODES.find(n => {
-        if (newMachineTipo === 'BEMA_FASCIATORE') return n.key === 'BEMA_FASCIATORE';
-        if (newMachineTipo === 'TRASLOELEVATORE_SMARTSTORE') return n.key === 'SMARTSTORE';
-        if (newMachineTipo === 'BAIA_CARICO') return n.key === 'BAIE_INBOUND_OUTBOUND';
-        if (newMachineTipo === 'PALLETTIZZATORE' || newMachineTipo === 'ISOLA_ROBOT') return n.key === 'ISOLA_ROBOT';
-        if (newMachineTipo === 'RULLIERA_INBOUND') return n.key === 'QUALITA_TRACCIABILITA';
-        return false;
-      });
+      const targetNodeKey = mapMachineTipoToNodeKey(newMachineTipo, newMachineNome);
+      const matchingNode = PLANT_MACHINERY_NODES.find(n => n.key === targetNodeKey);
       if (matchingNode && !plantMachineryNodes.includes(matchingNode.key)) {
         setPlantMachineryNodes(prev => [...prev, matchingNode.key]);
       }
@@ -2238,8 +2228,11 @@ export const AdminControlPanel: React.FC<Props> = ({
                         type="button"
                         onClick={() => {
                           setAddMachineTarget('form');
-                          setNewMachineNome('');
-                          setNewMachinePlcTag('');
+                          const def = E80_MACHINERY_CATALOG[0];
+                          setNewMachineTipo(def.tipo);
+                          setNewMachineNome(def.defaultNome);
+                          setNewMachineReparto(def.defaultReparto);
+                          setNewMachinePlcTag(def.defaultPlcTag);
                           setIsAddMachineModalOpen(true);
                         }}
                         className="px-2.5 py-1 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 border border-cyan-500/50 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-colors"
@@ -2873,8 +2866,11 @@ export const AdminControlPanel: React.FC<Props> = ({
                 type="button"
                 onClick={() => {
                   setAddMachineTarget('activePlant');
-                  setNewMachineNome('');
-                  setNewMachinePlcTag('');
+                  const def = E80_MACHINERY_CATALOG[0];
+                  setNewMachineTipo(def.tipo);
+                  setNewMachineNome(def.defaultNome);
+                  setNewMachineReparto(def.defaultReparto);
+                  setNewMachinePlcTag(def.defaultPlcTag);
                   setIsAddMachineModalOpen(true);
                 }}
                 className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white text-xs font-mono font-bold flex items-center gap-1.5 shadow-md shadow-cyan-600/20 transition-all cursor-pointer self-start sm:self-auto"
@@ -2887,16 +2883,8 @@ export const AdminControlPanel: React.FC<Props> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {activeTenant.plantTopology?.macchinari.map(mac => {
                 // Count operators authorized for this machine
-                const matchingNode = PLANT_MACHINERY_NODES.find(n => {
-                  if (mac.tipo === 'BEMA_FASCIATORE') return n.key === 'BEMA_FASCIATORE';
-                  if (mac.tipo === 'TRASLOELEVATORE_SMARTSTORE') return n.key === 'SMARTSTORE';
-                  if (mac.tipo === 'BAIA_CARICO') return n.key === 'BAIE_INBOUND_OUTBOUND';
-                  if (mac.tipo === 'PALLETTIZZATORE' || mac.tipo === 'ISOLA_ROBOT') return n.key === 'ISOLA_ROBOT';
-                  if (mac.tipo === 'RULLIERA_INBOUND') return n.key === 'QUALITA_TRACCIABILITA';
-                  if (mac.nome.toLowerCase().includes('woodpecker')) return n.key === 'WOODPECKER';
-                  if (mac.nome.toLowerCase().includes('raptor')) return n.key === 'RAPTOR';
-                  return false;
-                });
+                const targetNodeKey = mapMachineTipoToNodeKey(mac.tipo, mac.nome);
+                const matchingNode = PLANT_MACHINERY_NODES.find(n => n.key === targetNodeKey);
                 const authorizedOpsCount = users.filter(u => {
                   if (u.ruolo !== 'Operatore di Linea') return false;
                   if (!matchingNode) return true;
@@ -4540,52 +4528,59 @@ export const AdminControlPanel: React.FC<Props> = ({
 
             <form onSubmit={handleSaveNewMachine} className="space-y-3.5">
               {/* Tipo Macchinario */}
-              <div className="space-y-1">
-                <label className="text-slate-300 font-bold flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Tipo Macchinario / Categoria Nodo *</span>
-                </label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Tipo Macchinario / Catalogo E80 Group *</span>
+                  </label>
+                  <span className="text-[10px] text-cyan-400 font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/60">
+                    {E80_MACHINERY_CATALOG.length} Modelli Ufficiali
+                  </span>
+                </div>
                 <select
                   value={newMachineTipo}
                   onChange={e => {
-                    const tipo = e.target.value as MachineAsset['tipo'];
-                    setNewMachineTipo(tipo);
-                    if (tipo === 'BEMA_FASCIATORE') {
-                      setNewMachineNome('Fasciatore Robotico Bema Silkworm');
-                      setNewMachineReparto('Fine Linea Confezionamento (ECS)');
-                      setNewMachinePlcTag('DB104.BEMA_SILKWORM_TENSIONE');
-                    } else if (tipo === 'TRASLOELEVATORE_SMARTSTORE') {
-                      setNewMachineNome('Trasloelevatore SmartStore Corsia ASRS');
-                      setNewMachineReparto('Magazzino Intensivo Automatico (WMS)');
-                      setNewMachinePlcTag('DB300.SMARTSTORE_POS_Z');
-                    } else if (tipo === 'BAIA_CARICO') {
-                      setNewMachineNome('Baia di Carico / Scarico Merci');
-                      setNewMachineReparto('Piazzale Spedizioni & Banchina (YMS)');
-                      setNewMachinePlcTag('DB50.BAY_DOCK_STATUS');
-                    } else if (tipo === 'ISOLA_ROBOT' || tipo === 'PALLETTIZZATORE') {
-                      setNewMachineNome('Isola Robotica di Pallettizzazione Antropomorfa');
-                      setNewMachineReparto('Pallettizzazione & Packaging Secondario');
-                      setNewMachinePlcTag('DB120.ROBOT_PALLET_READY');
-                    } else if (tipo === 'RULLIERA_INBOUND') {
-                      setNewMachineNome('Rulliera Inbound Controllo Materie Prime');
-                      setNewMachineReparto('Ricevimento Merci & Laboratorio MIP');
-                      setNewMachinePlcTag('DB10.MIP_LOT_VERIFIED');
-                    } else {
-                      setNewMachineNome('Macchinario Speciale Elettric80');
-                      setNewMachineReparto('Reparto Produzione');
-                      setNewMachinePlcTag(`DB99.SPECIAL_NODE_${Date.now().toString().slice(-4)}`);
-                    }
+                    const tipo = e.target.value;
+                    const def = getE80MachineryByType(tipo);
+                    setNewMachineTipo(def.tipo);
+                    setNewMachineNome(def.defaultNome);
+                    setNewMachineReparto(def.defaultReparto);
+                    setNewMachinePlcTag(def.defaultPlcTag);
                   }}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-purple-500 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-purple-500 cursor-pointer text-xs font-mono"
                 >
-                  <option value="BEMA_FASCIATORE">Fasciatore Bema Silkworm (Avvolgimento Film)</option>
-                  <option value="TRASLOELEVATORE_SMARTSTORE">Trasloelevatore SmartStore 3D (ASRS)</option>
-                  <option value="BAIA_CARICO">Baia di Carico / Scarico Intermodale</option>
-                  <option value="ISOLA_ROBOT">Isola Robotica Pallettizzazione Antropomorfa</option>
-                  <option value="PALLETTIZZATORE">Pallettizzatore di Linea Standard</option>
-                  <option value="RULLIERA_INBOUND">Rulliera Inbound Tracciabilità Materie Prime</option>
-                  <option value="ALTRO">Altro Nodo / Sensore Speciale (Woodpecker, Raptor, ecc.)</option>
+                  {Array.from(new Set(E80_MACHINERY_CATALOG.map(m => m.category))).map(cat => (
+                    <optgroup key={cat} label={`── ${cat.toUpperCase()} ──`} className="bg-slate-900 text-cyan-300 font-bold">
+                      {E80_MACHINERY_CATALOG.filter(m => m.category === cat).map(m => (
+                        <option key={m.tipo} value={m.tipo} className="bg-slate-950 text-slate-200 font-normal">
+                          {m.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
                 </select>
+
+                {/* Scheda Tecnica E80 & Associazione Macro-Nodo Quantistico */}
+                {(() => {
+                  const currentDef = getE80MachineryByType(newMachineTipo);
+                  return (
+                    <div className="p-2.5 rounded-lg bg-purple-950/30 border border-purple-500/30 text-[11px] font-mono space-y-1.5">
+                      <div className="flex items-center justify-between text-purple-200">
+                        <span className="font-bold flex items-center gap-1">
+                          <Activity className="w-3 h-3 text-cyan-400" />
+                          <span>Macro-Nodo Quantistico:</span>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-purple-500/20 text-cyan-300 font-bold border border-purple-500/40 text-[10px]">
+                          {currentDef.associatedNodeKey}
+                        </span>
+                      </div>
+                      <p className="text-slate-400 text-[10px] leading-relaxed">
+                        {currentDef.descrizione}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Nome Macchinario */}
