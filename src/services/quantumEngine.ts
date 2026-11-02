@@ -119,7 +119,7 @@ export const QuantumEngine = {
     const b = Math.max(0, Number(baie_libere) || 0);
 
     const probabilita_blocco_pct = Math.min(99.5, Math.max(1.2, +((r / Math.max(1, b * 22)) * 34.0).toFixed(1)));
-    const var_costo_eur = Math.round(r * 52.0 * (4.5 / Math.max(1, b)));
+    const var_costo_eur = Math.round(r * 52.0 * (1.5 / Math.max(1, b)));
     const tempo_recupero_min = Math.round(r * 0.68 + (4 - Math.min(4, b)) * 16);
     const ore_fermo_rischio = +(r / 60 * (1 / Math.max(0.5, b))).toFixed(2);
 

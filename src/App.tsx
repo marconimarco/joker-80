@@ -414,12 +414,14 @@ export default function App() {
         }}
       />
 
-      {/* Modal for Python CUDA-Q Code (Strictly for Administrator) */}
+      {/* Modal for Python CUDA-Q Code & Results (Reserved for Administrator and Plant Manager) */}
       <QuantumPythonCodeModal
         isOpen={!!selectedPythonCalc}
         onClose={() => setSelectedPythonCalc(null)}
         calculation={selectedPythonCalc}
-        isAdmin={isAdmin}
+        canView={isAdmin || isResponsabile}
+        userRole={currentUser.ruolo}
+        userName={currentUser.nomeCompleto || currentUser.username}
       />
 
       {/* Desktop Footer status strip */}

@@ -49,6 +49,8 @@ import { PlantTelemetryTrendCharts } from './PlantTelemetryTrendCharts';
 import { getUserPermittedCalculations, PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
 import { PlantTelemetryHistoryService } from '../services/plantTelemetryHistory';
 import { QuantumPythonCodeModal } from './QuantumPythonCodeModal';
+import { AllQuantumPythonModal } from './AllQuantumPythonModal';
+import { downloadAllCalculationsTxtFile } from '../utils/quantumAllCalcsTxtExporter';
 import { UserAccount } from '../types/quantum';
 import { AutoScanSummary } from '../services/plantTelemetryScanner';
 import { IndustrialHelpTooltip } from './IndustrialHelpTooltip';
@@ -174,6 +176,7 @@ export const QuantumCatalog: React.FC<Props> = ({
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [selectedCpuCalc, setSelectedCpuCalc] = useState<QuantumCalculationMeta | null>(null);
   const [selectedPythonCalc, setSelectedPythonCalc] = useState<QuantumCalculationMeta | null>(null);
+  const [isAllPythonModalOpen, setIsAllPythonModalOpen] = useState(false);
   const [hoveredCalcId, setHoveredCalcId] = useState<number | null>(null);
 
   // Helper to format any input value for UI display
@@ -232,6 +235,8 @@ export const QuantumCatalog: React.FC<Props> = ({
   }, [targetInspectCalcId, onClearInspectTarget]);
 
   const isAdmin = currentUser?.ruolo === 'Amministratore';
+  const isManager = currentUser?.ruolo === 'Responsabile di Stabilimento';
+  const canViewPythonCode = isAdmin || isManager;
 
   // Allowed calculations for the user (filtered by their assigned machinery/nodes and active plant)
   const userPermittedIds = useMemo(() => {
@@ -242,6 +247,56 @@ export const QuantumCatalog: React.FC<Props> = ({
   const plantSupportedCalcs = useMemo(() => {
     return QUANTUM_CALCULATIONS.filter(c => userPermittedIds.includes(c.id));
   }, [userPermittedIds]);
+
+  // Scarica immediatamente il file .txt con tutti i file Python e i risultati di tutti i calcoli
+  const handleDownloadAllCalcsTxt = () => {
+    const targetCalcs = plantSupportedCalcs.length > 0 ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
+    const filename = downloadAllCalculationsTxtFile({
+      activeTenant,
+      calculations: targetCalcs,
+      formInputs,
+      results,
+      currentUser
+    });
+    setToastMessage(`Download avviato: "${filename}" scaricato sul tuo computer!`);
+    setTimeout(() => setToastMessage(null), 4500);
+  };
+
+  const [isRecomputingAll, setIsRecomputingAll] = useState(false);
+  const [recomputeProgress, setRecomputeProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Esegue il ricalcolo e re-sampling completo di tutti i circuiti quantistici per lo stabilimento
+  const handleRecomputeAllCatalogCalcs = async () => {
+    const targetCalcs = plantSupportedCalcs.length > 0 ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
+    setIsRecomputingAll(true);
+    setRecomputeProgress({ current: 0, total: targetCalcs.length });
+    const newResults: Record<number, any> = { ...results };
+    
+    try {
+      let count = 0;
+      for (const calc of targetCalcs) {
+        const raw = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
+        const inputs: Record<string, any> = {};
+        for (const [k, v] of Object.entries(raw)) {
+          inputs[k] = parseFlexibleInput(v);
+        }
+        // Micro-intervallo realistico per simulare la sequenza di campionamento batch GPU/QPU
+        await new Promise(r => setTimeout(r, 20));
+        const res = await QuantumEngine.executeCalculation(calc.id, inputs);
+        newResults[calc.id] = res;
+        count++;
+        setRecomputeProgress({ current: count, total: targetCalcs.length });
+      }
+      setResults(newResults);
+      setToastMessage(`Ricalcolo completato con successo: aggiornati tutti i ${targetCalcs.length} calcoli con telemetria e timestamp live!`);
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch (err) {
+      console.error('Errore durante il ricalcolo globale dei nodi', err);
+    } finally {
+      setIsRecomputingAll(false);
+      setRecomputeProgress(null);
+    }
+  };
 
   // Auto-populate / auto-compute calculation results on mount or activeTenant change so operator sees results without pressing Calcola
   useEffect(() => {
@@ -999,6 +1054,49 @@ export const QuantumCatalog: React.FC<Props> = ({
               </button>
             )}
 
+            {/* PULSANTE UNICO PER TUTTI I CALCOLI: File Python e risultato all calcs (DI FIANCO A CARICA CSV) */}
+            {canViewPythonCode && (
+              <div className="flex items-center rounded-xl bg-gradient-to-r from-teal-700 via-emerald-700 to-cyan-700 border border-emerald-400/60 shadow-lg shadow-emerald-950/40">
+                <button
+                  type="button"
+                  onClick={handleDownloadAllCalcsTxt}
+                  className="px-4 py-2 hover:from-teal-600 hover:via-emerald-600 hover:to-cyan-600 text-white text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.98]"
+                  title={`Scarica subito il file .txt con tutti i file Python e i risultati di tutti i calcoli dello stabilimento ${activeTenant.nome}`}
+                >
+                  <Download className="w-4 h-4 text-emerald-200" />
+                  <span>File Python e risultato all calcs</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAllPythonModalOpen(true)}
+                  className="px-2.5 py-2 border-l border-emerald-400/40 text-emerald-200 hover:text-white hover:bg-emerald-600/30 transition-colors cursor-pointer"
+                  title="Apri l'anteprima a schermo del file consolidato e visualizza i singoli calcoli"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* PULSANTE RICALCOLA TUTTI (ESEGUE IL RE-SAMPLING PROGRESSIVO DI TUTTI I CIRCUITI QPU) */}
+            <button
+              type="button"
+              disabled={isRecomputingAll}
+              onClick={handleRecomputeAllCatalogCalcs}
+              className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer border shadow-lg ${
+                isRecomputingAll
+                  ? 'bg-cyan-950/80 text-cyan-200 border-cyan-400 animate-pulse'
+                  : 'bg-slate-800 hover:bg-slate-750 text-cyan-300 hover:text-white border-cyan-500/40 shadow-slate-950/40 hover:scale-[1.02]'
+              } active:scale-[0.98] disabled:opacity-60`}
+              title="Ricalcola tutti i calcoli dello stabilimento aggiornando in tempo reale stati quantistici, telemetria e timestamp"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRecomputingAll ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
+              <span>
+                {isRecomputingAll 
+                  ? `Ricalcolo (${recomputeProgress?.current || 0}/${recomputeProgress?.total || plantSupportedCalcs.length})...` 
+                  : 'Ricalcola Tutti'}
+              </span>
+            </button>
+
             {/* PULSANTE VISUALIZZAZIONE GRAFICO STABILIMENTO (A FIANCO DI CARICA CSV) */}
             {currentUser && (
               <button
@@ -1336,16 +1434,16 @@ export const QuantumCatalog: React.FC<Props> = ({
                       )}
                     </div>
 
-                    {/* Pulsante Codice Python CUDA-Q (Riservato Solo ad Amministratore Globale) */}
-                    {isAdmin && (
+                    {/* Pulsante File Codice Python & Risultato (Riservato ad Amministratore e Responsabile) */}
+                    {canViewPythonCode && (
                       <button
                         type="button"
                         onClick={() => setSelectedPythonCalc(calc)}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white transition-all cursor-pointer shadow-xs flex items-center gap-1.5 text-[11px] font-mono font-bold"
-                        title={`Visualizza codice Python CUDA-Q per il Calcolo #${calc.id} (Riservato Amministratore)`}
+                        className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-950/90 to-teal-950/90 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white transition-all cursor-pointer shadow-xs flex items-center gap-1.5 text-[11px] font-mono font-bold"
+                        title={`Visualizza file con codice Python e risultato per il Calcolo #${calc.id} (Riservato ad Amministratore e Responsabile)`}
                       >
                         <FileCode className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Codice Python</span>
+                        <span>File Python & Risultato</span>
                       </button>
                     )}
                   </div>
@@ -2119,6 +2217,19 @@ export const QuantumCatalog: React.FC<Props> = ({
                         </>
                       )}
                     </button>
+
+                    {/* Secondo Pulsante Esplicito File Python & Risultato */}
+                    {canViewPythonCode && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPythonCalc(calc)}
+                        className="w-full lg:w-auto px-3.5 py-2 h-[38px] rounded-lg bg-gradient-to-r from-emerald-950/90 to-teal-950/90 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+                        title={`Apri il file con codice Python e risultato per ${calc.name}`}
+                      >
+                        <FileCode className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>File Python & Risultato</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2251,7 +2362,7 @@ export const QuantumCatalog: React.FC<Props> = ({
               </button>
 
               <div className="flex items-center gap-2">
-                {isAdmin && (
+                {canViewPythonCode && (
                   <button
                     type="button"
                     onClick={() => {
@@ -2259,11 +2370,11 @@ export const QuantumCatalog: React.FC<Props> = ({
                       setSelectedCpuCalc(null);
                       setSelectedPythonCalc(target);
                     }}
-                    className="px-4 py-2 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/50 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm"
-                    title="Visualizza codice Python CUDA-Q"
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-950 to-teal-950 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/60 text-emerald-300 hover:text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+                    title="Visualizza file con codice Python e risultato del calcolo"
                   >
                     <FileCode className="w-4 h-4 text-emerald-400" />
-                    <span>Codice Python CUDA-Q</span>
+                    <span>File Python & Risultato</span>
                   </button>
                 )}
 
@@ -2390,12 +2501,36 @@ export const QuantumCatalog: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Modal Visualizzazione Codice Python CUDA-Q - Riservato Esclusivamente ad Amministratore */}
+      {/* Modal Visualizzazione File Codice Python CUDA-Q & Risultato - Riservato ad Amministratore e Responsabile */}
       <QuantumPythonCodeModal
         isOpen={Boolean(selectedPythonCalc)}
         onClose={() => setSelectedPythonCalc(null)}
         calculation={selectedPythonCalc}
-        isAdmin={isAdmin}
+        canView={canViewPythonCode}
+        result={selectedPythonCalc ? results[selectedPythonCalc.id] : undefined}
+        inputs={selectedPythonCalc ? formInputs[selectedPythonCalc.id] : undefined}
+        userRole={currentUser?.ruolo}
+        userName={currentUser?.nomeCompleto || currentUser?.username}
+        onRecompute={async (calc) => {
+          const safeInputs = formInputs[calc.id] || calc.defaultInputs || {};
+          const res = await QuantumEngine.executeCalculation(calc.id, safeInputs);
+          setResults(prev => ({ ...prev, [calc.id]: res }));
+          return res;
+        }}
+      />
+
+      {/* Modal Unico Consolidato per Tutti i Calcoli Python e Risultati (File Python e risultato all calcs) */}
+      <AllQuantumPythonModal
+        isOpen={isAllPythonModalOpen}
+        onClose={() => setIsAllPythonModalOpen(false)}
+        activeTenant={activeTenant}
+        plantSupportedCalcs={plantSupportedCalcs}
+        allCalculations={QUANTUM_CALCULATIONS}
+        results={results}
+        formInputs={formInputs}
+        currentUser={currentUser}
+        canView={canViewPythonCode}
+        onUpdateResults={(newResults) => setResults(newResults)}
       />
     </div>
   );

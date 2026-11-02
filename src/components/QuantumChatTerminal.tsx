@@ -17,13 +17,15 @@ import {
   Bell,
   ChevronDown,
   Search,
-  X
+  X,
+  FileCode
 } from 'lucide-react';
 import { ChatMessage, QuantumCalculationMeta, FactoryTenant, UserRole } from '../types/quantum';
 import { QuantumRouterService } from '../services/quantumRouter';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
 import { isCalculationSupportedByPlant } from '../data/plantNodeCalculations';
 import { GuidedChatAssistant } from './GuidedChatAssistant';
+import { QuantumPythonCodeModal } from './QuantumPythonCodeModal';
 
 interface Props {
   onOpenCircuit: (calc: QuantumCalculationMeta, state?: string) => void;
@@ -406,6 +408,9 @@ Tutti i **21 Calcoli Quantistici CUDA-Q** sono pre-caricati e attivi nel core:`
   const [isProcessing, setIsProcessing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [dispatchedPlcId, setDispatchedPlcId] = useState<string | null>(null);
+  const [selectedPythonCalc, setSelectedPythonCalc] = useState<{ calc: QuantumCalculationMeta; payload?: any } | null>(null);
+
+  const canViewPythonCode = userRole === 'Amministratore' || userRole === 'Responsabile di Stabilimento';
   const [isScenariOpen, setIsScenariOpen] = useState(false);
   const [scenarioSearch, setScenarioSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
@@ -1087,6 +1092,17 @@ Tutti i **21 Calcoli Quantistici CUDA-Q** sono pre-caricati e attivi nel core:`
                               </button>
                             )}
 
+                            {calcMeta && canViewPythonCode && (
+                              <button
+                                onClick={() => setSelectedPythonCalc({ calc: calcMeta, payload: msg.payload })}
+                                className="px-3 py-1.5 text-xs font-mono rounded-lg bg-gradient-to-r from-emerald-950 to-teal-950 hover:from-emerald-900 hover:to-teal-900 text-emerald-300 hover:text-white border border-emerald-500/50 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                                title="Visualizza file con codice Python e risultato del calcolo"
+                              >
+                                <FileCode className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>File Python & Risultato</span>
+                              </button>
+                            )}
+
                             <button
                               onClick={() => dispatchToPlc(msg.id, msg.payload)}
                               disabled={dispatchedPlcId === msg.id}
@@ -1162,6 +1178,18 @@ Tutti i **21 Calcoli Quantistici CUDA-Q** sono pre-caricati e attivi nel core:`
           </button>
         </form>
       </div>
+
+      {/* Modal File Python & Risultato */}
+      {selectedPythonCalc && (
+        <QuantumPythonCodeModal
+          isOpen={Boolean(selectedPythonCalc)}
+          onClose={() => setSelectedPythonCalc(null)}
+          calculation={selectedPythonCalc.calc}
+          canView={canViewPythonCode}
+          result={selectedPythonCalc.payload}
+          userRole={userRole}
+        />
+      )}
     </div>
   );
 };
