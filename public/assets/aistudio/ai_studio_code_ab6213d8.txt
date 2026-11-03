@@ -1,0 +1,24 @@
+Aggiungi un pop-up modale di blocco "Trial / Beta Test Disclaimer" identico nelle grafiche e nei testi alla seguente specifica:
+
+1. COMPONENTE (es. src/components/TrialDisclaimerModal.tsx):
+- Stile: Dark mode moderno con Tailwind CSS (overlay a tutto schermo z-[9999] bg-slate-950/90 backdrop-blur-md, card arrotondata rounded-3xl bg-slate-900 border border-slate-800/80 shadow-[0_0_50px_rgba(0,0,0,0.9)], con bagliori ambra/rossi sfumati di sfondo).
+- Icone: Lucide React (ShieldAlert pulsante, AlertTriangle, CheckCircle).
+- Intestazione:
+  * Badge/Tag superiore: "INFORMATIVA LEGALE • VERSIONE SPERIMENTALE" in font-mono ambra.
+  * Titolo: "AVVISO IMPORTANTE: VERSIONE TRIAL DI PROVA".
+- Testo del corpo:
+  * "Gentile Utente,"
+  * "Si informa che questa applicazione è attualmente rilasciata esclusivamente come versione trial di prova e sperimentale. Sebbene i documenti legali (EULA, NDA e Disclaimer) facciano riferimento alla versione definitiva del prodotto, l'utente riconosce e accetta che il software potrebbe contenere bug, anomalie o malfunzionamenti."
+  * Box di avviso ambra evidenziato (bg-amber-950/25 border-amber-900/40) con icona AlertTriangle:
+    "Lo sviluppatore e l'organizzazione non si assumono alcuna responsabilità per eventuali danni, interruzioni operative o perdite di dati derivanti dall'utilizzo dell'applicazione in questa fase di collaudo e prova."
+- Casella di controllo obbligatoria:
+  * Checkbox con etichetta: "Dichiaro di aver letto, compreso e accetto che l'applicazione è una versione trial di prova".
+- Pulsante di azione:
+  * Testo: "Accetto e Prosegui" con icona CheckCircle.
+  * Stato: Disabilitato e opaco di default, si abilita solo quando la checkbox è spuntata.
+  * Quando attivo: gradiente arancione/ambra lucido (bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 text-slate-950 font-bold).
+
+2. LOGICA DI INTEGRAZIONE:
+- Il popup deve apparire subito dopo il login (prima di mostrare la schermata principale dell'applicazione).
+- Se l'utente è un amministratore, può essere esentato, mentre per gli utenti standard deve essere bloccante finché non viene accettato.
+- Quando l'utente preme "Accetto e Prosegui", salva lo stato di accettazione (es. nello stato React della sessione o localStorage) e consenti l'accesso all'app.

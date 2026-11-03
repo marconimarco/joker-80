@@ -10,6 +10,7 @@ import { PreAccessGate } from './components/PreAccessGate';
 import { AdminControlPanel } from './components/AdminControlPanel';
 import { PlantCsvUploadModal } from './components/PlantCsvUploadModal';
 import { QuantumPythonCodeModal } from './components/QuantumPythonCodeModal';
+import { TrialDisclaimerModal } from './components/TrialDisclaimerModal';
 import { FactoryTenant, QuantumCalculationMeta, UserAccount } from './types/quantum';
 import { AuthStorage } from './services/authStorage';
 import { PlantTelemetryScanner, AutoScanSummary } from './services/plantTelemetryScanner';
@@ -38,6 +39,19 @@ export default function App() {
       return (
         sessionStorage.getItem('joker80_preaccess_unlocked') === 'true' &&
         sessionStorage.getItem('joker80_legal_accepted') === 'true'
+      );
+    } catch {
+      return false;
+    }
+  });
+  const [isTrialAccepted, setIsTrialAccepted] = useState<boolean>(() => {
+    try {
+      const user = AuthStorage.getCurrentUser();
+      if (!user) return false;
+      if (user.ruolo === 'Amministratore') return true;
+      return (
+        localStorage.getItem(`joker80_trial_accepted_${user.id}`) === 'true' ||
+        sessionStorage.getItem(`joker80_trial_accepted_${user.id}`) === 'true'
       );
     } catch {
       return false;
@@ -164,14 +178,33 @@ export default function App() {
     // Gli utenti normali (operatori) non hanno bisogno della Chat Terminal: vanno direttamente al Catalogo con i calcoli del proprio stabilimento
     if (user.ruolo !== 'Amministratore') {
       setActiveView('catalog');
+      const accepted = (
+        localStorage.getItem(`joker80_trial_accepted_${user.id}`) === 'true' ||
+        sessionStorage.getItem(`joker80_trial_accepted_${user.id}`) === 'true'
+      );
+      setIsTrialAccepted(accepted);
     } else {
       setActiveView('chat');
+      setIsTrialAccepted(true);
     }
+  };
+
+  const handleTrialAccept = () => {
+    if (currentUser) {
+      try {
+        localStorage.setItem(`joker80_trial_accepted_${currentUser.id}`, 'true');
+        sessionStorage.setItem(`joker80_trial_accepted_${currentUser.id}`, 'true');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    setIsTrialAccepted(true);
   };
 
   const handleLogout = () => {
     AuthStorage.logout();
     setCurrentUser(null);
+    setIsTrialAccepted(false);
     try {
       sessionStorage.removeItem('joker80_preaccess_unlocked');
     } catch (e) {
@@ -208,6 +241,20 @@ export default function App() {
             setIsPreAccessGranted(true);
             handleLoginSuccess(user);
           }}
+        />
+      </div>
+    );
+  }
+
+  // Step 2: Pop-up modale di blocco "Trial / Beta Test Disclaimer" (subito dopo il login, prima di mostrare la schermata principale)
+  // Se l'utente è un amministratore, può essere esentato; per gli utenti standard è bloccante finché non viene accettato.
+  if (!isTrialAccepted && currentUser.ruolo !== 'Amministratore') {
+    return (
+      <div className="h-[100dvh] min-h-[100dvh] w-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-3 sm:p-4 overflow-y-auto selection:bg-cyan-500/30 selection:text-cyan-200">
+        <TrialDisclaimerModal 
+          isOpen={true}
+          onAccept={handleTrialAccept}
+          userName={currentUser.nomeCompleto || currentUser.username}
         />
       </div>
     );
