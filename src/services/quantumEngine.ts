@@ -546,6 +546,7 @@ export const QuantumEngine = {
 
     const buffer_fill_pct = +(sat * 100).toFixed(1);
     const minuti_autonomia = Math.max(3, Math.round((1 - sat) * 195 / Math.max(1, c * 0.22)));
+    const tempo_medio_attesa_min = +(c * 3.8 * sat).toFixed(1);
     const cluster_centroide = +(sat * 1.28 + c * 0.042).toFixed(3);
 
     const bias = Math.min(0.95, Math.max(0.1, sat));
@@ -561,6 +562,7 @@ export const QuantumEngine = {
       metrica_principale_valore: `${buffer_fill_pct}%`,
       metriche_dettagliate: {
         "Saturazione Buffer": `${buffer_fill_pct}%`,
+        "Tempo Medio Attesa": `${tempo_medio_attesa_min} min`,
         "Autonomia Residua": `${minuti_autonomia} min`,
         "Centroide Quantistico": `${cluster_centroide}`,
         "Camion Coinvolti": `${c} camion`
@@ -631,11 +633,11 @@ export const QuantumEngine = {
     forza_serraggio_carico_n?: number,
     temp_barra_saldante_c?: number
   ) {
-    const t = Number(tensione_newton) || 148;
-    const v = Number(velocita_svolgimento) || 12;
-    const s = Math.max(1, Number(spessore_film_micron) || 23);
+    const t = Number(tensione_newton) || 148.5;
+    const v = Number(velocita_svolgimento) || 12.4;
+    const s = Math.max(1, Number(spessore_film_micron) || 23.0);
 
-    const sforzo_mpa = +(t / (s * 0.48)).toFixed(2);
+    const sforzo_mpa = +(t / s).toFixed(2);
     const prestiro_max_pct = Math.round(285 + (s - 23) * 7.2 - (v * 3.6));
     const rischio_rottura_pct = Math.min(99.0, Math.max(1.0, +((t / 215) * (v / 14) * 62.0).toFixed(1)));
 
@@ -802,7 +804,8 @@ export const QuantumEngine = {
 
     const tempo_ricarica_sec = Math.round((100 - soc) * 2.1 * (110 / kw));
     const efficienza_pct = Math.min(99.5, +(98.5 - (temp > 45 ? (temp - 45) * 1.7 : 0)).toFixed(1));
-    const peak_shaving_kw = +(kw * 0.23).toFixed(1);
+    const peak_shaving_kw = +(kw * 0.28).toFixed(1);
+    const energia_recuperata_kwh = +(kw * (soc / 100.0) * 0.425).toFixed(2);
 
     const { most_probable } = sampleQuantumCircuit(4, false, 0.4);
 
@@ -817,6 +820,7 @@ export const QuantumEngine = {
         "Efficienza Ricarica": `${efficienza_pct}%`,
         "Tempo Ricarica Residuo": `${tempo_ricarica_sec} s`,
         "Peak-Shaving Risparmiato": `${peak_shaving_kw} kW`,
+        "Energia Recuperata": `${energia_recuperata_kwh} kWh`,
         "Temperatura Piastre": `${temp} °C`,
         "Stazioni Attive": `${staz} postazioni`
       },
@@ -834,12 +838,13 @@ export const QuantumEngine = {
     maschera_difetti?: any
   ) {
     const f = Number(forza_deformazione_pattini_n) || 3400;
-    const u = Number(umidita_legno_pct) || 13;
+    const u = Number(umidita_legno_pct) || 13.4;
     const tp = Math.max(1, Number(throughput_pallet_ora) || 280);
 
+    const tasso_scarto_pct = +(Math.max(0.5, (22.0 - u) * 0.18)).toFixed(2);
     const integrita_pct = Math.min(100, Math.max(0, +(100 - (u > 14 ? (u - 14) * 7.5 : 0) - (f > 3200 ? (f - 3200) * 0.048 : 0)).toFixed(1)));
     const carico_rottura_kg = Math.round(1550 * (integrita_pct / 100));
-    const scarti_stimati_ora = Math.round(tp * (1 - integrita_pct / 100));
+    const scarti_stimati_ora = Math.round(tp * (tasso_scarto_pct / 100));
 
     const { most_probable } = sampleQuantumCircuit(4, false, (100 - integrita_pct) / 100);
 
@@ -852,6 +857,7 @@ export const QuantumEngine = {
       metrica_principale_valore: `${integrita_pct}%`,
       metriche_dettagliate: {
         "Integrità Pallet": `${integrita_pct}%`,
+        "Tasso Scarto Stimato": `${tasso_scarto_pct}%`,
         "Carico Rottura Stimato": `${carico_rottura_kg} kg`,
         "Scarti Stimati/Ora": `${scarti_stimati_ora} plt/h`,
         "Forza Pattini": `${f} N`,
