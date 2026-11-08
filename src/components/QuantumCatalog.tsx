@@ -262,6 +262,20 @@ export const QuantumCatalog: React.FC<Props> = ({
     setTimeout(() => setToastMessage(null), 4500);
   };
 
+  // Scarica la relazione tecnica completa di Audit e Validazione (Fasi 1-4 + Checklist)
+  const handleDownloadAuditReport = (format: 'md' | 'txt' = 'md') => {
+    const filename = format === 'md' ? 'AUDIT_JOKER80_BARILLA_NOVARA.md' : 'AUDIT_JOKER80_BARILLA_NOVARA.txt';
+    const url = `/${filename}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setToastMessage(`Download avviato: "${filename}" (Relazione Tecnica di Audit) scaricato!`);
+    setTimeout(() => setToastMessage(null), 4500);
+  };
+
   const [isRecomputingAll, setIsRecomputingAll] = useState(false);
   const [recomputeProgress, setRecomputeProgress] = useState<{ current: number; total: number } | null>(null);
 
@@ -1073,6 +1087,29 @@ export const QuantumCatalog: React.FC<Props> = ({
                   title="Apri l'anteprima a schermo del file consolidato e visualizza i singoli calcoli"
                 >
                   <Eye className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* PULSANTE RELAZIONE TECNICA AUDIT & RE-ENGINEERING (FIX JOKER) */}
+            {canViewPythonCode && (
+              <div className="flex items-center rounded-xl bg-gradient-to-r from-purple-800 via-indigo-800 to-blue-800 border border-purple-400/50 shadow-lg shadow-purple-950/40">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadAuditReport('md')}
+                  className="px-3.5 py-2 hover:from-purple-700 hover:via-indigo-700 hover:to-blue-700 text-white text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.98]"
+                  title="Scarica la Relazione Tecnica Completa di Audit, Validazione e Re-Engineering (Fasi 1-4 + Checklist 20 domande) in formato Markdown (.md)"
+                >
+                  <FileText className="w-4 h-4 text-purple-200" />
+                  <span>Relazione Audit (.md)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadAuditReport('txt')}
+                  className="px-2.5 py-2 border-l border-purple-400/30 text-purple-200 hover:text-white hover:bg-purple-700/40 transition-colors cursor-pointer text-xs font-mono font-semibold"
+                  title="Scarica la Relazione Tecnica in formato testo (.txt)"
+                >
+                  .txt
                 </button>
               </div>
             )}

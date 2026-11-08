@@ -104,8 +104,8 @@ export const PreAccessGate: React.FC<Props> = ({ onUnlock, onLoginWithUser }) =>
 
     const cleanPass = password.trim();
 
-    // Verify password: master 'nicopol' or user account specific password
-    const isMaster = cleanPass.toLowerCase() === 'nicopol';
+    // Verify password: master 'murasaki' or user account specific password
+    const isMaster = cleanPass.toLowerCase() === 'murasaki';
     const isUserPass = activeUser?.password && cleanPass.toLowerCase() === activeUser.password.toLowerCase();
 
     if (isMaster || isUserPass) {
@@ -120,7 +120,7 @@ export const PreAccessGate: React.FC<Props> = ({ onUnlock, onLoginWithUser }) =>
         setShowLegalModal(true);
       }
     } else {
-      setError('Password errata. Autorizzazione negata (Password master: nicopol).');
+      setError('Password errata. Autorizzazione negata.');
       if (inputRef.current) {
         inputRef.current.focus();
         inputRef.current.select();
@@ -405,8 +405,8 @@ export const PreAccessGate: React.FC<Props> = ({ onUnlock, onLoginWithUser }) =>
                   <KeyRound className="w-3.5 h-3.5 text-cyan-400" />
                   <span>3. Password di Sicurezza Gateway:</span>
                 </span>
-                <span className="text-[10px] text-slate-400 font-normal">
-                  Master: <code className="text-cyan-300">nicopol</code>
+                <span className="text-[10px] text-slate-500 font-normal">
+                  Richiesta credenziale
                 </span>
               </label>
 
@@ -421,7 +421,7 @@ export const PreAccessGate: React.FC<Props> = ({ onUnlock, onLoginWithUser }) =>
                   }}
                   disabled={isSuccess}
                   required
-                  placeholder="Inserisci la password di sicurezza (es. nicopol)..."
+                  placeholder="Inserisci la password di sicurezza..."
                   className={`w-full pl-3.5 pr-10 py-2.5 sm:py-3 rounded-xl bg-slate-950 border font-mono text-sm text-white placeholder:text-slate-600 focus:outline-none transition-all ${
                     error 
                       ? 'border-rose-500 focus:border-rose-400 ring-1 ring-rose-500/30' 
