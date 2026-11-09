@@ -1724,12 +1724,16 @@ export const QuantumCatalog: React.FC<Props> = ({
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Micro-spessore Film (micron)</label>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Spessore Interfalda (mm)</label>
                       <input
                         type="number"
                         step="0.1"
-                        value={inputs.spessore_micro}
-                        onChange={e => handleInputChange(4, 'spessore_micro', Number(e.target.value))}
+                        value={inputs.spessore_interfalda_mm ?? inputs.spessore_micro ?? 2.8}
+                        onChange={e => {
+                          const val = Number(e.target.value);
+                          handleInputChange(4, 'spessore_interfalda_mm', val);
+                          handleInputChange(4, 'spessore_micro', val);
+                        }}
                         className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
                       />
                     </div>
@@ -1889,26 +1893,40 @@ export const QuantumCatalog: React.FC<Props> = ({
 
                 {/* Calcolo 10 */}
                 {calc.id === 10 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Volume Cassone Camion (mc)</label>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Colli da Caricare</label>
                       <input
                         type="number"
-                        value={inputs.volume_disponibile_mc}
-                        onChange={e => handleInputChange(10, 'volume_disponibile_mc', Number(e.target.value))}
+                        min="1"
+                        value={inputs.colli_da_caricare ?? (Array.isArray(inputs.lista_pesi_pallet) ? inputs.lista_pesi_pallet.length : 33)}
+                        onChange={e => {
+                          const val = Number(e.target.value);
+                          handleInputChange(10, 'colli_da_caricare', val);
+                          handleInputChange(10, 'colli', val);
+                        }}
                         className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Lista Pesi Pallet (kg)</label>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Volume Cassone Camion (m³)</label>
                       <input
-                        type="text"
-                        value={JSON.stringify(inputs.lista_pesi_pallet)}
+                        type="number"
+                        value={inputs.volume_cassone_m3 ?? inputs.volume_disponibile_mc ?? 86.0}
                         onChange={e => {
-                          try {
-                            handleInputChange(10, 'lista_pesi_pallet', JSON.parse(e.target.value));
-                          } catch {}
+                          const val = Number(e.target.value);
+                          handleInputChange(10, 'volume_cassone_m3', val);
+                          handleInputChange(10, 'volume_disponibile_mc', val);
                         }}
+                        className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-mono text-slate-400 block mb-1">Peso Totale Carico (kg)</label>
+                      <input
+                        type="number"
+                        value={inputs.peso_totale_kg ?? 24500.0}
+                        onChange={e => handleInputChange(10, 'peso_totale_kg', Number(e.target.value))}
                         className="w-full px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-slate-700 text-slate-200 font-mono"
                       />
                     </div>

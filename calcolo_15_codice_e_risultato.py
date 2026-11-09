@@ -1,82 +1,36 @@
-#!/usr/bin/env python3
-"""
-JOKER 80 QUANTUM - SM.I.LE80
-Calcolo 15: Quantum Support Vector Machines (QSVM) per Tensione Film Bema
-Target: NVIDIA CUDA-Q / QPU Gate-Based
-"""
-import json
+import cudaq
+import numpy as np
 from typing import Dict, Any
-try:
-    import numpy as np
-except ImportError:
-    import math
-    class _NumPyFallback:
-        pi = math.pi
-        @staticmethod
-        def clip(a, a_min, a_max):
-            return min(a_max, max(a_min, a))
-        @staticmethod
-        def sqrt(x):
-            return math.sqrt(x)
-        @staticmethod
-        def arcsin(x):
-            return math.asin(x)
-    np = _NumPyFallback()
 
-try:
-    import cudaq
-    HAS_CUDAQ = True
-    cudaq.set_target("nvidia")
-except ImportError:
-    HAS_CUDAQ = False
+@cudaq.kernel
+def qsvm_film_kernel(theta_t: float, theta_p: float):
+    q = cudaq.qvector(4)
+    cudaq.ry(theta_t, q[0])
+    cudaq.ry(theta_p, q[1])
+    cudaq.x.ctrl(q[0], q[2])
+    cudaq.x.ctrl(q[1], q[3])
 
-if HAS_CUDAQ:
-    @cudaq.kernel
-    def qsvm_kernel(qubit_count: int, theta_tensione: float, theta_velocita: float):
-        q = cudaq.qvector(qubit_count)
-        for i in range(qubit_count):
-            cudaq.h(q[i])
-        cudaq.ry(theta_tensione, q[0])
-        cudaq.ry(theta_velocita, q[1])
-        cudaq.x.ctrl(q[0], q[2])
-        cudaq.x.ctrl(q[1], q[3])
-        cudaq.rz(theta_tensione * theta_velocita, q[2])
+def compute_stress_mpa(tension_n: float = 148.5, thickness_um: float = 23.0, width_mm: float = 1000.0) -> float:
+    area_mm2 = width_mm * (thickness_um / 1000.0)
+    return round(float(tension_n / area_mm2), 2)
 
-def esegui_qsvm_tensione_film(
-    tensione_newton: float = 148.5, 
-    velocita_metri_sec: float = 12.4, 
-    spessore_film_micron: float = 23.0
-) -> Dict[str, Any]:
-    t_newton = float(tensione_newton)
-    v_ms = float(velocita_metri_sec)
-    s_film = float(spessore_film_micron)
-    
-    theta_t = float(np.clip((t_newton / 200.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_v = float(np.clip((v_ms / 20.0) * np.pi, 0.1, np.pi - 0.1))
-    
-    if HAS_CUDAQ:
-        counts = cudaq.sample(qsvm_kernel, 4, theta_t, theta_v, shots=1000)
-        stato_separazione = counts.most_probable()
-        distrib = dict(counts)
-    else:
-        stato_separazione = "0001"
-        distrib = {"0001": 840, "0010": 110, "0100": 50}
-        
-    sforzo_unitario_mpa = round(float(t_newton / s_film), 2)
-    rischio_strappo = "ELEVATO" if (sforzo_unitario_mpa > 18.0 or t_newton > 165.0) else "BASSO_SICURO"
-    
+def esegui_calcolo_15_qsvm_film(tensione_newton: float = 148.5, pre_stiro_pct: float = 250.0, spessore_film_micron: float = 23.0) -> Dict[str, Any]:
+    t_n = max(1.0, float(tensione_newton))
+    prestiro = float(np.clip(pre_stiro_pct, 100.0, 350.0))
+    spess_um = max(1.0, float(spessore_film_micron))
+    sforzo_mpa = compute_stress_mpa(t_n, spess_um, width_mm=1000.0)
+    theta_t = float(np.clip((t_n / 300.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_p = float(np.clip((prestiro / 350.0) * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(qsvm_film_kernel, theta_t, theta_p, shots=100)
+    stato = counts.most_probable()
     return {
         "calcolo": "Quantum Support Vector Machines (QSVM) - Tensione Film Bema",
-        "tensione_newton": t_newton,
-        "velocita_metri_sec": v_ms,
-        "spessore_film_micron": s_film,
-        "stato_qubit_qsvm": stato_separazione,
-        "sforzo_unitario_mpa": sforzo_unitario_mpa,
-        "iperpiano_separazione": "CLASSE_+1 (Tenuta Ottimale)" if rischio_strappo == "BASSO_SICURO" else "CLASSE_-1 (Rischio Rottura)",
-        "rischio_strappo_film": rischio_strappo,
-        "distribuzione_campionata": distrib
+        "tensione_newton": t_n,
+        "pre_stiro_pct": prestiro,
+        "spessore_film_micron": spess_um,
+        "sforzo_unitario_mpa": sforzo_mpa,
+        "stato_fasciatura": "ALLARME ROTTURA FILM" if sforzo_mpa > 18.0 else "REGOLARE"
     }
 
 if __name__ == '__main__':
-    risultato = esegui_qsvm_tensione_film()
-    print(json.dumps(risultato, indent=2))
+    print(esegui_calcolo_15_qsvm_film())

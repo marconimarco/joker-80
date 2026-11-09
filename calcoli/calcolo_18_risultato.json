@@ -1,0 +1,16 @@
+{
+  "calcolo": "Variational Quantum Eigensolver (VQE) - Robot Joint Kinematics",
+  "metodo": "VQE Variazionale Reale con Hamiltoniana di Spin (4 Qubit)",
+  "coppia_motori_nm": 185.0,
+  "pressione_vuoto_bar": -0.78,
+  "corrente_joint_ampere": 14.2,
+  "energia_ground_state_trovata": -1.7738,
+  "angoli_ottimi_rad": [
+    0.35,
+    0.55,
+    0.42
+  ],
+  "tenuta_vuoto_pinza": "TENUTA OTTIMALE",
+  "vibrazione_giunti_mm": 0.191,
+  "stato_manutenzione": "REGOLARE"
+}

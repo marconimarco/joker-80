@@ -1,0 +1,13 @@
+{
+  "calcolo": "Quantum Walk Route Exploration (TSP) - Picking & Batching",
+  "distanza_nominale_metri": 340.0,
+  "distanza_ottimizzata_metri": 286.0,
+  "metri_lineari_risparmiati": 54.0,
+  "stato_qubit_percorso": "0000",
+  "sequenza_tappe_ottimale": [
+    "PLT_A (Corsia 1)",
+    "PLT_B (Corsia 3)",
+    "PLT_C (Corsia 2)",
+    "PLT_D (Baia Scarico)"
+  ]
+}

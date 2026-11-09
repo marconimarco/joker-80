@@ -194,12 +194,13 @@ export class PlantTelemetryScanner {
         };
       }
       case 4: {
-        let umidita = 12.0;
-        let spessore = 42.0;
-        if (tid === 'barilla-foggia') { umidita = 16.5; spessore = 48.0; }
+        let umidita = 12.8;
+        let spessoreMm = 2.8;
+        if (tid === 'barilla-foggia') { umidita = 16.5; spessoreMm = 3.6; }
         return {
           umidita_rilevata: +umidita.toFixed(1),
-          spessore_micro: +spessore.toFixed(1)
+          spessore_interfalda_mm: spessoreMm,
+          spessore_micro: spessoreMm
         };
       }
       case 5: {
@@ -246,7 +247,10 @@ export class PlantTelemetryScanner {
       }
       case 10: {
         return {
-          volume_disponibile_mc: 68.0
+          colli_da_caricare: 33,
+          volume_cassone_m3: 86.0,
+          peso_totale_kg: 24500.0,
+          volume_disponibile_mc: 86.0
         };
       }
       case 11: {
@@ -274,12 +278,13 @@ export class PlantTelemetryScanner {
         };
       }
       case 14: {
-        let rpm = 48.0;
+        let rpm = 48.5;
         if (tid === 'barilla-novara') rpm = 58.6; // overspeed
         else if (tid === 'nestle') rpm = 36.2; // slow
         else if (tid === 'e80-bema-dolo') rpm = 56.5;
         return {
-          giri_minuto: rpm
+          giri_minuto: rpm,
+          rpm_tavola_bema: rpm
         };
       }
       case 15: {

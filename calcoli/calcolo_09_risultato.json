@@ -1,0 +1,14 @@
+{
+  "calcolo": "Quantum Graph Neural Network (QGNN) - Order Batching",
+  "ordini_in_coda": 24,
+  "cluster_ottimale_bitstring": "0000",
+  "numero_cluster_generati": 2,
+  "efficienza_batching_pct": 91.4,
+  "tempo_consolidamento_sec": 50.4,
+  "distribuzione_campionata": {
+    "0000": 85,
+    "0001": 8,
+    "0010": 4,
+    "0011": 3
+  }
+}

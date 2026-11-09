@@ -1,66 +1,35 @@
-#!/usr/bin/env python3
-"""
-JOKER 80 QUANTUM - SM.I.LE80
-Calcolo 11: Quantum-Enhanced Blind Signatures per e-CMR & Spedizioni
-Target: QPU Gate-Based / Simulatori GPU
-"""
-import json
-import hashlib
+import cudaq
 import secrets
-import time
+import hashlib
+import numpy as np
 from typing import Dict, Any
 
-try:
-    import cudaq
-    HAS_CUDAQ = True
-    cudaq.set_target("nvidia")
-except ImportError:
-    HAS_CUDAQ = False
+@cudaq.kernel
+def blind_signature_kernel(theta_phase: float):
+    q = cudaq.qvector(4)
+    for i in range(4):
+        cudaq.h(q[i])
+        cudaq.rz(theta_phase * (i + 1), q[i])
 
-if HAS_CUDAQ:
-    @cudaq.kernel
-    def blind_signature_kernel(fase_cieca: float):
-        q_counting = cudaq.qvector(3)
-        q_eigen = cudaq.qubit()
-        cudaq.x(q_eigen)
-        for i in range(3):
-            cudaq.h(q_counting[i])
-        for i in range(3):
-            potenza = 2**i
-            for _ in range(potenza):
-                cudaq.rz.ctrl(fase_cieca, q_counting[i], q_eigen)
-        for i in range(3):
-            cudaq.h(q_counting[i])
-
-def genera_firma_cieca_ecmr(
-    id_spedizione: str = "CMR-EU-2026-881", 
-    destinazione: str = "Monaco di Baviera (DE)", 
-    vettore_logistico: str = "DBSchenker"
-) -> Dict[str, Any]:
-    fase = float(0.45 * 3.14159)
-    if HAS_CUDAQ:
-        counts = cudaq.sample(blind_signature_kernel, fase, shots=1000)
-        stato_firma = counts.most_probable()
-    else:
-        stato_firma = "101"
-        
-    blinding_salt = secrets.token_hex(16)
-    timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ")
-    seed_str = f"{id_spedizione}:{destinazione}:{vettore_logistico}:{stato_firma}:{blinding_salt}:{timestamp}"
-    salt_hex = hashlib.sha3_256(seed_str.encode('utf-8')).hexdigest()
-    
+def esegui_calcolo_11_ecmr(id_spedizione: str = "ECMR-NOV-2026-9921", destinazione: str = "HUB-INTERPORTO-BOLOGNA", vettore_logistico: str = "FERCAM-LOGISTICS-IT") -> Dict[str, Any]:
+    theta_seed = float((len(id_spedizione) % 8) / 8.0 * np.pi)
+    counts = cudaq.sample(blind_signature_kernel, theta_seed, shots=100)
+    qpu_entropy = counts.most_probable()
+    blinding_factor = secrets.token_hex(16)
+    raw_carrier = f"{vettore_logistico.strip()}::{destinazione.strip()}::BARILLA_SALT_2026"
+    carrier_token = f"OP-CARRIER-{hashlib.sha3_256(raw_carrier.encode('utf-8')).hexdigest()[:16].upper()}"
+    blinded_payload = f"{id_spedizione}|{carrier_token}|{qpu_entropy}::BLINDED_BY::{blinding_factor}"
+    blind_hash = hashlib.sha3_256(blinded_payload.encode('utf-8')).hexdigest()
+    unblind_token = hashlib.sha3_256(f"{blind_hash}::{blinding_factor}".encode('utf-8')).hexdigest()
     return {
-        "calcolo": "Quantum-Enhanced Blind Signatures - e-CMR Dispatching",
+        "calcolo": "Quantum-Enhanced Blind Signatures e-CMR",
+        "metodo": "Euristica di Accecamento Crittografico con Seed Quantistico (Non-QPU Lattice)",
         "id_spedizione": id_spedizione,
-        "destinazione": destinazione,
-        "vettore_logistico": vettore_logistico,
-        "stato_qubit_firma": stato_firma,
-        "salt_esadecimale": salt_hex[:32],
-        "algoritmo_post_quantum": "Hybrid Dilithium5 / Falcon-1024",
-        "validita_contratto_ecmr": "CONFORME_ART_21_NIS2",
-        "timestamp_utc": timestamp
+        "vettore_pseudonimizzato_gdpr": carrier_token,
+        "firma_cieca_hash": blind_hash,
+        "token_unblind_notarile": unblind_token,
+        "stato_qubit_entropy": qpu_entropy
     }
 
 if __name__ == '__main__':
-    risultato = genera_firma_cieca_ecmr()
-    print(json.dumps(risultato, indent=2))
+    print(esegui_calcolo_11_ecmr())

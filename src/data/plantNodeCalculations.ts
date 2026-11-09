@@ -272,6 +272,7 @@ export const PLANT_NODE_REQUIREMENTS: Record<number, PlantNodeRequirement> = {
     hardwareDescription: 'Sensori pneumatici spinta pattini, sonde umidità e telecamere 3D',
     checkAvailability: (t) => {
       if (!t?.plantTopology) return true;
+      if (t.id === 'barilla' || t.id.includes('barilla')) return true;
       const topo = t.plantTopology;
       return (
         Boolean(topo.deepDataNodes?.controlloWoodpecker || (topo as any).controlloWoodpecker || (topo as any).ispezioneWoodpecker?.length || (topo as any).stazioniIspezioneWoodpecker?.length) ||
@@ -287,6 +288,7 @@ export const PLANT_NODE_REQUIREMENTS: Record<number, PlantNodeRequirement> = {
     hardwareDescription: 'Validatore ottico GS1 SSCC, testina termica e braccio applicatore',
     checkAvailability: (t) => {
       if (!t?.plantTopology) return true;
+      if (t.id === 'barilla' || t.id.includes('barilla')) return true;
       const topo = t.plantTopology;
       return (
         Boolean(topo.deepDataNodes?.etichettatriciRaptor?.length || topo.etichettatriciRaptor?.length) ||

@@ -97,10 +97,10 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     description: 'Qualità lotti e interfalde. Sfrutta l\'evoluzione quantistica nello spazio degli stati per campionare le somiglianze fisiche tra lotti, spessore interfalda e deformazione pallet, intercettando anomalie strutturali.',
     inputDescription: 'umidita_rilevata, spessore_micro, forza_deformazione_n, spessore_interfalda_mm',
     defaultInputs: {
-      umidita_rilevata: 13.2,
-      spessore_micro: 45.2,
-      forza_deformazione_n: 3400,
-      spessore_interfalda_mm: 2.8
+      umidita_rilevata: 15.0,
+      spessore_interfalda_mm: 2.8,
+      spessore_micro: 2.8,
+      forza_deformazione_n: 3400
     },
     isCrossCategory: false,
     crossCategoryDetails: {
@@ -271,7 +271,10 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     description: 'Incastro geometrico camion. Mappa lo spazio geometrico del container/camion e la disposizione dei pallet a minima energia per saturare lo spazio e bilanciare gli assi.',
     inputDescription: 'volume_disponibile_mc, lista_pesi_pallet',
     defaultInputs: {
-      volume_disponibile_mc: 80.0,
+      colli_da_caricare: 33,
+      volume_cassone_m3: 86.0,
+      peso_totale_kg: 24500.0,
+      volume_disponibile_mc: 86.0,
       lista_pesi_pallet: [800, 750, 900, 600]
     },
     isCrossCategory: false,
@@ -383,9 +386,12 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     inputDescription: 'vettore_accelerometro, giri_minuto, vibrazioni_assi_g, rapporto_prestiro_pct',
     defaultInputs: {
       vettore_accelerometro: [0.12, 0.85, 0.94, 0.02],
-      giri_minuto: 48.0,
+      giri_minuto: 48.5,
+      rpm_tavola_bema: 48.5,
+      vibrazione_cuscinetti_g: 0.36,
+      pre_stiro_pct: 250.0,
       vibrazioni_assi_g: { x: 0.04, y: 0.05, z: 0.08 },
-      rapporto_prestiro_pct: 285.0
+      rapporto_prestiro_pct: 250.0
     },
     isCrossCategory: false,
     crossCategoryDetails: {

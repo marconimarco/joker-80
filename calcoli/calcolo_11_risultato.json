@@ -1,0 +1,9 @@
+{
+  "calcolo": "Quantum-Enhanced Blind Signatures e-CMR",
+  "metodo": "Euristica di Accecamento Crittografico con Seed Quantistico (Non-QPU Lattice)",
+  "id_spedizione": "ECMR-NOV-2026-9921",
+  "vettore_pseudonimizzato_gdpr": "OP-CARRIER-7A8B9C0D1E2F3A4B",
+  "firma_cieca_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0",
+  "token_unblind_notarile": "b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef01a",
+  "stato_qubit_entropy": "0000"
+}

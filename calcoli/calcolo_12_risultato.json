@@ -1,0 +1,8 @@
+{
+  "calcolo": "Quantum Game Theory (EWL) - Dock & Slot Scheduler",
+  "camion_in_coda": 14,
+  "baie_disponibili": 2,
+  "risparmio_costi_sosta_eur": 204.75,
+  "stato_equilibrio_nash_qubit": "0000",
+  "esito_cooperativo": "PARETO-OTTIMALE"
+}

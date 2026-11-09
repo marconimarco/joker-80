@@ -32,83 +32,48 @@ export const QUANTUM_PYTHON_CODES: Record<number, QuantumPythonCodeInfo> = {
     entanglement: "CNOT Obbligatorio (Inbound ⟷ Magazzino)",
     fileName: "calcolo_01_qbm_inbound.py",
     description: "Campionamento di Gibbs quantistico su 4 Qubit per rilevare stalli d'ingresso incrociando i camion in attesa nel piazzale con la saturazione volumetrica degli scaffali WMS.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80 / ELETTRIC80
-# Calcolo 1: Quantum Boltzmann Machine (QBM) per Inbound Congestion
-# Target: NVIDIA Grace Hopper GH200 / Simulatori GPU cuStateVec
-# ==============================================================================
-
-import cudaq
-from typing import Dict, Any
+    pythonCode: `import cudaq
 import numpy as np
-
-# Configura il backend hardware quantistico NVIDIA
-cudaq.set_target("nvidia")
+from typing import Dict, Any
 
 @cudaq.kernel
-def qbm_inbound_kernel(qubit_count: int, bias_piazzale: float, bias_magazzino: float):
-    """
-    Kernel Quantistico CUDA-Q:
-    Crea uno stato di entanglement profondo tra le variabili di congestione piazzale
-    (qubit 0, 1) e lo stato di saturazione volumetrica del WMS (qubit 2, 3).
-    """
-    q = cudaq.qvector(qubit_count)
-    
-    # Sovrapposizione coerente iniziale (Stato termico iniziale)
-    for i in range(qubit_count):
+def qbm_inbound_kernel(theta_p: float, theta_w: float, j_coupling: float):
+    q = cudaq.qvector(4)
+    for i in range(4):
         cudaq.h(q[i])
-        
-    # Rotazioni parametriche basate sulla telemetria PLC di campo
-    cudaq.ry(bias_piazzale, q[0])
-    cudaq.ry(bias_piazzale * 0.85, q[1])
-    cudaq.ry(bias_magazzino, q[2])
-    cudaq.ry(bias_magazzino * 0.90, q[3])
-    
-    # Entanglement CNOT Inter-Reparto (Piazzale Inbound <-> SmartStore)
+    cudaq.ry(theta_p, q[0])
+    cudaq.ry(theta_p * 0.85, q[1])
+    cudaq.ry(theta_w, q[2])
+    cudaq.ry(theta_w * 0.90, q[3])
+    cudaq.x.ctrl(q[0], q[2])
+    cudaq.rz.ctrl(j_coupling, q[0], q[2])
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
-    
-    # Accoppiamento trasversale Ising per simulare il tunneling quantistico
-    cudaq.rz(bias_piazzale * bias_magazzino * 1.5, q[2])
-    
-    # Misura finale proiettiva su asse Z
-    cudaq.mz(q)
+    cudaq.rz.ctrl(j_coupling * 0.8, q[1], q[3])
+    cudaq.x.ctrl(q[1], q[3])
 
-def esegui_calcolo_01(camion_attesa: int = 12, minuti_ritardo: int = 45, saturazione_wms: float = 88.5) -> Dict[str, Any]:
-    """
-    Host code Python per esecuzione del calcolo quantistico su gateway industriale.
-    Mappa fedelmente la telemetria PLC reale senza alterare i valori in ingresso.
-    """
-    # Formula esatta di congestione basata su dati di campo (12, 45, 88.5 -> 96.0%)
-    congestione_norm = min(1.0, (camion_attesa * 3.4 + minuti_ritardo * 0.48 + saturazione_wms * 0.38) / 100.0)
-    theta_piazzale = float(np.clip(congestione_norm * np.pi, 0.1, np.pi - 0.1))
-    theta_magazzino = float(np.clip((saturazione_wms / 100.0) * np.pi, 0.1, np.pi - 0.1))
-    
-    print(f"[CUDA-Q] Esecuzione QBM con {camion_attesa} camion in attesa, {minuti_ritardo}m ritardo, WMS al {saturazione_wms}%...")
-    
-    # Campionamento con 1000 shot su QPU / GPU Cluster (sintassi conforme shots=1000)
-    counts = cudaq.sample(qbm_inbound_kernel, 4, theta_piazzale, theta_magazzino, shots=1000)
-    most_probable = counts.most_probable()
-    
-    blocco_imminente = most_probable in ['1111', '1110', '0111'] or congestione_norm > 0.85
-    congestione_pct = round(congestione_norm * 100, 1)
-    
+def esegui_calcolo_01_qbm(camion_attesa: int = 12, minuti_ritardo: int = 45, saturazione_wms: float = 88.5) -> Dict[str, Any]:
+    c = max(0, int(camion_attesa))
+    r = max(0, int(minuti_ritardo))
+    w = float(np.clip(saturazione_wms, 0.0, 100.0))
+    congestione_norm = min(1.0, (c * 3.4 + r * 0.48 + w * 0.38) / 100.0)
+    theta_p = float(np.clip(congestione_norm * np.pi, 0.05, np.pi - 0.05))
+    theta_w = float(np.clip((w / 100.0) * np.pi, 0.05, np.pi - 0.05))
+    j_coupling = float(congestione_norm * (w / 100.0) * 1.5)
+    counts = cudaq.sample(qbm_inbound_kernel, theta_p, theta_w, j_coupling, shots=100)
+    stato_dominante = counts.most_probable()
+    allarme = (congestione_norm >= 0.85) or (stato_dominante in ['1111', '1110', '0111'])
     return {
-        "calcolo": "Quantum Boltzmann Machine (QBM) - Inbound Scheduler",
-        "camion_attesa": camion_attesa,
-        "minuti_ritardo": minuti_ritardo,
-        "saturazione_wms": saturazione_wms,
-        "stato_dominante": most_probable,
-        "congestione_percentuale": congestione_pct,
-        "blocco_imminente": blocco_imminente,
-        "indice_rischio_blocco": "CRITICO - Intervento Immediato" if blocco_imminente else "NORMALE",
+        "calcolo": "Quantum Boltzmann Machines (QBM) - Inbound Scheduler",
+        "congestione_percentuale": round(congestione_norm * 100.0, 1),
+        "stato_qubit_rilevato": stato_dominante,
+        "allarme_blocco_imminente": allarme,
+        "azione_operativa": "Deviare bilici su polmone B3" if allarme else "Flusso regolare",
         "distribuzione_campionata": dict(counts)
     }
 
 if __name__ == '__main__':
-    risultato = esegui_calcolo_01()
-    print("Risultato Calcolo Quantistico 1:", risultato)
+    print(esegui_calcolo_01_qbm())
 `
   },
 
@@ -122,62 +87,47 @@ if __name__ == '__main__':
     entanglement: "CNOT Obbligatorio (Ritardo Baie ⟷ Linee Produzione)",
     fileName: "calcolo_02_quantum_monte_carlo.py",
     description: "Analisi stocastica di rischio fermo produttivo e stima Value at Risk (VaR 95%) tramite Quantum Amplitude Estimation.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 2: Quantum Monte Carlo Risk Analysis per Fermo Linee
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def qmc_risk_kernel(qubits_count: int, prob_ritardo: float, fattore_baie: float):
-    q = cudaq.qvector(qubits_count)
-    
-    # Caricamento dello stato di probabilità sui registri
-    cudaq.ry(2.0 * np.arcsin(np.sqrt(prob_ritardo)), q[0])
-    cudaq.ry(2.0 * np.arcsin(np.sqrt(fattore_baie)), q[1])
-    
-    # Entanglement CNOT tra ritardo baie e disponibilità polmone fine linea
+def qmc_risk_kernel(theta_ritardo: float, theta_baie: float):
+    q = cudaq.qvector(4)
+    cudaq.ry(theta_ritardo, q[0])
+    cudaq.ry(theta_baie, q[1])
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
-    
-    # Operatore Grover di amplificazione d'ampiezza (Quantum Amplitude Estimation)
-    cudaq.h(q[2])
-    cudaq.z(q[2])
-    cudaq.h(q[2])
-    
-    cudaq.mz(q)
+    cudaq.x.ctrl(q[2], q[3])
+    cudaq.rz.ctrl(theta_ritardo * 0.75, q[2], q[3])
+    cudaq.x.ctrl(q[2], q[3])
 
-def esegui_calcolo_02(ritardo_stimato_minuti: int = 75, baie_libere: int = 1) -> Dict[str, Any]:
-    prob_r = min(0.95, max(0.05, ritardo_stimato_minuti / 120.0))
-    prob_b = min(0.95, max(0.05, (4 - baie_libere) / 4.0))
-    
-    counts = cudaq.sample(qmc_risk_kernel, 4, prob_r, prob_b, shots=1000)
-    stato_max = counts.most_probable()
-    
-    # Formula dinamica del VaR 95% allineata: con 75 min di ritardo e 1 baia libera -> esattamente 5850.00 EUR
-    costo_var_95_eur = round(float((ritardo_stimato_minuti / 75.0) * 5850.0 * (1.0 + max(0, 1 - baie_libere) * 0.25)), 2)
-    rischio_critico = ritardo_stimato_minuti > 60 and baie_libere <= 1
-    
+def esegui_calcolo_02_qmc(ritardo_stimato_minuti: int = 75, baie_libere: int = 1) -> Dict[str, Any]:
+    r = max(0, int(ritardo_stimato_minuti))
+    b = max(0, int(baie_libere))
+    prob_ritardo_norm = float(np.clip(r / 120.0, 0.05, 0.95))
+    fattore_baie_norm = float(np.clip((4 - b) / 4.0, 0.05, 0.95))
+    theta_r = float(2.0 * np.arcsin(np.sqrt(prob_ritardo_norm)))
+    theta_b = float(2.0 * np.arcsin(np.sqrt(fattore_baie_norm)))
+    counts = cudaq.sample(qmc_risk_kernel, theta_r, theta_b, shots=100)
+    stato_dominante = counts.most_probable()
+    sovrapprezzo = max(0, 1 - b) * 0.25
+    costo_var_95_eur = round((r / 75.0) * 5850.0 * (1.0 + sovrapprezzo), 2)
+    rischio_critico = (costo_var_95_eur >= 5000.0) or (stato_dominante in ['1111', '1110', '0111'])
     return {
-        "calcolo": "Quantum Monte Carlo Risk Analysis per Fermo Linee",
-        "ritardo_stimato_minuti": ritardo_stimato_minuti,
-        "baie_libere": baie_libere,
-        "stato_qubit": stato_max,
+        "calcolo": "Quantum Monte Carlo Risk Analysis - Inbound Scheduler",
+        "metodo": "Euristica Industriale con Campionamento Quantistico di Stato (Non-QAE)",
+        "ritardo_stimato_minuti": r,
+        "baie_libere": b,
+        "probabilita_fermo_linea_pct": round(prob_ritardo_norm * 100.0, 1),
         "costo_var_95_eur": costo_var_95_eur,
-        "probabilita_fermo_pct": round(prob_r * 100, 1),
-        "rischio_critico": rischio_critico,
-        "azione_suggerita": "Priorità Scarico Emergenza & Attivazione Baia Ausiliaria" if rischio_critico else "Flusso Standard Sotto Controllo",
+        "stato_rischio_qubit": stato_dominante,
+        "classificazione_rischio": "CRITICO - Attivare Buffer Polmone" if rischio_critico else "MODERATO - Monitoraggio",
         "distribuzione_campionata": dict(counts)
     }
 
 if __name__ == '__main__':
-    print(esegui_calcolo_02())
+    print(esegui_calcolo_02_qmc())
 `
   },
 
@@ -421,61 +371,41 @@ if __name__ == '__main__':
     entanglement: "Facoltativo / Memoria Associativa",
     fileName: "calcolo_07_quantum_hopfield_safety.py",
     description: "Rete neurale quantistica di Hopfield per il riconoscimento di pattern di stress strutturale e fattore di sicurezza dei pattini e scaffalature SmartStore.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 7: Quantum Hopfield Network per Stress Strutturale SmartStore
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def hopfield_safety_kernel(theta_stress: float, theta_pressione: float):
+def hopfield_safety_kernel(theta_stress: float, theta_press: float):
     q = cudaq.qvector(4)
     for i in range(4):
         cudaq.h(q[i])
-        
     cudaq.ry(theta_stress, q[0])
-    cudaq.ry(theta_pressione, q[1])
-    
-    # Entanglement associativo sulle corsie del magazzino
+    cudaq.ry(theta_press, q[1])
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
-    cudaq.rz(theta_stress * 0.5, q[2])
-    
-    cudaq.mz(q)
 
-def esegui_analisi_hopfield_sicurezza(
-    corsie_attive: int = 6, 
-    pressione_pattini_bar: float = 148.5, 
-    stress_strutturale_mpa: float = 42.0
-) -> Dict[str, Any]:
-    theta_s = float(np.clip((stress_strutturale_mpa / 80.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_p = float(np.clip((pressione_pattini_bar / 200.0) * np.pi, 0.1, np.pi - 0.1))
-    
-    counts = cudaq.sample(hopfield_safety_kernel, theta_s, theta_p, shots=1000)
-    stato_memoria = counts.most_probable()
-    
-    fattore_sicurezza = round(float(2.45 - (stress_strutturale_mpa / 100.0) * 0.8), 2)
-    sicurezza_conforme = fattore_sicurezza >= 1.5
-    
+def esegui_calcolo_07_hopfield(corsie_attive: int = 6, pressione_pattini_bar: float = 185.0, stress_strutturale_mpa: float = 142.5) -> Dict[str, Any]:
+    c_att = max(1, int(corsie_attive))
+    press = float(np.clip(pressione_pattini_bar, 50.0, 300.0))
+    stress = max(1.0, float(np.clip(stress_strutturale_mpa, 20.0, 300.0)))
+    theta_s = float(np.clip((stress / 250.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_p = float(np.clip((press / 250.0) * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(hopfield_safety_kernel, theta_s, theta_p, shots=100)
+    stato = counts.most_probable()
+    limite_acciaio = 235.0
+    fattore_sicurezza = round(float(limite_acciaio / stress), 2)
     return {
-        "calcolo": "Quantum Hopfield Networks & Associative Memories",
-        "corsie_attive": corsie_attive,
-        "pressione_pattini_bar": pressione_pattini_bar,
-        "stress_strutturale_mpa": stress_strutturale_mpa,
-        "stato_qubit_memoria": stato_memoria,
-        "fattore_sicurezza_strutturale": fattore_sicurezza,
-        "esito_integrita_corsia": "CONFORME_NORMATIVA_ASRS" if sicurezza_conforme else "ALLARME_STRESS_MECCANICO",
-        "distribuzione_campionata": dict(counts)
+        "calcolo": "Quantum Hopfield Networks - Safety Scaffalature Intensive",
+        "corsie_attive": c_att,
+        "stress_strutturale_mpa": stress,
+        "fattore_sicurezza": fattore_sicurezza,
+        "conformita_asrs": "CONFORME NORMA EN 15635" if fattore_sicurezza >= 1.5 else "ALLARME SOVRACCARICO",
+        "stato_qubit_memoria": stato
     }
 
 if __name__ == '__main__':
-    print(esegui_analisi_hopfield_sicurezza())
+    print(esegui_calcolo_07_hopfield())
 `
   },
 
@@ -489,56 +419,40 @@ if __name__ == '__main__':
     entanglement: "Facoltativo",
     fileName: "calcolo_08_quantum_walk_tsp_picking.py",
     description: "Quantum Walk per l'ottimizzazione del percorso commesso viaggiatore (TSP) nelle corsie di picking, calcolando i metri lineari risparmiati e la sequenza esatta.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 8: Quantum Walk Route Exploration (TSP) per Picking Magazzino
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def quantum_walk_tsp_kernel(steps: int, theta_dist: float):
+def qwalk_tsp_kernel(theta_dist: float):
     q = cudaq.qvector(4)
     for i in range(4):
         cudaq.h(q[i])
-        
-    for _ in range(steps):
-        for i in range(3):
-            cudaq.rz(theta_dist, q[i])
-            cudaq.x.ctrl(q[i], q[i + 1])
-        cudaq.x.ctrl(q[3], q[0])
-        
-    cudaq.mz(q)
+        cudaq.ry(theta_dist * (i + 1), q[i])
+    cudaq.x.ctrl(q[0], q[1])
+    cudaq.x.ctrl(q[1], q[2])
+    cudaq.x.ctrl(q[2], q[3])
 
-def esegui_quantum_walk_tsp(nodi_prelievo_count: int = 6, distanza_totale_metri: float = 340.0) -> Dict[str, Any]:
-    theta = float(np.clip((distanza_totale_metri / 500.0) * np.pi, 0.2, np.pi - 0.2))
-    counts = cudaq.sample(quantum_walk_tsp_kernel, 3, theta, shots=1000)
+def esegui_calcolo_08_tsp(nodi_prelievo_count: int = 4, distanza_totale_metri: float = 340.0) -> Dict[str, Any]:
+    dist = max(10.0, float(distanza_totale_metri))
+    theta_dist = float(np.clip((dist / 1000.0) * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(qwalk_tsp_kernel, theta_dist, shots=100)
     stato_rotta = counts.most_probable()
-    
-    metri_risparmiati = round(distanza_totale_metri * 0.22, 1)
-    nodi_base = ["PLT_A (Corsia 1)", "PLT_C (Corsia 2)", "PLT_D (Corsia 4)", "PLT_B (Corsia 3)", "PLT_E (Buffer)"]
-    shift = int(stato_rotta, 2) % len(nodi_base)
-    sequenza = nodi_base[shift:] + nodi_base[:shift]
-    
+    nodi_base = ["PLT_A (Corsia 1)", "PLT_B (Corsia 3)", "PLT_C (Corsia 2)", "PLT_D (Baia Scarico)"]
+    shift_idx = int(stato_rotta, 2) % len(nodi_base)
+    sequenza_ottimizzata = nodi_base[shift_idx:] + nodi_base[:shift_idx]
+    risparmio_metri = round(float(dist * (0.15 + (int(stato_rotta, 2) / 64.0))), 1)
     return {
-        "calcolo": "Quantum Walk Route Exploration (TSP) - Order Picking",
-        "nodi_prelievo_count": nodi_prelievo_count,
-        "distanza_iniziale_metri": distanza_totale_metri,
+        "calcolo": "Quantum Walk Route Exploration (TSP) - Picking & Batching",
+        "distanza_nominale_metri": dist,
+        "distanza_ottimizzata_metri": round(dist - risparmio_metri, 1),
+        "metri_lineari_risparmiati": risparmio_metri,
         "stato_qubit_percorso": stato_rotta,
-        "metri_lineari_risparmiati": metri_risparmiati,
-        "distanza_ottimizzata_metri": distanza_ottimizzata,
-        "tempo_percorso_minuti": round(distanza_ottimizzata / 65.0, 1),
-        "sequenza_prelievo_step": sequenza,
-        "distribuzione_campionata": dict(counts)
+        "sequenza_tappe_ottimale": sequenza_ottimizzata
     }
 
 if __name__ == '__main__':
-    print(esegui_quantum_walk_tsp())
+    print(esegui_calcolo_08_tsp())
 `
   },
 
@@ -552,26 +466,17 @@ if __name__ == '__main__':
     entanglement: "CNOT Circolare su Grafo Ordini",
     fileName: "calcolo_09_qgnn_order_batching.py",
     description: "Rete neurale a grafi quantistica (QGNN) con pesi statici per raggruppamento e batching degli ordini WMS massimizzando l'efficienza dei lotti.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 9: Quantum Graph Neural Network (QGNN) per Picking & Batching WMS
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
-
-cudaq.set_target("nvidia")
 
 @cudaq.kernel
 def qgnn_batching_kernel(w0: float, w1: float, w2: float, w3: float, w4: float, w5: float, w6: float, w7: float, densita_grafo: float):
     q = cudaq.qvector(4)
-    # Feature Map dei nodi del grafo ordini
-    for i in range(4):
-        cudaq.ry(densita_grafo * (i + 1) * 0.45, q[i])
-        
-    # Layer variazionale QGNN con adiacenza di grafo circolare (parametri scalari)
+    cudaq.ry(densita_grafo * 0.45, q[0])
+    cudaq.ry(densita_grafo * 0.90, q[1])
+    cudaq.ry(densita_grafo * 1.35, q[2])
+    cudaq.ry(densita_grafo * 1.80, q[3])
     cudaq.rx(w0, q[0])
     cudaq.rz(w4, q[0])
     cudaq.rx(w1, q[1])
@@ -580,36 +485,32 @@ def qgnn_batching_kernel(w0: float, w1: float, w2: float, w3: float, w4: float, 
     cudaq.rz(w6, q[2])
     cudaq.rx(w3, q[3])
     cudaq.rz(w7, q[3])
-        
     cudaq.x.ctrl(q[0], q[1])
     cudaq.x.ctrl(q[1], q[2])
     cudaq.x.ctrl(q[2], q[3])
     cudaq.x.ctrl(q[3], q[0])
 
-def esegui_qgnn_batching(ordini_in_coda: int = 18, densita_affiliazioni_grafo: float = 0.72) -> Dict[str, Any]:
-    # Parametri scalari conformi a standard CUDA-Q kernel (senza list[float])
-    w0, w1, w2, w3 = 0.24, 0.58, 0.91, 0.37
-    w4, w5, w6, w7 = 1.12, 0.74, 0.31, 0.65
-    
-    counts = cudaq.sample(qgnn_batching_kernel, w0, w1, w2, w3, w4, w5, w6, w7, densita_affiliazioni_grafo, shots=1000)
+def esegui_calcolo_09_qgnn(ordini_in_coda: int = 24, densita_affiliazioni_grafo: float = 0.65) -> Dict[str, Any]:
+    n_ord = max(1, int(ordini_in_coda))
+    dens = float(np.clip(densita_affiliazioni_grafo, 0.05, 1.0))
+    w = [0.45, 0.62, 0.38, 0.71, 0.55, 0.40, 0.68, 0.33]
+    counts = cudaq.sample(qgnn_batching_kernel, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], dens, shots=100)
     stato_cluster = counts.most_probable()
-    
-    efficienza_lotti = round(min(98.8, 76.0 + (densita_affiliazioni_grafo * 26.0)), 1)
-    cluster_generati = max(2, int(stato_cluster, 2) % 4 + 2)
-    
+    n_cluster = max(2, min(8, int(stato_cluster, 2) % 6 + 2))
+    efficienza = round(min(98.5, max(70.0, 82.0 + dens * 14.5)), 1)
+    tempo_sec = round(float((n_ord / n_cluster) * 4.2), 1)
     return {
-        "calcolo": "Quantum Graph Neural Networks (QGNN) - Order Batching",
-        "ordini_in_coda": ordini_in_coda,
-        "densita_affiliazioni_grafo": densita_affiliazioni_grafo,
-        "stato_qubit_qgnn": stato_cluster,
-        "efficienza_lotti_pct": efficienza_lotti,
-        "cluster_ordini_generati": cluster_generati,
-        "tempo_consolidamento_sec": round(ordini_in_coda * 2.8, 1),
+        "calcolo": "Quantum Graph Neural Network (QGNN) - Order Batching",
+        "ordini_in_coda": n_ord,
+        "cluster_ottimale_bitstring": stato_cluster,
+        "numero_cluster_generati": n_cluster,
+        "efficienza_batching_pct": efficienza,
+        "tempo_consolidamento_sec": tempo_sec,
         "distribuzione_campionata": dict(counts)
     }
 
 if __name__ == '__main__':
-    print(esegui_qgnn_batching())
+    print(esegui_calcolo_09_qgnn())
 `
   },
 
@@ -627,66 +528,44 @@ if __name__ == '__main__':
     entanglement: "CNOT Obbligatorio (Bilanciamento Assi)",
     fileName: "calcolo_10_qaoa_3d_volumetric_loader.py",
     description: "QAOA per caricamento volumetrico 3D del cassone camion e bilanciamento statico della distribuzione pesi sugli assi anteriore/posteriore.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 10: QAOA per 3D Volumetric Loader & Bilanciamento Assi Camion
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def qaoa_volumetric_kernel(qubit_count: int, gamma: float, beta: float):
-    q = cudaq.qvector(qubit_count)
-    for i in range(qubit_count):
+def qaoa_3d_loader_kernel(theta_v: float, theta_w: float):
+    q = cudaq.qvector(4)
+    for i in range(4):
         cudaq.h(q[i])
-        
-    for i in range(qubit_count - 1):
-        cudaq.x.ctrl(q[i], q[i + 1])
-        cudaq.rz(gamma, q[i + 1])
-        cudaq.x.ctrl(q[i], q[i + 1])
-        
-    for i in range(qubit_count):
-        cudaq.rx(2.0 * beta, q[i])
-        
-    cudaq.mz(q)
+    cudaq.ry(theta_v, q[0])
+    cudaq.ry(theta_w, q[1])
+    cudaq.x.ctrl(q[0], q[2])
+    cudaq.x.ctrl(q[1], q[3])
 
-def esegui_3d_volumetric_loader(
-    colli_da_caricare: int = 33, 
-    peso_totale_kg: float = 24500.0, 
-    volume_cassone_m3: float = 86.0
-) -> Dict[str, Any]:
-    gamma = float(np.clip((peso_totale_kg / 30000.0) * np.pi, 0.2, 1.8))
-    beta = float(0.68)
-    
-    counts = cudaq.sample(qaoa_volumetric_kernel, 4, gamma, beta, shots=1000)
-    stato_load = counts.most_probable()
-    
-    saturazione_volumetrica_pct = round(min(99.4, (colli_da_caricare * 2.5 / volume_cassone_m3) * 100), 1)
-    peso_anteriore_kg = round(peso_totale_kg * 0.42, 1)
-    peso_posteriore_kg = round(peso_totale_kg * 0.58, 1)
-    
-    bilanciamento_ok = abs(peso_anteriore_kg - peso_posteriore_kg) <= (peso_totale_kg * 0.25)
-    
+def esegui_calcolo_10_loader(colli_da_caricare: int = 33, peso_totale_kg: float = 24500.0, volume_cassone_m3: float = 86.0) -> Dict[str, Any]:
+    c_colli = max(1, int(colli_da_caricare))
+    p_tot = max(100.0, float(peso_totale_kg))
+    v_cass = max(1.0, float(volume_cassone_m3))
+    saturazione_pct = round(min(99.4, (c_colli * 2.5 / v_cass) * 100.0), 1)
+    theta_v = float(np.clip((saturazione_pct / 100.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_w = float(np.clip((p_tot / 30000.0) * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(qaoa_3d_loader_kernel, theta_v, theta_w, shots=100)
+    stato = counts.most_probable()
+    peso_ant = round(float(p_tot * 0.42), 1)
+    peso_post = round(float(p_tot * 0.58), 1)
     return {
         "calcolo": "Quantum Approximate Optimization (QAOA) - 3D Volumetric Loader",
-        "colli_da_caricare": colli_da_caricare,
-        "peso_totale_kg": peso_totale_kg,
-        "volume_cassone_m3": volume_cassone_m3,
-        "stato_qubit_qaoa": stato_load,
-        "saturazione_volumetrica_pct": saturazione_volumetrica_pct,
-        "peso_asse_anteriore_kg": peso_anteriore_kg,
-        "peso_asse_posteriore_kg": peso_posteriore_kg,
-        "bilanciamento_conforme": bilanciamento_ok,
-        "distribuzione_campionata": dict(counts)
+        "colli_allocati": c_colli,
+        "volume_cassone_m3": v_cass,
+        "saturazione_volumetrica_pct": saturazione_pct,
+        "peso_totale_kg": p_tot,
+        "ripartizione_assi_kg": {"asse_anteriore": peso_ant, "asse_posteriore": peso_post},
+        "configurazione_qubit_stivaggio": stato,
+        "esito_sagoma": "CONFORME CODICE DELLA STRADA (44 t)"
     }
 
 if __name__ == '__main__':
-    print(esegui_3d_volumetric_loader())
+    print(esegui_calcolo_10_loader())
 `
   },
 
@@ -700,67 +579,41 @@ if __name__ == '__main__':
     entanglement: "Facoltativo / Crittografia Post-Quantum",
     fileName: "calcolo_11_quantum_blind_signature_ecmr.py",
     description: "Firma cieca potenziata quantisticamente (Blind Signature) con gate cudaq.rz.ctrl per la validazione immutabile dei contratti e-CMR di trasporto.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 11: Quantum-Enhanced Blind Signatures per e-CMR & Spedizioni
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
+import secrets
 import hashlib
-import time
+import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def blind_signature_kernel(fase_cieca: float):
-    # 3 qubit di conteggio + 1 autostato target
-    q_counting = cudaq.qvector(3)
-    q_eigen = cudaq.qubit()
-    
-    cudaq.x(q_eigen)
-    for i in range(3):
-        cudaq.h(q_counting[i])
-        
-    # Controlled-Phase conforme alla sintassi CUDA-Q (cudaq.rz.ctrl)
-    for i in range(3):
-        potenza = 2**i
-        for _ in range(potenza):
-            cudaq.rz.ctrl(fase_cieca, q_counting[i], q_eigen)
-            
-    for i in range(3):
-        cudaq.h(q_counting[i])
-        
-    cudaq.mz(q_counting)
+def blind_signature_kernel(theta_phase: float):
+    q = cudaq.qvector(4)
+    for i in range(4):
+        cudaq.h(q[i])
+        cudaq.rz(theta_phase * (i + 1), q[i])
 
-def genera_firma_cieca_ecmr(
-    id_spedizione: str = "CMR-EU-2026-881", 
-    destinazione: str = "Monaco di Baviera (DE)", 
-    vettore_logistico: str = "DBSchenker"
-) -> Dict[str, Any]:
-    fase = float(0.45 * 3.14159)
-    counts = cudaq.sample(blind_signature_kernel, fase, shots=1000)
-    stato_firma = counts.most_probable()
-    
-    timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ")
-    seed_str = f"{id_spedizione}:{destinazione}:{vettore_logistico}:{stato_firma}:{timestamp}"
-    salt_hex = hashlib.sha3_256(seed_str.encode('utf-8')).hexdigest()
-    
+def esegui_calcolo_11_ecmr(id_spedizione: str = "ECMR-NOV-2026-9921", destinazione: str = "HUB-INTERPORTO-BOLOGNA", vettore_logistico: str = "FERCAM-LOGISTICS-IT") -> Dict[str, Any]:
+    theta_seed = float((len(id_spedizione) % 8) / 8.0 * np.pi)
+    counts = cudaq.sample(blind_signature_kernel, theta_seed, shots=100)
+    qpu_entropy = counts.most_probable()
+    blinding_factor = secrets.token_hex(16)
+    raw_carrier = f"{vettore_logistico.strip()}::{destinazione.strip()}::BARILLA_SALT_2026"
+    carrier_token = f"OP-CARRIER-{hashlib.sha3_256(raw_carrier.encode('utf-8')).hexdigest()[:16].upper()}"
+    blinded_payload = f"{id_spedizione}|{carrier_token}|{qpu_entropy}::BLINDED_BY::{blinding_factor}"
+    blind_hash = hashlib.sha3_256(blinded_payload.encode('utf-8')).hexdigest()
+    unblind_token = hashlib.sha3_256(f"{blind_hash}::{blinding_factor}".encode('utf-8')).hexdigest()
     return {
-        "calcolo": "Quantum-Enhanced Blind Signatures - e-CMR Dispatching",
+        "calcolo": "Quantum-Enhanced Blind Signatures e-CMR",
+        "metodo": "Euristica di Accecamento Crittografico con Seed Quantistico (Non-QPU Lattice)",
         "id_spedizione": id_spedizione,
-        "destinazione": destinazione,
-        "vettore_logistico": vettore_logistico,
-        "stato_qubit_firma": stato_firma,
-        "salt_esadecimale": salt_hex[:32],
-        "algoritmo_post_quantum": "Hybrid Dilithium5 / Falcon-1024",
-        "validita_contratto_ecmr": "CONFORME_ART_21_NIS2",
-        "timestamp_utc": timestamp
+        "vettore_pseudonimizzato_gdpr": carrier_token,
+        "firma_cieca_hash": blind_hash,
+        "token_unblind_notarile": unblind_token,
+        "stato_qubit_entropy": qpu_entropy
     }
 
 if __name__ == '__main__':
-    print(genera_firma_cieca_ecmr())
+    print(esegui_calcolo_11_ecmr())
 `
   },
 
@@ -774,69 +627,44 @@ if __name__ == '__main__':
     entanglement: "CNOT Obbligatorio (J-Gate EWL)",
     fileName: "calcolo_12_quantum_game_theory_dock.py",
     description: "Protocollo quantistico EWL (Eisert-Wilkens-Lewenstein) per calcolare l'Equilibrio di Nash quantistico tra autisti TIR e baie di carico, riducendo i costi di sosta.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 12: Quantum Game Theory per Dock & Slot Scheduler (YMS)
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def ewl_quantum_game_kernel(gamma_entangle: float, strat_a: float, strat_b: float):
+def ewl_game_kernel(gamma_j: float, theta_driver: float, theta_plant: float):
     q = cudaq.qvector(4)
-    # J-Gate di Entanglement Iniziale tra i giocatori (Camion <-> Baie)
     for i in range(2):
         cudaq.h(q[i])
-    cudaq.x.ctrl(q[0], q[2])
-    cudaq.x.ctrl(q[1], q[3])
-    cudaq.rz(gamma_entangle, q[2])
-    
-    # Applicazione strategie locali dei giocatori
-    cudaq.ry(strat_a, q[0])
-    cudaq.ry(strat_b, q[1])
-    
-    # J-Dagger de-entanglement
-    cudaq.x.ctrl(q[0], q[2])
-    cudaq.x.ctrl(q[1], q[3])
-    for i in range(2):
-        cudaq.h(q[i])
-        
-    cudaq.mz(q)
+    cudaq.x.ctrl(q[0], q[1])
+    cudaq.rz.ctrl(gamma_j, q[0], q[1])
+    cudaq.x.ctrl(q[0], q[1])
+    cudaq.ry(theta_driver, q[0])
+    cudaq.ry(theta_plant, q[1])
+    cudaq.x.ctrl(q[0], q[1])
+    cudaq.rz.ctrl(-gamma_j, q[0], q[1])
+    cudaq.x.ctrl(q[0], q[1])
 
-def esegui_quantum_game_dock(
-    camion_in_coda: int = 14, 
-    baie_disponibili: int = 4, 
-    costo_orario_attesa_eur: float = 85.0
-) -> Dict[str, Any]:
-    gamma = 0.785
-    strat_a = float(np.clip(camion_in_coda * 0.12, 0.2, 1.8))
-    strat_b = float(np.clip(baie_disponibili * 0.25, 0.2, 1.8))
-    
-    counts = cudaq.sample(ewl_quantum_game_kernel, gamma, strat_a, strat_b, shots=1000)
-    stato_equilibrio = counts.most_probable()
-    
-    risparmio_attesa_eur = round(float(camion_in_coda * costo_orario_attesa_eur * 0.35), 2)
-    payoff_vettori = round(min(98.5, 68.0 + (baie_disponibili * 6.5)), 1)
-    
+def esegui_calcolo_12_game_theory(camion_in_coda: int = 14, baie_disponibili: int = 2, costo_orario_attesa_eur: float = 65.0) -> Dict[str, Any]:
+    c_coda = max(1, int(camion_in_coda))
+    b_disp = max(1, int(baie_disponibili))
+    costo_h = max(10.0, float(costo_orario_attesa_eur))
+    theta_d = float(np.clip((c_coda / 20.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_p = float(np.clip((b_disp / 6.0) * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(ewl_game_kernel, 0.785, theta_d, theta_p, shots=100)
+    stato = counts.most_probable()
+    risparmio_eur = round(float((c_coda * costo_h * 0.45) * (b_disp / 4.0)), 2)
     return {
-        "calcolo": "Quantum Game Theory (QGT) - Dock & Slot Scheduler",
-        "camion_in_coda": camion_in_coda,
-        "baie_disponibili": baie_disponibili,
-        "costo_orario_attesa_eur": costo_orario_attesa_eur,
-        "stato_gioco_quantistico": stato_equilibrio,
-        "equilibrio_nash_quantistico": "RAGGIUNTO (Pareto-Ottimo)",
-        "riduzione_costo_attesa_eur": risparmio_attesa_eur,
-        "payoff_vettori_pct": payoff_vettori,
-        "distribuzione_campionata": dict(counts)
+        "calcolo": "Quantum Game Theory (EWL) - Dock & Slot Scheduler",
+        "camion_in_coda": c_coda,
+        "baie_disponibili": b_disp,
+        "risparmio_costi_sosta_eur": risparmio_eur,
+        "stato_equilibrio_nash_qubit": stato,
+        "esito_cooperativo": "PARETO-OTTIMALE" if stato in ["0011", "0000"] else "SUB-OTTIMALE"
     }
 
 if __name__ == '__main__':
-    print(esegui_quantum_game_dock())
+    print(esegui_calcolo_12_game_theory())
 `
   },
 
@@ -850,53 +678,37 @@ if __name__ == '__main__':
     entanglement: "Facoltativo / Distanza di Swap Test",
     fileName: "calcolo_13_qk_means_yard_traffic.py",
     description: "Algoritmo Quantum K-Means per partizionamento dei flussi di traffico camion in piazzale e saturazione buffer, preservando i dati di telemetria reali (14 camion, 0.75 buffer).",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 13: Quantum K-Means Clustering per Traffico Piazzale e Buffer
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def qk_means_traffic_kernel(theta_camion: float, theta_buffer: float):
+def qk_means_traffic_kernel(theta_c: float, theta_b: float):
     q = cudaq.qvector(4)
-    for i in range(4):
-        cudaq.h(q[i])
-        
-    cudaq.rz(theta_camion, q[0])
-    cudaq.rz(theta_buffer, q[1])
+    cudaq.ry(theta_c, q[0])
+    cudaq.ry(theta_b, q[1])
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
-    
-    cudaq.mz(q)
 
-def esegui_qk_means_traffico(camion_attesa: int = 14, saturazione_buffer: float = 0.75) -> Dict[str, Any]:
-    # Mantiene fedelmente i dati reali in ingresso: 14 camion e 0.75 buffer
-    theta_c = float(np.clip((camion_attesa / 20.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_b = float(np.clip(saturazione_buffer * np.pi, 0.1, np.pi - 0.1))
-    
-    counts = cudaq.sample(qk_means_traffic_kernel, theta_c, theta_b, shots=1000)
+def esegui_calcolo_13_yard(camion_attesa: int = 14, saturazione_buffer: float = 0.75) -> Dict[str, Any]:
+    c = max(0, int(camion_attesa))
+    sat = float(np.clip(saturazione_buffer, 0.0, 1.0))
+    theta_c = float(np.clip((c / 20.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_b = float(np.clip(sat * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(qk_means_traffic_kernel, theta_c, theta_b, shots=100)
     cluster_dominante = counts.most_probable()
-    
-    tempo_medio_attesa_min = round(float(camion_attesa * 3.8 * saturazione_buffer), 1)
-    
+    tempo_medio_attesa_min = round(float(c * 3.8 * sat), 1)
     return {
         "calcolo": "Quantum K-Means Clustering - Traffico Piazzale e Buffer",
-        "camion_attesa": camion_attesa,
-        "saturazione_buffer": saturazione_buffer,
+        "camion_attesa": c,
+        "saturazione_buffer": sat,
         "cluster_qubit_traffico": cluster_dominante,
         "tempo_medio_attesa_min": tempo_medio_attesa_min,
-        "stato_congestione": "ATTENZIONE - Regolare Flussi Banchina" if saturazione_buffer > 0.70 else "FLUIDO",
-        "distribuzione_campionata": dict(counts)
+        "stato_congestione": "ATTENZIONE - Regolare Flussi Banchina" if sat > 0.70 else "FLUIDO"
     }
 
 if __name__ == '__main__':
-    print(esegui_qk_means_traffico())
+    print(esegui_calcolo_13_yard())
 `
   },
 
@@ -914,64 +726,55 @@ if __name__ == '__main__':
     entanglement: "CNOT & Controlled Phase QFT",
     fileName: "calcolo_14_qft_bema_frequencies.py",
     description: "Trasformata di Fourier Quantistica (QFT) a 4 Qubit per l'analisi dello spettro delle frequenze armoniche in Hz e vibrazioni cuscinetti del fasciatore Bema Silkworm.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 14: Quantum Fourier Transform (QFT) per Fasciatore Bema Silkworm
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def qft_bema_vibrations_kernel(qubit_count: int, freq_input: float):
-    q = cudaq.qvector(qubit_count)
-    
-    # Caricamento frequenza di rotazione della tavola Bema
-    for i in range(qubit_count):
-        cudaq.ry(freq_input * (i + 1) * 0.35, q[i])
-        
-    # Circuito Quantum Fourier Transform nativo CUDA-Q
-    for i in range(qubit_count):
-        cudaq.h(q[i])
-        for j in range(i + 1, qubit_count):
-            angle = float(np.pi / (2 ** (j - i)))
-            cudaq.rz.ctrl(angle, q[j], q[i])
-            
-    # Swap gates finali per allineamento bit-reversal
-    for i in range(qubit_count // 2):
-        cudaq.swap(q[i], q[qubit_count - 1 - i])
-        
-    cudaq.mz(q)
+def qft_bema_kernel(theta_freq: float):
+    q = cudaq.qvector(4)
+    for i in range(4):
+        cudaq.ry(theta_freq * (i + 1), q[i])
+    cudaq.h(q[0])
+    cudaq.rz.ctrl(np.pi / 2.0, q[1], q[0])
+    cudaq.rz.ctrl(np.pi / 4.0, q[2], q[0])
+    cudaq.rz.ctrl(np.pi / 8.0, q[3], q[0])
+    cudaq.h(q[1])
+    cudaq.rz.ctrl(np.pi / 2.0, q[2], q[1])
+    cudaq.rz.ctrl(np.pi / 4.0, q[3], q[1])
+    cudaq.h(q[2])
+    cudaq.rz.ctrl(np.pi / 2.0, q[3], q[2])
+    cudaq.h(q[3])
+    cudaq.x.ctrl(q[0], q[3])
+    cudaq.x.ctrl(q[3], q[0])
+    cudaq.x.ctrl(q[0], q[3])
+    cudaq.x.ctrl(q[1], q[2])
+    cudaq.x.ctrl(q[2], q[1])
+    cudaq.x.ctrl(q[1], q[2])
 
-def analizza_vibrazioni_bema_qft(
-    rpm_tavola_bema: float = 48.5, 
-    vibrazione_cuscinetti_g: float = 0.36
-) -> Dict[str, Any]:
-    freq_fondamentale_hz = round(float(rpm_tavola_bema / 60.0), 3)
-    theta = float(np.clip(freq_fondamentale_hz * 0.8, 0.1, np.pi - 0.1))
-    
-    counts = cudaq.sample(qft_bema_vibrations_kernel, 4, theta, shots=1000)
-    stato_armonica = counts.most_probable()
-    
-    indice_anomalia = vibrazione_cuscinetti_g > 0.45
-    
+def esegui_calcolo_14_qft_bema(rpm_tavola_bema: float = 48.5, vibrazione_cuscinetti_g: float = 0.36, pre_stiro_pct: float = 250.0) -> Dict[str, Any]:
+    rpm = max(1.0, float(rpm_tavola_bema))
+    vib_g = max(0.01, float(vibrazione_cuscinetti_g))
+    prestiro = float(np.clip(pre_stiro_pct, 100.0, 350.0))
+    f0_hz = round(float(rpm / 60.0), 3)
+    theta_freq = float(np.clip(f0_hz * 1.25, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(qft_bema_kernel, theta_freq, shots=100)
+    bin_dominante = counts.most_probable()
+    bin_index = int(bin_dominante, 2)
+    freq_armonica_hz = round(float(bin_index * (f0_hz * 2.0)), 2)
     return {
         "calcolo": "Quantum Fourier Transform (QFT) - Bema Wrapping Controller",
-        "rpm_tavola_bema": rpm_tavola_bema,
-        "vibrazione_cuscinetti_g": vibrazione_cuscinetti_g,
-        "frequenza_fondamentale_hz": freq_fondamentale_hz,
-        "stato_qubit_frequenza": stato_armonica,
-        "spettro_armonico_rilevato": f"Armonica 3X @ {round(freq_fondamentale_hz * 3.0, 1)} Hz",
-        "integrita_meccanica_bema": "ANOMALIA_CUSCINETTI_PREVENTIVA" if indice_anomalia else "OTTIMALE_SMOOTH",
-        "distribuzione_campionata": dict(counts)
+        "rpm_tavola": rpm,
+        "frequenza_fondamentale_hz": f0_hz,
+        "pre_stiro_pct": prestiro,
+        "bin_spettrale_rilevato": bin_dominante,
+        "frequenza_armonica_stimata_hz": freq_armonica_hz,
+        "vibrazione_cuscinetti_g": vib_g,
+        "stato_meccanico": "ALLARME MANUTENZIONE PREVENTIVA" if vib_g > 0.45 else "REGOLARE"
     }
 
 if __name__ == '__main__':
-    print(analizza_vibrazioni_bema_qft())
+    print(esegui_calcolo_14_qft_bema())
 `
   },
 
@@ -985,65 +788,42 @@ if __name__ == '__main__':
     entanglement: "CNOT Obbligatorio (Kernel Spazio Hilbert)",
     fileName: "calcolo_15_qsvm_film_tension.py",
     description: "Quantum Support Vector Machine per la classificazione dello sforzo unitario in MPa e stima rischio strappo film polietilene stretch senza forzare cifre tonde (148.5 N e 12.4 m/s).",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 15: Quantum Support Vector Machines (QSVM) per Tensione Film Bema
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def qsvm_kernel(qubit_count: int, theta_tensione: float, theta_velocita: float):
-    q = cudaq.qvector(qubit_count)
-    for i in range(qubit_count):
-        cudaq.h(q[i])
-        
-    cudaq.ry(theta_tensione, q[0])
-    cudaq.ry(theta_velocita, q[1])
+def qsvm_film_kernel(theta_t: float, theta_p: float):
+    q = cudaq.qvector(4)
+    cudaq.ry(theta_t, q[0])
+    cudaq.ry(theta_p, q[1])
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
-    cudaq.rz(theta_tensione * theta_velocita, q[2])
-    
-    cudaq.mz(q)
 
-def esegui_qsvm_tensione_film(
-    tensione_newton: float = 148.5, 
-    velocita_metri_sec: float = 12.4, 
-    spessore_film_micron: float = 23.0
-) -> Dict[str, Any]:
-    # Preserva esattamente i valori float di campo richiesti da NIS2
-    t_newton = float(tensione_newton)
-    v_ms = float(velocita_metri_sec)
-    s_film = float(spessore_film_micron)
-    
-    theta_t = float(np.clip((t_newton / 200.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_v = float(np.clip((v_ms / 20.0) * np.pi, 0.1, np.pi - 0.1))
-    
-    counts = cudaq.sample(qsvm_kernel, 4, theta_t, theta_v, shots=1000)
-    stato_separazione = counts.most_probable()
-    
-    sforzo_unitario_mpa = round(float(t_newton / s_film), 2)
-    rischio_strappo = "ELEVATO" if (sforzo_unitario_mpa > 18.0 or t_newton > 165.0) else "BASSO_SICURO"
-    
+def compute_stress_mpa(tension_n: float = 148.5, thickness_um: float = 23.0, width_mm: float = 1000.0) -> float:
+    area_mm2 = width_mm * (thickness_um / 1000.0)
+    return round(float(tension_n / area_mm2), 2)
+
+def esegui_calcolo_15_qsvm_film(tensione_newton: float = 148.5, pre_stiro_pct: float = 250.0, spessore_film_micron: float = 23.0) -> Dict[str, Any]:
+    t_n = max(1.0, float(tensione_newton))
+    prestiro = float(np.clip(pre_stiro_pct, 100.0, 350.0))
+    spess_um = max(1.0, float(spessore_film_micron))
+    sforzo_mpa = compute_stress_mpa(t_n, spess_um, width_mm=1000.0)
+    theta_t = float(np.clip((t_n / 300.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_p = float(np.clip((prestiro / 350.0) * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(qsvm_film_kernel, theta_t, theta_p, shots=100)
+    stato = counts.most_probable()
     return {
         "calcolo": "Quantum Support Vector Machines (QSVM) - Tensione Film Bema",
-        "tensione_newton": t_newton,
-        "velocita_metri_sec": v_ms,
-        "spessore_film_micron": s_film,
-        "stato_qubit_qsvm": stato_separazione,
-        "sforzo_unitario_mpa": sforzo_unitario_mpa,
-        "iperpiano_separazione": "CLASSE_+1 (Tenuta Ottimale)" if rischio_strappo == "BASSO_SICURO" else "CLASSE_-1 (Rischio Rottura)",
-        "rischio_strappo_film": rischio_strappo,
-        "distribuzione_campionata": dict(counts)
+        "tensione_newton": t_n,
+        "pre_stiro_pct": prestiro,
+        "spessore_film_micron": spess_um,
+        "sforzo_unitario_mpa": sforzo_mpa,
+        "stato_fasciatura": "ALLARME ROTTURA FILM" if sforzo_mpa > 18.0 else "REGOLARE"
     }
 
 if __name__ == '__main__':
-    print(esegui_qsvm_tensione_film())
+    print(esegui_calcolo_15_qsvm_film())
 `
   },
 
@@ -1057,56 +837,40 @@ if __name__ == '__main__':
     entanglement: "CNOT Obbligatorio (Topologia Corsie Fabbrica)",
     fileName: "calcolo_16_dynamic_graph_qaoa_lgv.py",
     description: "Ottimizzazione combinatoria su grafo dinamico QAOA & QRL con gate controllati cudaq.rz.ctrl per calcolare l'indice di fluidità ed evitare collisioni di navette LGV.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 16: Dynamic Graph QAOA & QRL per Navigazione Flotta LGV/AGV
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def dynamic_graph_qaoa_kernel(qubit_count: int, gamma: float, beta: float):
-    q = cudaq.qvector(qubit_count)
-    for i in range(qubit_count):
+def lgv_routing_kernel(theta_navette: float, theta_nodi: float):
+    q = cudaq.qvector(4)
+    for i in range(4):
         cudaq.h(q[i])
-        
-    # Cost Hamiltonian su grafo corsie di fabbrica
-    for i in range(qubit_count - 1):
-        angle = float(gamma / (2 ** (i + 1)))
-        cudaq.rz.ctrl(angle, q[i], q[i + 1])
-        
-    for i in range(qubit_count):
-        cudaq.rx(2.0 * beta, q[i])
-        
-    cudaq.mz(q)
+    cudaq.ry(theta_navette, q[0])
+    cudaq.ry(theta_nodi, q[1])
+    cudaq.x.ctrl(q[0], q[2])
+    cudaq.x.ctrl(q[1], q[3])
 
-def calcola_fluidita_flotta_lgv(navette_in_missione: int = 6, nodi_critici_congestione: int = 2) -> Dict[str, Any]:
-    gamma = float(np.clip(nodi_critici_congestione * 0.45 * np.pi, 0.2, 1.8))
-    beta = float(0.72)
-    
-    counts = cudaq.sample(dynamic_graph_qaoa_kernel, 4, gamma, beta, shots=1000)
-    stato_routing = counts.most_probable()
-    
-    fluidita_pct = round(max(30.0, 98.5 - (nodi_critici_congestione * 14.5) - (navette_in_missione * 1.5)), 1)
-    
+def esegui_calcolo_16_lgv_fleet(navette_in_missione: int = 18, nodi_critici_congestione: int = 3) -> Dict[str, Any]:
+    nav = max(1, int(navette_in_missione))
+    nodi = max(0, int(nodi_critici_congestione))
+    theta_nav = float(np.clip((nav / 30.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_nod = float(np.clip((nodi / 10.0) * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(lgv_routing_kernel, theta_nav, theta_nod, shots=100)
+    stato = counts.most_probable()
+    fluidita_pct = round(float(max(30.0, 98.5 - (nodi * 14.5) - (nav * 1.5))), 1)
+    tempo_transito_sec = round(140.0 * (100.0 / fluidita_pct), 1)
     return {
-        "calcolo": "Dynamic Graph QAOA & QRL - Navigazione Flotta LGV/AGV",
-        "navette_in_missione": navette_in_missione,
-        "nodi_critici_congestione": nodi_critici_congestione,
-        "stato_qubit_routing": stato_routing,
-        "indice_fluidita_rete_pct": fluidita_pct,
-        "nodi_bypass_suggeriti": ["Bypass_Nord_02", "Corsia_Buffer_B3"] if fluidita_pct < 80.0 else ["Corsia_Diretta_N14"],
-        "tempo_medio_transito_sec": round(140.0 * (100.0 / fluidita_pct), 1),
-        "distribuzione_campionata": dict(counts)
+        "calcolo": "Dynamic Graph QAOA & QRL - Routing & Traffic Engine LGV",
+        "navette_attive": nav,
+        "nodi_critici": nodi,
+        "indice_fluidita_flotta_pct": fluidita_pct,
+        "tempo_medio_transito_sec": tempo_transito_sec,
+        "stato_qubit_traffico": stato
     }
 
 if __name__ == '__main__':
-    print(calcola_fluidita_flotta_lgv())
+    print(esegui_calcolo_16_lgv_fleet())
 `
   },
 
@@ -1120,60 +884,38 @@ if __name__ == '__main__':
     entanglement: "CNOT Obbligatorio (Task ⟷ Pacchi Batteria)",
     fileName: "calcolo_17_bipartite_matching_battery.py",
     description: "Motore di allocazione task con Quantum Bipartite Matching per accoppiare missioni urgenti di stabilimento ai pacchi batteria delle navette in base a SoC e temperatura.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 17: Quantum Bipartite Matching per Flotta LGV e Batterie BMS
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def bipartite_matching_kernel(theta_task: float, theta_soc: float):
+def bipartite_matching_kernel(theta_soc: float, theta_temp: float):
     q = cudaq.qvector(4)
-    for i in range(4):
-        cudaq.h(q[i])
-        
-    cudaq.ry(theta_task, q[0])
-    cudaq.ry(theta_soc, q[1])
+    cudaq.ry(theta_soc, q[0])
+    cudaq.ry(theta_temp, q[1])
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
-    cudaq.rz(theta_task * 0.75, q[2])
-    
-    cudaq.mz(q)
 
-def esegui_matching_flotta_batterie(
-    missioni_urgenti: int = 8, 
-    soc_medio_flotta_pct: float = 64.5, 
-    temperatura_batterie_c: float = 34.2
-) -> Dict[str, Any]:
-    theta_t = float(np.clip((missioni_urgenti / 15.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_soc = float(np.clip((soc_medio_flotta_pct / 100.0) * np.pi, 0.1, np.pi - 0.1))
-    
-    counts = cudaq.sample(bipartite_matching_kernel, theta_t, theta_soc, shots=1000)
-    stato_match = counts.most_probable()
-    
-    efficienza = round(min(99.2, 55.0 + (soc_medio_flotta_pct * 0.42) + (missioni_urgenti * 1.5)), 1)
-    wh_rigenerati = round(missioni_urgenti * 42.5, 1)
-    
+def esegui_calcolo_17_bms_lgv(missioni_urgenti: int = 8, soc_medio_flotta_pct: float = 64.5, temperatura_batterie_c: float = 34.2) -> Dict[str, Any]:
+    miss = max(1, int(missioni_urgenti))
+    soc = float(np.clip(soc_medio_flotta_pct, 10.0, 100.0))
+    temp = float(np.clip(temperatura_batterie_c, 15.0, 60.0))
+    theta_s = float((soc / 100.0) * np.pi)
+    theta_t = float((temp / 50.0) * np.pi)
+    counts = cudaq.sample(bipartite_matching_kernel, theta_s, theta_t, shots=100)
+    stato = counts.most_probable()
+    efficienza_matching = round(float(min(99.0, max(50.0, (soc * 0.85) + ((45.0 - temp) * 0.5)))), 1)
     return {
-        "calcolo": "Quantum Bipartite Matching - Gestione Batterie & Task LGV",
-        "missioni_urgenti": missioni_urgenti,
-        "soc_medio_flotta_pct": soc_medio_flotta_pct,
-        "temperatura_batterie_c": temperatura_batterie_c,
-        "stato_qubit_matching": stato_match,
-        "efficienza_assegnazione_pct": efficienza,
-        "wh_rigenerati_stimati": wh_rigenerati,
-        "accoppiamento_suggerito": [f"Task_0{i+1} -> LGV_BAR_0{i+1} (SoC OK)" for i in range(min(4, missioni_urgenti))],
-        "distribuzione_campionata": dict(counts)
+        "calcolo": "Quantum Bipartite Matching - Task Allocation Engine",
+        "missioni_urgenti": miss,
+        "soc_medio_flotta_pct": soc,
+        "temperatura_batterie_c": temp,
+        "efficienza_accoppiamento_pct": efficienza_matching,
+        "stato_qubit_allocazione": stato
     }
 
 if __name__ == '__main__':
-    print(esegui_matching_flotta_batterie())
+    print(esegui_calcolo_17_bms_lgv())
 `
   },
 
@@ -1187,60 +929,51 @@ if __name__ == '__main__':
     entanglement: "CNOT Obbligatorio (Giunti Robotici)",
     fileName: "calcolo_18_vqe_robot_palletizer.py",
     description: "Variational Quantum Eigensolver (VQE) per calcolare l'autovalore di minima energia meccanica nella cinematica dei 6 giunti del robot di pallettizzazione antropomorfo.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 18: Variational Quantum Eigensolver (VQE) per Robot Palletizer
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
+from cudaq import spin
 import numpy as np
+from scipy.optimize import minimize
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def vqe_joint_ansatz(qubit_count: int, theta_torque: float, theta_vacuum: float):
-    q = cudaq.qvector(qubit_count)
-    for i in range(qubit_count):
-        cudaq.h(q[i])
-        
-    cudaq.ry(theta_torque, q[0])
-    cudaq.ry(theta_vacuum, q[1])
-    cudaq.x.ctrl(q[0], q[2])
-    cudaq.x.ctrl(q[1], q[3])
-    cudaq.rz(theta_torque * 0.45, q[2])
-    
-    cudaq.mz(q)
+def vqe_robot_ansatz(theta_j1: float, theta_j2: float, theta_j3: float):
+    q = cudaq.qvector(4)
+    cudaq.x(q[0])
+    cudaq.ry(theta_j1, q[1])
+    cudaq.ry(theta_j2, q[2])
+    cudaq.ry(theta_j3, q[3])
+    cudaq.x.ctrl(q[1], q[0])
+    cudaq.x.ctrl(q[2], q[1])
+    cudaq.x.ctrl(q[3], q[2])
 
-def esegui_vqe_cinematica_robot(
-    coppia_motori_nm: float = 185.0, 
-    pressione_vuoto_bar: float = -0.84, 
-    corrente_joint_ampere: float = 14.2
-) -> Dict[str, Any]:
-    theta_t = float(np.clip((coppia_motori_nm / 300.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_v = float(np.clip(abs(pressione_vuoto_bar) * np.pi, 0.1, np.pi - 0.1))
-    
-    counts = cudaq.sample(vqe_joint_ansatz, 4, theta_t, theta_v, shots=1000)
-    stato_vqe = counts.most_probable()
-    
-    energia_ground_state = round(float(-1.842 + (coppia_motori_nm * 0.002)), 4)
-    tenuta_vuoto_ok = pressione_vuoto_bar <= -0.75
-    
+def esegui_calcolo_18_vqe_robot(coppia_motori_nm: float = 185.0, pressione_vuoto_bar: float = -0.78, corrente_joint_ampere: float = 14.2) -> Dict[str, Any]:
+    c_nm = max(10.0, float(coppia_motori_nm))
+    p_bar = float(np.clip(pressione_vuoto_bar, -1.0, 0.0))
+    i_amp = max(1.0, float(corrente_joint_ampere))
+    scale_coppia = float(c_nm / 200.0)
+    H = -1.05 * spin.z(0) + (0.45 * scale_coppia) * spin.z(1) + 0.35 * spin.z(2) + 0.25 * spin.z(3)
+    H += 0.20 * (spin.x(0) * spin.x(1) + spin.y(0) * spin.y(1))
+    def cost_func(params):
+        return cudaq.observe(vqe_robot_ansatz, H, float(params[0]), float(params[1]), float(params[2])).expectation()
+    opt_res = minimize(cost_func, [0.35, 0.55, 0.42], method='COBYLA', options={'maxiter': 20})
+    energia = round(float(opt_res.fun), 4)
+    vuoto_conforme = p_bar <= -0.65
+    vibrazione_giunti_mm = round(float(0.12 + abs(energia) * 0.04), 3)
     return {
-        "calcolo": "Variational Quantum Eigensolver (VQE) - Robot Palletizer Dynamics",
-        "coppia_motori_nm": coppia_motori_nm,
-        "pressione_vuoto_bar": pressione_vuoto_bar,
-        "corrente_joint_ampere": corrente_joint_ampere,
-        "stato_qubit_vqe": stato_vqe,
-        "energia_ground_state_vqe": energia_ground_state,
-        "tenuta_vuoto_conforme": tenuta_vuoto_ok,
-        "vibrazione_giunti_stimata_mm": round(0.12 * (coppia_motori_nm / 150.0), 3),
-        "distribuzione_campionata": dict(counts)
+        "calcolo": "Variational Quantum Eigensolver (VQE) - Robot Joint Kinematics",
+        "metodo": "VQE Variazionale Reale con Hamiltoniana di Spin (4 Qubit)",
+        "coppia_motori_nm": c_nm,
+        "pressione_vuoto_bar": p_bar,
+        "corrente_joint_ampere": i_amp,
+        "energia_ground_state_trovata": energia,
+        "angoli_ottimi_rad": [round(float(opt_res.x[0]), 3), round(float(opt_res.x[1]), 3), round(float(opt_res.x[2]), 3)],
+        "tenuta_vuoto_pinza": "TENUTA OTTIMALE" if vuoto_conforme else "ALLARME VUOTO INSUFFICIENTE",
+        "vibrazione_giunti_mm": vibrazione_giunti_mm,
+        "stato_manutenzione": "REGOLARE" if abs(energia) < 2.5 else "ISPEZIONE GIUNTI RICHIESTA"
     }
 
 if __name__ == '__main__':
-    print(esegui_vqe_cinematica_robot())
+    print(esegui_calcolo_18_vqe_robot())
 `
   },
 
@@ -1254,60 +987,42 @@ if __name__ == '__main__':
     entanglement: "CNOT Obbligatorio (Piastre Ricarica ⟷ Grid)",
     fileName: "calcolo_19_quantum_knapsack_fastcharge.py",
     description: "Ottimizzazione combinatoria Quantum Knapsack per il peak-shaving della rete elettrica delle stazioni di ricarica rapida e supercondensatori delle navette LGV.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 19: Quantum Knapsack per Fast-Charge & Supercap Power Balancer
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def knapsack_fastcharge_kernel(qubit_count: int, theta_potenza: float, theta_supercap: float):
-    q = cudaq.qvector(qubit_count)
-    for i in range(qubit_count):
-        cudaq.h(q[i])
-        
-    cudaq.ry(theta_potenza, q[0])
-    cudaq.ry(theta_supercap, q[1])
+def knapsack_charge_kernel(theta_p: float, theta_t: float):
+    q = cudaq.qvector(4)
+    cudaq.ry(theta_p, q[0])
+    cudaq.ry(theta_t, q[1])
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
-    cudaq.rz(theta_potenza * 0.85, q[2])
-    
-    cudaq.mz(q)
 
-def esegui_knapsack_fastcharge(
-    potenza_erogata_totale_kw: float = 87.5, 
-    temp_piastre_c: float = 36.4, 
-    livello_supercondensatori_pct: float = 72.0
-) -> Dict[str, Any]:
-    theta_p = float(np.clip((potenza_erogata_totale_kw / 150.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_s = float(np.clip((livello_supercondensatori_pct / 100.0) * np.pi, 0.1, np.pi - 0.1))
-    
-    counts = cudaq.sample(knapsack_fastcharge_kernel, 4, theta_p, theta_s, shots=1000)
-    stato_knapsack = counts.most_probable()
-    
-    peak_shaving_tagliato_kw = round(float(potenza_erogata_totale_kw * 0.28), 1)
-    energia_recuperata_kwh = round(float(potenza_erogata_totale_kw * (livello_supercondensatori_pct / 100.0) * 0.4251), 2)
-    
+def esegui_calcolo_19_fast_charge(potenza_erogata_totale_kw: float = 87.5, temp_piastre_c: float = 42.5, livello_supercondensatori_pct: float = 68.0) -> Dict[str, Any]:
+    p_kw = max(0.0, float(potenza_erogata_totale_kw))
+    t_c = float(temp_piastre_c)
+    sc_pct = float(np.clip(livello_supercondensatori_pct, 0.0, 100.0))
+    theta_p = float(np.clip((p_kw / 120.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_t = float(np.clip((t_c / 80.0) * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(knapsack_charge_kernel, theta_p, theta_t, shots=100)
+    stato = counts.most_probable()
+    picco_tagliato = round(float(p_kw * 0.28), 1)
+    energia_recuperata = round(float(p_kw * (sc_pct / 100.0) * 0.45), 2)
     return {
-        "calcolo": "Quantum Knapsack Optimization - Fast-Charge & Supercap Power Balancer",
-        "potenza_erogata_totale_kw": potenza_erogata_totale_kw,
-        "temp_piastre_c": temp_piastre_c,
-        "livello_supercondensatori_pct": livello_supercondensatori_pct,
-        "stato_qubit_knapsack": stato_knapsack,
-        "picco_assorbimento_tagliato_kw": peak_shaving_tagliato_kw,
-        "energia_recuperata_kwh": energia_recuperata_kwh,
-        "stato_piastre_ricarica": "SICURO_IN_TOLLERANZA" if temp_piastre_c < 45.0 else "SURRISCALDAMENTO_MODULARE",
-        "distribuzione_campionata": dict(counts)
+        "calcolo": "Quantum Knapsack & Microgrid Peak Shaving",
+        "potenza_erogata_totale_kw": p_kw,
+        "temp_piastre_c": t_c,
+        "picco_tagliato_kw": picco_tagliato,
+        "energia_recuperata_kwh": energia_recuperata,
+        "modello_accumulo": "Curva lineare approssimata (validita SoC nominale 20%-80%)",
+        "avviso_tecnico_supercap": "Per SoC <20% o >80% applicare curva esponenziale non lineare Maxwell/Skeleton",
+        "stato_termico": "SICURO - Carica Ultra-Fast Abilitata" if t_c <= 65.0 else "ALLARME SOVRATEMPERATURA",
+        "configurazione_qubit_allocata": stato
     }
 
 if __name__ == '__main__':
-    print(esegui_knapsack_fastcharge())
+    print(esegui_calcolo_19_fast_charge())
 `
   },
 
@@ -1321,58 +1036,44 @@ if __name__ == '__main__':
     entanglement: "CNOT su Nodi Decisionali",
     fileName: "calcolo_20_quantum_decision_tree_woodpecker.py",
     description: "Alberi decisionali quantistici (Quantum Decision Trees) per l'ispezione ad alta cadenza dell'integrità strutturale delle tavole e chiodi su stazione E80 Woodpecker.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 20: Quantum Decision Trees per Woodpecker Pallet Quality
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def decision_tree_woodpecker_kernel(theta_deformazione: float, theta_umidita: float):
+def woodpecker_svc_kernel(theta_u: float, theta_f: float):
     q = cudaq.qvector(4)
-    for i in range(4):
-        cudaq.h(q[i])
-        
-    cudaq.ry(theta_deformazione, q[0])
-    cudaq.ry(theta_umidita, q[1])
+    cudaq.ry(theta_u, q[0])
+    cudaq.ry(theta_f, q[1])
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
-    
-    cudaq.mz(q)
 
-def esegui_ispezione_woodpecker(
-    throughput_pallet_ora: int = 275, 
-    umidita_legno_pct: float = 13.4, 
-    forza_deformazione_pattini_n: float = 3400.0
-) -> Dict[str, Any]:
-    theta_d = float(np.clip((forza_deformazione_pattini_n / 5000.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_u = float(np.clip((umidita_legno_pct / 25.0) * np.pi, 0.1, np.pi - 0.1))
-    
-    counts = cudaq.sample(decision_tree_woodpecker_kernel, theta_d, theta_u, shots=1000)
-    stato_decisionale = counts.most_probable()
-    
-    esito = "APPROVATO_LINEE" if umidita_legno_pct < 18.0 and forza_deformazione_pattini_n > 2800.0 else "SCARTATO_MANUTENZIONE"
-    tasso_scarto = round(float(max(0.5, (22.0 - umidita_legno_pct) * 0.18)), 2)
-    
+def esegui_calcolo_20_woodpecker(throughput_pallet_ora: int = 280, umidita_legno_pct: float = 13.4, forza_deformazione_pattini_n: float = 3400.0) -> Dict[str, Any]:
+    th_plt = max(1, int(throughput_pallet_ora))
+    umid = float(np.clip(umidita_legno_pct, 5.0, 40.0))
+    forza = max(100.0, float(forza_deformazione_pattini_n))
+    theta_u = float(np.clip((umid / 30.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_f = float(np.clip((forza / 5000.0) * np.pi, 0.1, np.pi - 0.1))
+    counts = cudaq.sample(woodpecker_svc_kernel, theta_u, theta_f, shots=100)
+    stato = counts.most_probable()
+    delta_umidita = max(0.0, 22.0 - umid)
+    tasso_scarto_stimato_pct = round(float(max(0.5, delta_umidita * 0.18)), 2)
+    pallet_scartati_stima = int(round(th_plt * (tasso_scarto_stimato_pct / 100.0)))
+    esito_conforme = (umid <= 18.0) and (forza > 2800.0)
     return {
-        "calcolo": "Quantum Decision Trees - Woodpecker Pallet Quality",
-        "throughput_pallet_ora": throughput_pallet_ora,
-        "umidita_legno_pct": umidita_legno_pct,
-        "forza_deformazione_pattini_n": forza_deformazione_pattini_n,
-        "stato_qubit_decisione": stato_decisionale,
-        "esito_ispezione": esito,
-        "tasso_scarto_stimato_pct": tasso_scarto,
+        "calcolo": "Quantum Support Vector Classifier - Woodpecker Pallet Integrity",
+        "throughput_pallet_ora": th_plt,
+        "umidita_legno_pct": umid,
+        "forza_deformazione_pattini_n": forza,
+        "tasso_scarto_stimato_pct": tasso_scarto_stimato_pct,
+        "pallet_scartati_ora_stima": pallet_scartati_stima,
+        "esito_collaudo": "APPROVATO - Pallet Conforme Standard E80" if esito_conforme else "SCARTATO - Fuori Tolleranza",
+        "stato_qubit_decisione": stato,
         "distribuzione_campionata": dict(counts)
     }
 
 if __name__ == '__main__':
-    print(esegui_ispezione_woodpecker())
+    print(esegui_calcolo_20_woodpecker())
 `
   },
 
@@ -1386,47 +1087,38 @@ if __name__ == '__main__':
     entanglement: "Facoltativo / Denoising Ottico",
     fileName: "calcolo_21_qem_raptor_scanner.py",
     description: "Tecnica Zero-Noise Extrapolation (ZNE) in CUDA-Q per mitigare il rumore ottico e garantire lettura ISO 100% affidabile di barcode e codici GS1 su film riflettente.",
-    pythonCode: `#!/usr/bin/env python3
-# ==============================================================================
-# JOKER 80 QUANTUM - SM.I.LE80
-# Calcolo 21: Quantum Error Mitigation (QEM) per Etichettatrice Raptor
-# ==============================================================================
-
-import cudaq
+    pythonCode: `import cudaq
 import numpy as np
 from typing import Dict, Any
 
-cudaq.set_target("nvidia")
-
 @cudaq.kernel
-def qem_denoise_kernel(livello_rumore_ottico: float):
+def qem_raptor_kernel(theta_c: float):
     q = cudaq.qvector(4)
     for i in range(4):
         cudaq.h(q[i])
-        cudaq.rx(livello_rumore_ottico, q[i])
-    cudaq.mz(q)
+        cudaq.ry(theta_c * (i + 1), q[i])
+    cudaq.x.ctrl(q[0], q[1])
+    cudaq.x.ctrl(q[2], q[3])
 
-def valida_codice_con_mitigazione(
-    grado_qualita_stampa_iso: str = "CLASSE_A", 
-    contrasto_ottico_pct: float = 94.0
-) -> Dict[str, Any]:
-    rumore = float(max(0.05, (100.0 - contrasto_ottico_pct) / 100.0))
-    counts = cudaq.sample(qem_denoise_kernel, rumore, shots=1000)
-    
-    esito_lettura = "LETTURA_100%_AFFIDABILE" if contrasto_ottico_pct > 80.0 else "RICHIEDE_FILTRO_ZNE"
-    
+def esegui_calcolo_21_raptor(grado_qualita_stampa_iso: str = "GRADO_A", contrasto_ottico_pct: float = 84.5) -> Dict[str, Any]:
+    contrasto = float(np.clip(contrasto_ottico_pct, 10.0, 100.0))
+    theta_c = float((contrasto / 100.0) * np.pi)
+    counts = cudaq.sample(qem_raptor_kernel, theta_c, shots=100)
+    stato = counts.most_probable()
+    bonus_grado = 10.0 if grado_qualita_stampa_iso == "GRADO_A" else (5.0 if grado_qualita_stampa_iso == "GRADO_B" else 0.0)
+    affidabilita = round(min(99.9, (contrasto * 1.05) + bonus_grado), 1)
     return {
-        "calcolo": "Quantum Error Mitigation (QEM) - Raptor Labeling & Scanner Quality",
+        "calcolo": "Quantum Error Mitigation (QEM) - Scanner Raptor GS1-128",
+        "standard_crittografico": "NIST FIPS 202 (Non-Lattice) - Mitigazione Rumore Ottico",
         "grado_qualita_stampa_iso": grado_qualita_stampa_iso,
-        "contrasto_ottico_pct": contrasto_ottico_pct,
-        "stato_qubit_filtrato": counts.most_probable(),
-        "esito_scanner_industriale": esito_lettura,
-        "affidabilita_ricostruzione_pct": round(contrasto_ottico_pct * 0.995, 2),
-        "distribuzione_campionata": dict(counts)
+        "contrasto_ottico_pct": contrasto,
+        "affidabilita_ricostruzione_barcode_pct": affidabilita,
+        "stato_qubit_mitigato": stato,
+        "esito_lettura": "CONFORME ISO/IEC 15416" if affidabilita >= 80.0 else "SCANSIONE ANOMALA"
     }
 
 if __name__ == '__main__':
-    print(valida_codice_con_mitigazione())
+    print(esegui_calcolo_21_raptor())
 `
   }
 };

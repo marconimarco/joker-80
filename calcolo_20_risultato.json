@@ -1,0 +1,16 @@
+{
+  "calcolo": "Quantum Support Vector Classifier - Woodpecker Pallet Integrity",
+  "throughput_pallet_ora": 280,
+  "umidita_legno_pct": 13.4,
+  "forza_deformazione_pattini_n": 3400.0,
+  "tasso_scarto_stimato_pct": 1.55,
+  "pallet_scartati_ora_stima": 4,
+  "esito_collaudo": "APPROVATO - Pallet Conforme Standard E80",
+  "stato_qubit_decisione": "0000",
+  "distribuzione_campionata": {
+    "0000": 74,
+    "0001": 12,
+    "0010": 8,
+    "0011": 6
+  }
+}

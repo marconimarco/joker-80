@@ -536,8 +536,8 @@ Verifica la terminologia utilizzata oppure specifica il reparto/macchinario di i
       }
 
     } else if (targetId === 4) {
-      const uMatch = text.match(/umidit[aà]\s*(?:del)?\s*(\d+(?:\.\d+)?)\s*%/i) || text.match(/(\d+(?:\.\d+)?)\s*%\s*umidit/i);
-      const sMatch = text.match(/spessore\s*(?:del)?\s*(\d+(?:\.\d+)?)/i) || text.match(/(\d+(?:\.\d+)?)\s*(?:micro|micron)/i);
+      const uMatch = text.match(/umidit[aà]\s*[:=]?\s*(?:del)?\s*(\d+(?:\.\d+)?)/i) || text.match(/(\d+(?:\.\d+)?)\s*%\s*umidit/i);
+      const sMatch = text.match(/spessore\s*[:=]?\s*(?:del)?\s*(\d+(?:\.\d+)?)/i) || text.match(/(\d+(?:\.\d+)?)\s*(?:micro|micron|mm)/i);
 
       if (uMatch) { 
         inputs.umidita_rilevata = parseFloat(uMatch[1]); 
@@ -547,20 +547,25 @@ Verifica la terminologia utilizzata oppure specifica il reparto/macchinario di i
         extractedSource.umidita_rilevata = 'OPERATORE_MEMORIZZATO';
         hasTransferredParams = true;
       } else { 
-        inputs.umidita_rilevata = 6.8; 
+        inputs.umidita_rilevata = 15.0; 
         extractedSource.umidita_rilevata = 'VALORE_BASE'; 
       }
 
       if (sMatch) { 
-        inputs.spessore_micro = parseFloat(sMatch[1]); 
-        extractedSource.spessore_micro = 'OPERATORE'; 
-      } else if (saved.spessore_micro !== undefined) {
-        inputs.spessore_micro = saved.spessore_micro;
-        extractedSource.spessore_micro = 'OPERATORE_MEMORIZZATO';
+        const sVal = parseFloat(sMatch[1]);
+        inputs.spessore_interfalda_mm = sVal;
+        inputs.spessore_micro = sVal; 
+        extractedSource.spessore_interfalda_mm = 'OPERATORE'; 
+      } else if (saved.spessore_interfalda_mm !== undefined || saved.spessore_micro !== undefined) {
+        const sVal = saved.spessore_interfalda_mm ?? saved.spessore_micro;
+        inputs.spessore_interfalda_mm = sVal;
+        inputs.spessore_micro = sVal;
+        extractedSource.spessore_interfalda_mm = 'OPERATORE_MEMORIZZATO';
         hasTransferredParams = true;
       } else { 
-        inputs.spessore_micro = 125.0; 
-        extractedSource.spessore_micro = 'VALORE_BASE'; 
+        inputs.spessore_interfalda_mm = 2.8;
+        inputs.spessore_micro = 2.8; 
+        extractedSource.spessore_interfalda_mm = 'VALORE_BASE'; 
       }
 
     } else if (targetId === 5) {
@@ -594,10 +599,13 @@ Verifica la terminologia utilizzata oppure specifica il reparto/macchinario di i
       extractedSource.numero_ordini = saved.numero_ordini ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
 
     } else if (targetId === 10) {
-      inputs.volume_disponibile_m3 = saved.volume_disponibile_m3 ?? 82.5;
-      inputs.peso_massimo_kg = saved.peso_massimo_kg ?? 28000;
-      inputs.vincolo_anti_sbilanciamento = true;
-      extractedSource.volume_disponibile_m3 = saved.volume_disponibile_m3 ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
+      const colliMatch = text.match(/(\d+)\s*colli/i) || text.match(/colli\s*[:=]?\s*(\d+)/i);
+      const volMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:m3|mc|m³)/i) || text.match(/volume\s*[:=]?\s*(\d+(?:\.\d+)?)/i);
+      inputs.colli_da_caricare = colliMatch ? parseInt(colliMatch[1], 10) : (saved.colli_da_caricare ?? 33);
+      inputs.volume_cassone_m3 = volMatch ? parseFloat(volMatch[1]) : (saved.volume_cassone_m3 ?? 86.0);
+      inputs.volume_disponibile_mc = inputs.volume_cassone_m3;
+      inputs.peso_totale_kg = saved.peso_totale_kg ?? 24500.0;
+      extractedSource.colli_da_caricare = colliMatch ? 'OPERATORE' : (saved.colli_da_caricare ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE');
 
     } else if (targetId === 11) {
       inputs.id_spedizione = saved.id_spedizione || 'SHP-2026-9901';
@@ -618,21 +626,28 @@ Verifica la terminologia utilizzata oppure specifica il reparto/macchinario di i
       extractedSource.flusso_orario_camion = saved.flusso_orario_camion ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
 
     } else if (targetId === 14) {
-      const rpmMatch = text.match(/(\d+)\s*(?:rpm|giri)/i) || (hasNumbers ? text.match(/(\d+)/) : null);
+      const rpmMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:rpm|giri)/i) || text.match(/rpm\s*[:=]?\s*(\d+(?:\.\d+)?)/i) || (hasNumbers ? text.match(/(\d+(?:\.\d+)?)/) : null);
       const vibMatch = text.match(/(\d+(?:\.\d+)?)\s*g\b/i);
 
       if (rpmMatch) { 
-        inputs.giri_minuto = parseInt(rpmMatch[1], 10); 
+        const rpmVal = parseFloat(rpmMatch[1]);
+        inputs.giri_minuto = rpmVal; 
+        inputs.rpm_tavola_bema = rpmVal;
         extractedSource.giri_minuto = 'OPERATORE'; 
-      } else if (saved.giri_minuto !== undefined) {
-        inputs.giri_minuto = saved.giri_minuto;
+      } else if (saved.giri_minuto !== undefined || saved.rpm_tavola_bema !== undefined) {
+        const rpmVal = saved.rpm_tavola_bema ?? saved.giri_minuto;
+        inputs.giri_minuto = rpmVal;
+        inputs.rpm_tavola_bema = rpmVal;
         extractedSource.giri_minuto = 'OPERATORE_MEMORIZZATO';
         hasTransferredParams = true;
       } else if (topology) { 
-        inputs.giri_minuto = topology.fasciatoriSilkworm?.[0]?.dinamicaAvvolgimento?.velocitaRotazioneRpm || 48; 
+        const rpmVal = topology.fasciatoriSilkworm?.[0]?.dinamicaAvvolgimento?.velocitaRotazioneRpm || 48.5;
+        inputs.giri_minuto = rpmVal; 
+        inputs.rpm_tavola_bema = rpmVal;
         extractedSource.giri_minuto = 'TELEMETRIA_IMPIANTO'; 
       } else { 
-        inputs.giri_minuto = 48; 
+        inputs.giri_minuto = 48.5; 
+        inputs.rpm_tavola_bema = 48.5;
         extractedSource.giri_minuto = 'VALORE_BASE'; 
       }
 
