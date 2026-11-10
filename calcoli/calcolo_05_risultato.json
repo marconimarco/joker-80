@@ -1,9 +1,9 @@
 {
   "calcolo": "Post-Quantum Cryptographic Hashing - Material Inventory & Quality",
-  "standard_crittografico": "NIST FIPS 202 (SHA3-256) - Non-Lattice",
+  "standard_crittografico": "NIST FIPS 202 (SHA3-256) con Salt ad Alta Entropia (Non-Lattice)",
   "compliance_direttiva": "NIS2 Art. 21 - Tracciabilita Immutabile di Filiera",
   "id_lotto": "LOTTO-NOV-2026-0884",
-  "sscc_code": "080332190000458129",
+  "sscc_code": "80332190000458130",
   "salt_crittografico_256bit": "e80a7f9b2c8d114256a81c4029bd4901fa5c9b4e1104a390d40e022378f4a100",
   "token_certificato_sha3": "9d18fa729bc401bca280145892acbb0210459a8cde514a0984ef11739820bc01",
   "entropia_effettiva_bit": 256,

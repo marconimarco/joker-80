@@ -1,0 +1,8 @@
+{
+  "calcolo": "Dynamic Graph QAOA & QRL - Routing & Traffic Engine LGV",
+  "navette_attive": 3,
+  "nodi_critici": 1,
+  "indice_fluidita_flotta_pct": 79.5,
+  "tempo_medio_transito_sec": 176.1,
+  "stato_qubit_traffico": "0000"
+}

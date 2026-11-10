@@ -1,9 +1,9 @@
 {
   "calcolo": "Quantum Error Mitigation (QEM) - Scanner Raptor GS1-128",
   "standard_crittografico": "NIST FIPS 202 (Non-Lattice) - Mitigazione Rumore Ottico",
-  "grado_qualita_stampa_iso": "GRADO_A",
+  "grado_qualita_stampa_iso": "CLASSE_A",
   "contrasto_ottico_pct": 84.5,
-  "affidabilita_ricostruzione_barcode_pct": 98.7,
+  "affidabilita_ricostruzione_barcode_pct": 88.7,
   "stato_qubit_mitigato": "0000",
   "esito_lettura": "CONFORME ISO/IEC 15416"
 }

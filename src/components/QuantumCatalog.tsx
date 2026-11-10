@@ -188,13 +188,28 @@ export const QuantumCatalog: React.FC<Props> = ({
   };
 
   // Helper to flexibly parse user inputs (numbers, JSON arrays, comma-separated lists)
-  const parseFlexibleInput = (val: any): any => {
+  const parseFlexibleInput = (val: any, key?: string): any => {
     if (val === undefined || val === null) return val;
     if (typeof val === "number" || typeof val === "boolean") return val;
     if (Array.isArray(val) || (typeof val === "object" && val !== null)) return val;
     if (typeof val !== "string") return val;
     const trimmed = val.trim();
     if (trimmed === "") return 0;
+    // Always preserve SSCC, serials, and alphanumeric identifiers as string
+    if (
+      key === "sscc_code" ||
+      key === "sscc" ||
+      key === "id_lotto_materiale" ||
+      key === "codice_fornitore" ||
+      key === "id_spedizione" ||
+      key === "grado_qualita_stampa_iso" ||
+      key === "qualita_stampa_iso" ||
+      key === "etichetta_gs1" ||
+      (trimmed.length >= 10 && /^\d+$/.test(trimmed)) ||
+      (trimmed.length > 1 && trimmed.startsWith("0") && /^\d+$/.test(trimmed))
+    ) {
+      return trimmed;
+    }
     // JSON arrays and objects
     if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
       try {
@@ -292,7 +307,7 @@ export const QuantumCatalog: React.FC<Props> = ({
         const raw = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
         const inputs: Record<string, any> = {};
         for (const [k, v] of Object.entries(raw)) {
-          inputs[k] = parseFlexibleInput(v);
+          inputs[k] = parseFlexibleInput(v, k);
         }
         // Micro-intervallo realistico per simulare la sequenza di campionamento batch GPU/QPU
         await new Promise(r => setTimeout(r, 20));
@@ -338,7 +353,7 @@ export const QuantumCatalog: React.FC<Props> = ({
             const raw = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
             const inputs: Record<string, any> = {};
             for (const [k, v] of Object.entries(raw)) {
-              inputs[k] = parseFlexibleInput(v);
+              inputs[k] = parseFlexibleInput(v, k);
             }
             const res = await QuantumEngine.executeCalculation(calc.id, inputs);
             if (active) {
@@ -517,7 +532,7 @@ export const QuantumCatalog: React.FC<Props> = ({
     const rawInputs = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
     const inputs: Record<string, any> = {};
     for (const [k, v] of Object.entries(rawInputs)) {
-      inputs[k] = parseFlexibleInput(v);
+      inputs[k] = parseFlexibleInput(v, k);
     }
     
     try {
@@ -636,7 +651,7 @@ export const QuantumCatalog: React.FC<Props> = ({
           const raw = { ...(c.defaultInputs || {}), ...(formInputs[c.id] || {}) };
           const inputs: Record<string, any> = {};
           for (const [k, v] of Object.entries(raw)) {
-            inputs[k] = parseFlexibleInput(v);
+            inputs[k] = parseFlexibleInput(v, k);
           }
           const res = await QuantumEngine.executeCalculation(c.id, inputs);
           setResults(prev => ({ ...prev, [c.id]: res }));

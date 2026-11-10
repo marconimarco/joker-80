@@ -1,0 +1,8 @@
+{
+  "calcolo": "Quantum Support Vector Machines (QSVM) - Tensione Film Bema",
+  "tensione_newton": 148.5,
+  "pre_stiro_pct": 250.0,
+  "spessore_film_micron": 23.0,
+  "sforzo_unitario_mpa": 6.46,
+  "stato_fasciatura": "REGOLARE"
+}

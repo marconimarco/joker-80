@@ -129,7 +129,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     defaultInputs: {
       id_lotto_materiale: 'BOBINA_BEMA_2026_A',
       codice_fornitore: 'PLAST_REGGIO_01',
-      sscc_code: '080332190000458129',
+      sscc_code: '80332190000458130',
       qualita_stampa_iso: 'CLASSE_A'
     },
     isCrossCategory: false,
@@ -605,7 +605,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     description: 'Validazione crittografica quantistica zero-knowledge serializzazione GS1. Esegue verifiche basate su reticoli euclidei (standard Crystals-Dilithium / ML-DSA NIST FIPS 204) sul codice SSCC stampato e applicato dal robot Raptor, garantendo anticontraffazione assoluta.',
     inputDescription: 'sscc_code, etichetta_gs1, grado_qualita_stampa_iso, temp_testina_termica_c',
     defaultInputs: {
-      sscc_code: '080332190000458129',
+      sscc_code: '80332190000458130',
       etichetta_gs1: '(01)08033219001234(10)LOT-2026-X8(15)261231',
       grado_qualita_stampa_iso: 'CLASSE_A',
       temp_testina_termica_c: 54.2
