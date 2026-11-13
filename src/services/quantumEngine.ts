@@ -76,21 +76,37 @@ export const QuantumEngine = {
     const allarme = (congestione_norm >= 0.85) || ['1111', '1110', '0111'].includes(most_probable);
     const azione = allarme ? "Deviare bilici su polmone B3" : "Flusso regolare";
 
+    const codaCritica = c >= 10;
+    const wmsSaturo = w >= 85.0;
+    let motivo_allarme: string | undefined = undefined;
+    if (allarme) {
+      if (codaCritica && wmsSaturo) {
+        motivo_allarme = `Coda camion critica (${c} in attesa) + WMS quasi saturo (${w}%)`;
+      } else if (codaCritica) {
+        motivo_allarme = "Solo coda camion critica";
+      } else if (wmsSaturo) {
+        motivo_allarme = "Solo WMS quasi saturo";
+      } else {
+        motivo_allarme = `Coda camion critica (${c} in attesa) + WMS quasi saturo (${w}%)`;
+      }
+    }
+
     return {
       calcolo_id: 1,
       calcolo: "Quantum Boltzmann Machines (QBM) - Inbound Scheduler",
       sotto_funzione: "Inbound Scheduler",
       congestione_percentuale,
+      stato_qubit: most_probable,
       stato_qubit_rilevato: most_probable,
       stato_qubit_dominante: most_probable,
       stato_dominante: most_probable,
       allarme_blocco_imminente: allarme,
+      ...(motivo_allarme ? { motivo_allarme } : {}),
       azione_operativa: azione,
       distribuzione_campionata: distribution,
-      metrica_principale_etichetta: "Indice Congestione Quantistica",
+      metrica_principale_etichetta: "Indice di congestione",
       metrica_principale_valore: `${congestione_percentuale}%`,
       metriche_dettagliate: {
-        "Indice Congestione": `${congestione_percentuale}%`,
         "Camion in Attesa": `${c} unità`,
         "Minuti Ritardo": `${r} min`,
         "Saturazione WMS": `${w}%`,
@@ -635,6 +651,20 @@ export const QuantumEngine = {
     const classe_cluster = `CLUSTER_${stato_num % 4}`;
     const allerta = tempo_medio_attesa_min > 30.0 ? "ROSSO - TRAFFICO CRITICO" : "VERDE - FLUSSO REGOLARE";
 
+    const bufferPieno = sat >= 0.70;
+    const codaCriticaYard = c >= 12;
+    let motivo_allarme: string | undefined = undefined;
+    if (tempo_medio_attesa_min > 30.0 || allerta.includes("ROSSO")) {
+      const satPct = Number((sat * 100.0).toFixed(1));
+      if (bufferPieno && codaCriticaYard) {
+        motivo_allarme = `Buffer quasi pieno (${satPct}%) + Coda camion critica (${c})`;
+      } else if (bufferPieno) {
+        motivo_allarme = `Buffer quasi pieno (${satPct}%)`;
+      } else {
+        motivo_allarme = `Coda camion critica (${c})`;
+      }
+    }
+
     return {
       calcolo_id: 13,
       calcolo: "Quantum K-Means - Yard Traffic Management & Polmone",
@@ -646,7 +676,9 @@ export const QuantumEngine = {
       stato_qubit_cluster: most_probable,
       stato_qubit_dominante: most_probable,
       stato_dominante: most_probable,
+      stato_congestione: allerta,
       livello_allerta_yard: allerta,
+      ...(motivo_allarme ? { motivo_allarme } : {}),
       distribuzione_campionata: distribution,
       metrica_principale_etichetta: "Tempo Medio Attesa Yard (K-Means)",
       metrica_principale_valore: `${tempo_medio_attesa_min} min`,
@@ -725,6 +757,17 @@ export const QuantumEngine = {
     const sforzo_mpa = Number((t / (1000.0 * (spess / 1000.0))).toFixed(2));
     const stato_fasciatura = sforzo_mpa > 18.0 ? "ALLARME ROTTURA FILM" : "REGOLARE";
 
+    let motivo_allarme: string | undefined = undefined;
+    if (stato_fasciatura === "ALLARME ROTTURA FILM" || sforzo_mpa > 18.0 || t > 180.0) {
+      if (sforzo_mpa > 18.0 && t > 180.0) {
+        motivo_allarme = `Sforzo film oltre soglia (${sforzo_mpa} MPa) + Tensione oltre soglia (${t} N)`;
+      } else if (sforzo_mpa > 18.0) {
+        motivo_allarme = `Sforzo film oltre soglia (${sforzo_mpa} MPa)`;
+      } else {
+        motivo_allarme = `Tensione oltre soglia (${t} N)`;
+      }
+    }
+
     const { most_probable, distribution } = sampleQuantumCircuit(4, false, Math.min(0.95, sforzo_mpa / 25.0));
 
     return {
@@ -736,6 +779,7 @@ export const QuantumEngine = {
       spessore_film_micron: spess,
       sforzo_unitario_mpa: sforzo_mpa,
       stato_fasciatura,
+      ...(motivo_allarme ? { motivo_allarme } : {}),
       stato_qubit_qsvm: most_probable,
       stato_qubit_dominante: most_probable,
       stato_dominante: most_probable,
@@ -907,6 +951,17 @@ export const QuantumEngine = {
     const { most_probable, distribution } = sampleQuantumCircuit(4, false, 0.4);
     const stato_termico = t_c <= 65.0 ? "SICURO - Carica Ultra-Fast Abilitata" : "ALLARME SOVRATEMPERATURA";
 
+    let motivo_allarme: string | undefined = undefined;
+    if (t_c > 65.0 || p_kw > 100.0 || stato_termico.includes("ALLARME")) {
+      if (t_c > 65.0 && p_kw > 100.0) {
+        motivo_allarme = `Temperatura piastre oltre soglia (${t_c} °C) + Potenza oltre soglia (${p_kw} kW)`;
+      } else if (t_c > 65.0) {
+        motivo_allarme = `Temperatura piastre oltre soglia (${t_c} °C)`;
+      } else {
+        motivo_allarme = `Potenza oltre soglia (${p_kw} kW)`;
+      }
+    }
+
     return {
       calcolo_id: 19,
       calcolo: "Quantum Knapsack & Microgrid Peak Shaving",
@@ -918,6 +973,7 @@ export const QuantumEngine = {
       modello_accumulo: "Curva lineare approssimata (validita SoC nominale 20%-80%)",
       avviso_tecnico_supercap: "Per SoC <20% o >80% applicare curva esponenziale non lineare Maxwell/Skeleton",
       stato_termico,
+      ...(motivo_allarme ? { motivo_allarme } : {}),
       configurazione_qubit_allocata: most_probable,
       stato_qubit_ricarica: most_probable,
       stato_qubit_dominante: most_probable,
@@ -956,6 +1012,19 @@ export const QuantumEngine = {
     const esito_conforme = (umid <= 18.0) && (forza > 2800.0);
     const esito_collaudo = esito_conforme ? "APPROVATO - Pallet Conforme Standard E80" : "SCARTATO - Fuori Tolleranza";
 
+    let motivo_allarme: string | undefined = undefined;
+    if (!esito_conforme) {
+      const umidCritica = umid > 18.0;
+      const forzaCritica = forza <= 2800.0;
+      if (umidCritica && forzaCritica) {
+        motivo_allarme = `Umidità legno oltre soglia (${umid}%) + Forza pattini sotto soglia (${forza} N)`;
+      } else if (umidCritica) {
+        motivo_allarme = `Umidità legno oltre soglia (${umid}%)`;
+      } else {
+        motivo_allarme = `Forza pattini sotto soglia (${forza} N)`;
+      }
+    }
+
     return {
       calcolo_id: 20,
       calcolo: "Quantum Support Vector Classifier - Woodpecker Pallet Integrity",
@@ -966,6 +1035,7 @@ export const QuantumEngine = {
       tasso_scarto_stimato_pct,
       pallet_scartati_ora_stima: pallet_scartati_stima,
       esito_collaudo,
+      ...(motivo_allarme ? { motivo_allarme } : {}),
       stato_qubit_decisione: most_probable,
       stato_qubit_dominante: most_probable,
       stato_dominante: most_probable,

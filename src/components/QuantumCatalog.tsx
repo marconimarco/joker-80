@@ -88,6 +88,136 @@ export const DEPARTMENT_FILTERS: { id: DepartmentFilter; label: string; icon: st
   { id: 'SHIFTS_OPS', label: 'Turni & Reparto', icon: '👥', calcIds: [3, 18, 19, 20], description: 'Schedulazione squadre, ergonomia e OEE di fabbrica' },
 ];
 
+export interface SimulationMetricDef {
+  key: string;
+  label: string;
+  unit?: string;
+  betterDirection: 'higher' | 'lower' | 'neutral';
+}
+
+export interface SimulationConfig {
+  inputs: SimulationMetricDef[];
+  outputs: SimulationMetricDef[];
+}
+
+export const SIMULATION_CONFIGS: Record<number, SimulationConfig> = {
+  1: {
+    inputs: [
+      { key: 'camion_attesa', label: 'Camion in attesa', unit: 'unità', betterDirection: 'lower' },
+      { key: 'minuti_ritardo', label: 'Ritardo', unit: 'min', betterDirection: 'lower' },
+      { key: 'saturazione_wms', label: 'Saturazione WMS', unit: '%', betterDirection: 'lower' },
+    ],
+    outputs: [
+      { key: 'congestione_percentuale', label: 'Indice di congestione', unit: '%', betterDirection: 'lower' },
+      { key: 'allarme_blocco_imminente', label: 'Allarme Blocco Imminente', betterDirection: 'lower' },
+      { key: 'stato_qubit', label: 'Stato Qubit', betterDirection: 'neutral' },
+    ]
+  },
+  3: {
+    inputs: [
+      { key: 'ore_lavoro_disponibili', label: 'Ore lavoro disponibili', unit: 'h', betterDirection: 'neutral' },
+      { key: 'baie_totali', label: 'Baie totali da coprire', unit: 'baie', betterDirection: 'neutral' },
+    ],
+    outputs: [
+      { key: 'energia_ground_state', label: 'Energia Ground State', unit: 'Ha', betterDirection: 'lower' },
+      { key: 'efficienza_oraria_pct', label: 'Efficienza oraria', unit: '%', betterDirection: 'higher' },
+      { key: 'costo_ottimo_turno_eur', label: 'Costo ottimo turno', unit: '€', betterDirection: 'lower' },
+    ]
+  },
+  8: {
+    inputs: [
+      { key: 'nodi_prelievo_count', label: 'Nodi di prelievo', unit: 'nodi', betterDirection: 'neutral' },
+      { key: 'distanza_totale_metri', label: 'Distanza nominale', unit: 'm', betterDirection: 'lower' },
+    ],
+    outputs: [
+      { key: 'distanza_ottimizzata_metri', label: 'Distanza ottimizzata', unit: 'm', betterDirection: 'lower' },
+      { key: 'metri_lineari_risparmiati', label: 'Metri risparmiati', unit: 'm', betterDirection: 'higher' },
+      { key: 'stato_qubit_rotta', label: 'Qubit Rotta', betterDirection: 'neutral' },
+    ]
+  },
+  10: {
+    inputs: [
+      { key: 'colli_da_caricare', label: 'Colli da caricare', unit: 'colli', betterDirection: 'neutral' },
+      { key: 'peso_totale_kg', label: 'Peso totale', unit: 'kg', betterDirection: 'neutral' },
+      { key: 'volume_cassone_m3', label: 'Volume cassone', unit: 'm³', betterDirection: 'neutral' },
+    ],
+    outputs: [
+      { key: 'saturazione_volumetrica_pct', label: 'Saturazione volumetrica', unit: '%', betterDirection: 'higher' },
+      { key: 'stato_qubit_incastro', label: 'Configurazione Qubit', betterDirection: 'neutral' },
+    ]
+  },
+  12: {
+    inputs: [
+      { key: 'camion_in_coda', label: 'Camion in coda', unit: 'camion', betterDirection: 'lower' },
+      { key: 'baie_disponibili', label: 'Baie disponibili', unit: 'baie', betterDirection: 'higher' },
+      { key: 'costo_orario_attesa_eur', label: 'Costo orario attesa', unit: '€/h', betterDirection: 'lower' },
+    ],
+    outputs: [
+      { key: 'risparmio_costi_sosta_eur', label: 'Risparmio costi sosta', unit: '€', betterDirection: 'higher' },
+      { key: 'stato_equilibrio_nash_qubit', label: 'Equilibrio Nash Qubit', betterDirection: 'neutral' },
+      { key: 'esito_cooperativo', label: 'Esito Cooperativo', betterDirection: 'neutral' },
+    ]
+  },
+  13: {
+    inputs: [
+      { key: 'camion_attesa', label: 'Camion in attesa', unit: 'unità', betterDirection: 'lower' },
+      { key: 'saturazione_buffer', label: 'Saturazione buffer', unit: '', betterDirection: 'lower' },
+    ],
+    outputs: [
+      { key: 'tempo_medio_attesa_min', label: 'Tempo medio attesa', unit: 'min', betterDirection: 'lower' },
+      { key: 'saturazione_buffer_pct', label: 'Saturazione buffer', unit: '%', betterDirection: 'lower' },
+      { key: 'stato_congestione', label: 'Stato congestione', betterDirection: 'neutral' },
+    ]
+  },
+  15: {
+    inputs: [
+      { key: 'tensione_newton', label: 'Tensione', unit: 'N', betterDirection: 'lower' },
+      { key: 'pre_stiro_pct', label: 'Pre-stiro applicato', unit: '%', betterDirection: 'neutral' },
+      { key: 'spessore_film_micron', label: 'Spessore film', unit: 'µm', betterDirection: 'neutral' },
+    ],
+    outputs: [
+      { key: 'sforzo_unitario_mpa', label: 'Sforzo unitario', unit: 'MPa', betterDirection: 'lower' },
+      { key: 'stato_fasciatura', label: 'Stato fasciatura', betterDirection: 'neutral' },
+      { key: 'stato_qubit_qsvm', label: 'Qubit QSVM', betterDirection: 'neutral' },
+    ]
+  },
+  16: {
+    inputs: [
+      { key: 'navette_attive', label: 'Navette attive / in missione', unit: 'LGV', betterDirection: 'higher' },
+      { key: 'nodi_critici', label: 'Nodi critici congestione', unit: 'nodi', betterDirection: 'lower' },
+    ],
+    outputs: [
+      { key: 'indice_fluidita_flotta_pct', label: 'Fluidità flotta', unit: '%', betterDirection: 'higher' },
+      { key: 'tempo_medio_transito_sec', label: 'Tempo medio transito', unit: 's', betterDirection: 'lower' },
+      { key: 'stato_qubit_traffico', label: 'Qubit Traffico', betterDirection: 'neutral' },
+    ]
+  },
+  19: {
+    inputs: [
+      { key: 'potenza_erogata_totale_kw', label: 'Potenza erogata', unit: 'kW', betterDirection: 'lower' },
+      { key: 'temp_piastre_c', label: 'Temp piastre contatto', unit: '°C', betterDirection: 'lower' },
+      { key: 'livello_supercondensatori_pct', label: 'Supercondensatori', unit: '%', betterDirection: 'higher' },
+    ],
+    outputs: [
+      { key: 'picco_tagliato_kw', label: 'Picco tagliato', unit: 'kW', betterDirection: 'higher' },
+      { key: 'energia_recuperata_kwh', label: 'Energia recuperata', unit: 'kWh', betterDirection: 'higher' },
+      { key: 'stato_termico', label: 'Stato termico', betterDirection: 'neutral' },
+    ]
+  },
+  20: {
+    inputs: [
+      { key: 'throughput_pallet_ora', label: 'Throughput', unit: 'plt/h', betterDirection: 'higher' },
+      { key: 'umidita_legno_pct', label: 'Umidità legno', unit: '%', betterDirection: 'lower' },
+      { key: 'forza_deformazione_pattini_n', label: 'Forza deformazione pattini', unit: 'N', betterDirection: 'higher' },
+    ],
+    outputs: [
+      { key: 'tasso_scarto_stimato_pct', label: 'Tasso scarto stimato', unit: '%', betterDirection: 'lower' },
+      { key: 'pallet_scartati_ora_stima', label: 'Pallet scartati stima', unit: '/h', betterDirection: 'lower' },
+      { key: 'esito_collaudo', label: 'Esito collaudo', betterDirection: 'neutral' },
+    ]
+  }
+};
+
 export const QuantumCatalog: React.FC<Props> = ({ 
   onOpenCircuit, 
   allowPlcWrite,
@@ -178,6 +308,54 @@ export const QuantumCatalog: React.FC<Props> = ({
   const [selectedPythonCalc, setSelectedPythonCalc] = useState<QuantumCalculationMeta | null>(null);
   const [isAllPythonModalOpen, setIsAllPythonModalOpen] = useState(false);
   const [hoveredCalcId, setHoveredCalcId] = useState<number | null>(null);
+
+  // Stato per la modalità di simulazione confronto "Prima / Dopo"
+  const [simulationCalcId, setSimulationCalcId] = useState<number | null>(null);
+  const [simPrimaInputs, setSimPrimaInputs] = useState<Record<string, any>>({});
+  const [simDopoInputs, setSimDopoInputs] = useState<Record<string, any>>({});
+  const [simComparisonResult, setSimComparisonResult] = useState<{ prima: any; dopo: any } | null>(null);
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+
+  const handleOpenSimulation = (calc: QuantumCalculationMeta) => {
+    const current = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
+    setSimPrimaInputs({ ...current });
+    setSimDopoInputs({ ...current });
+    setSimComparisonResult(null);
+    setSimulationCalcId(calc.id);
+  };
+
+  const handleCloseSimulation = () => {
+    setSimulationCalcId(null);
+    setSimComparisonResult(null);
+    setSimPrimaInputs({});
+    setSimDopoInputs({});
+    setIsSimulating(false);
+  };
+
+  const handleRunSimulation = async (calcId: number) => {
+    setIsSimulating(true);
+    try {
+      const primaParsed: Record<string, any> = {};
+      for (const [k, v] of Object.entries(simPrimaInputs)) {
+        primaParsed[k] = parseFlexibleInput(v, k);
+      }
+      const dopoParsed: Record<string, any> = {};
+      for (const [k, v] of Object.entries(simDopoInputs)) {
+        dopoParsed[k] = parseFlexibleInput(v, k);
+      }
+      // Esecuzione in memoria isolata: nessun salvataggio su Firestore o state dashboard
+      const primaRes = await QuantumEngine.executeCalculation(calcId, primaParsed);
+      const dopoRes = await QuantumEngine.executeCalculation(calcId, dopoParsed);
+      setSimComparisonResult({
+        prima: primaRes,
+        dopo: dopoRes
+      });
+    } catch (err) {
+      console.error('Errore durante la simulazione in-memory:', err);
+    } finally {
+      setIsSimulating(false);
+    }
+  };
 
   // Helper to format any input value for UI display
   const formatInputValue = (val: any): string => {
@@ -751,6 +929,17 @@ export const QuantumCatalog: React.FC<Props> = ({
                 QPU: {res.tempo_simulazione_qpu_ms}ms
               </span>
             )}
+            {SIMULATION_CONFIGS[calc.id] && (
+              <button
+                type="button"
+                onClick={() => handleOpenSimulation(calc)}
+                className="px-2 py-0.5 rounded bg-purple-950/80 hover:bg-purple-900 text-purple-300 hover:text-white border border-purple-500/50 flex items-center gap-1 cursor-pointer transition-colors text-[10px] font-bold"
+                title={`Avvia simulazione di confronto Prima / Dopo per ${calc.name}`}
+              >
+                <Sliders className="w-3 h-3 text-purple-400" />
+                <span>Simula</span>
+              </button>
+            )}
             {isAdmin && (
               <button
                 type="button"
@@ -773,7 +962,7 @@ export const QuantumCatalog: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Primary Metric Banner */}
+        {/* Primary Metric Banner - Singolo Valore Primario (Deduplicato) */}
         {res.metrica_principale_valore && (
           <div className={`p-2 sm:p-2.5 rounded-lg border flex items-center justify-between gap-2 ${
             isCritical
@@ -800,21 +989,43 @@ export const QuantumCatalog: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Detailed KPIs Grid - Sulla stessa riga */}
-        {res.metriche_dettagliate && Object.keys(res.metriche_dettagliate).length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 w-full">
-            {Object.entries(res.metriche_dettagliate).map(([key, val]) => (
-              <div key={key} className="px-2 py-1.5 rounded-md bg-slate-900/90 border border-slate-800 text-[11px] font-mono leading-tight flex flex-col justify-between">
-                <span className="text-slate-400 text-[9.5px] block truncate" title={key}>{key}:</span>
-                <span className="font-bold text-cyan-300 text-xs block mt-0.5 truncate">{String(val)}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Detailed KPIs Grid - Sulla stessa riga con deduplicazione contro metrica principale */}
+        {res.metriche_dettagliate && Object.keys(res.metriche_dettagliate).length > 0 && (() => {
+          const primaryValClean = String(res.metrica_principale_valore || '').replace(/[^\d.-]/g, '');
+          const primaryLabelClean = String(res.metrica_principale_etichetta || '').toLowerCase().trim();
 
-        {/* Human-readable diagnostic summary */}
+          const entries = Object.entries(res.metriche_dettagliate).filter(([key, val]) => {
+            const keyLower = key.toLowerCase().trim();
+            const valClean = String(val).replace(/[^\d.-]/g, '');
+
+            // Calcolo 1: Rimuovi congestione dal dettaglio secondario per evitare doppioni di 96%
+            if (calc.id === 1 && (keyLower.includes('congestione') || valClean === primaryValClean)) {
+              return false;
+            }
+            // Deduplicazione generica
+            if (primaryLabelClean && keyLower === primaryLabelClean && valClean === primaryValClean) {
+              return false;
+            }
+            return true;
+          });
+
+          if (entries.length === 0) return null;
+
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 w-full">
+              {entries.map(([key, val]) => (
+                <div key={key} className="px-2 py-1.5 rounded-md bg-slate-900/90 border border-slate-800 text-[11px] font-mono leading-tight flex flex-col justify-between">
+                  <span className="text-slate-400 text-[9.5px] block truncate" title={key}>{key}:</span>
+                  <span className="font-bold text-cyan-300 text-xs block mt-0.5 truncate">{String(val)}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* Diagnosi e Consiglio Operativo Ingrandito con Badge Motivo Allarme */}
         {(res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica || res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] font-mono">
+          <div className="space-y-2 text-[11px] font-mono">
             {(res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica) && (
               <div className={`px-2.5 py-1.5 rounded-md border ${
                 isCritical ? 'bg-rose-950/20 border-rose-500/30' : isWarning ? 'bg-amber-950/20 border-amber-500/30' : 'bg-slate-900/80 border-slate-800'
@@ -827,9 +1038,19 @@ export const QuantumCatalog: React.FC<Props> = ({
             )}
 
             {(res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita) && (
-              <div className="px-2.5 py-1.5 rounded-md bg-slate-900/80 border border-slate-800">
-                <span className="text-slate-400 text-[9.5px] block font-bold">Azione Suggerita:</span>
-                <span className="font-semibold text-xs text-cyan-300 leading-snug">
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-slate-400 text-[10px] block font-bold uppercase tracking-wider">
+                    Consiglio Operativo / Azione Suggerita:
+                  </span>
+                  {res.motivo_allarme && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/50 text-rose-300 text-[10.5px] font-bold">
+                      <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>Motivo Allarme: {res.motivo_allarme}</span>
+                    </span>
+                  )}
+                </div>
+                <span className="font-bold text-base sm:text-lg text-cyan-200 block leading-snug">
                   {res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita}
                 </span>
               </div>
@@ -948,9 +1169,17 @@ export const QuantumCatalog: React.FC<Props> = ({
             </span>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
-            <span className="text-[11px] font-mono text-slate-400 block font-semibold">Cosa Fare Subito (Istruzione Operatore):</span>
-            <span className="text-sm font-semibold text-cyan-200 block font-sans leading-snug">
+          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-[11px] font-mono text-slate-400 block font-semibold">Cosa Fare Subito (Istruzione Operatore):</span>
+              {res?.motivo_allarme && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/50 text-rose-300 text-[10.5px] font-bold font-mono">
+                  <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span>Motivo Allarme: {res.motivo_allarme}</span>
+                </span>
+              )}
+            </div>
+            <span className="text-base sm:text-lg font-bold text-cyan-200 block font-sans leading-snug">
               {operatorAction}
             </span>
           </div>
@@ -969,22 +1198,36 @@ export const QuantumCatalog: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Metriche dettagliate se presenti */}
-        {res?.metriche_dettagliate && Object.keys(res.metriche_dettagliate).length > 0 && (
-          <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80">
-            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-2 font-bold">
-              Telemetria Sensori Chiave:
-            </span>
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
-              {Object.entries(res.metriche_dettagliate).map(([k, v]) => (
-                <div key={k} className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex flex-col justify-between">
-                  <span className="text-[9.5px] font-mono text-slate-400 truncate" title={k}>{k}:</span>
-                  <span className="text-xs font-bold font-mono text-cyan-300 truncate mt-0.5">{String(v)}</span>
-                </div>
-              ))}
+        {/* Metriche dettagliate se presenti - Deduplicazione contro metrica principale */}
+        {res?.metriche_dettagliate && Object.keys(res.metriche_dettagliate).length > 0 && (() => {
+          const primaryValClean = String(res.metrica_principale_valore || '').replace(/[^\d.-]/g, '');
+          const entries = Object.entries(res.metriche_dettagliate).filter(([k, v]) => {
+            const keyLower = k.toLowerCase().trim();
+            const valClean = String(v).replace(/[^\d.-]/g, '');
+            if (calc.id === 1 && (keyLower.includes('congestione') || valClean === primaryValClean)) {
+              return false;
+            }
+            return true;
+          });
+
+          if (entries.length === 0) return null;
+
+          return (
+            <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80">
+              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-2 font-bold">
+                Telemetria Sensori Chiave:
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                {entries.map(([k, v]) => (
+                  <div key={k} className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex flex-col justify-between">
+                    <span className="text-[9.5px] font-mono text-slate-400 truncate" title={k}>{k}:</span>
+                    <span className="text-xs font-bold font-mono text-cyan-300 truncate mt-0.5">{String(v)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Barra Azioni a Grande Formato */}
         <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -993,7 +1236,18 @@ export const QuantumCatalog: React.FC<Props> = ({
             <span>Ultimo campionamento: {res?.timestamp ? new Date(res.timestamp).toLocaleTimeString() : 'In tempo reale'}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {SIMULATION_CONFIGS[calc.id] && (
+              <button
+                type="button"
+                onClick={() => handleOpenSimulation(calc)}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-950/40 cursor-pointer min-h-[42px] transition-all hover:scale-[1.02] active:scale-[0.98]"
+                title={`Avvia simulazione di confronto Prima / Dopo per ${calc.name}`}
+              >
+                <Sliders className="w-4 h-4 text-purple-200" />
+                <span>Simula (Prima / Dopo)</span>
+              </button>
+            )}
             {isAdmin && (
               <button
                 type="button"
@@ -1016,6 +1270,258 @@ export const QuantumCatalog: React.FC<Props> = ({
             </button>
           </div>
         </div>
+      </div>
+    );
+  };
+
+  {/* Pannello Simulazione Confronto "Prima / Dopo" Split-Screen */}
+  const renderSimulationComparisonPanel = (calc: QuantumCalculationMeta) => {
+    const config = SIMULATION_CONFIGS[calc.id];
+    if (!config) return null;
+
+    return (
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-950 border-2 border-indigo-500/60 shadow-2xl space-y-4 font-mono text-xs">
+        {/* Header del Pannello di Simulazione */}
+        <div className="flex items-center justify-between pb-3 border-b border-indigo-500/30 flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
+              <Sliders className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white">Simulazione Confronto (Prima / Dopo)</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-500/50">
+                  Calcolo #{calc.id}
+                </span>
+              </div>
+              <p className="text-[11px] text-indigo-300/80">
+                Esecuzione in memoria isolata • Snapshot telemetria congelata
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCloseSimulation}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 transition-colors cursor-pointer flex items-center gap-1.5 text-[11px] font-bold"
+            title="Chiudi simulazione e ripristina visualizzazione standard"
+          >
+            <X className="w-4 h-4" />
+            <span>Chiudi</span>
+          </button>
+        </div>
+
+        {/* Due Colonne: Prima (Congelata) vs Dopo (Modificabile) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {/* Colonna PRIMA: Snapshot Congelato */}
+          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+              <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                PRIMA: Telemetria Congelata
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[9.5px] bg-slate-900 border border-slate-700 text-slate-400">
+                Sola Lettura
+              </span>
+            </div>
+            <div className="space-y-2">
+              {config.inputs.map(input => (
+                <div key={input.key} className="flex items-center justify-between p-2 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <span className="text-slate-400 text-[11px]">{input.label}:</span>
+                  <span className="font-bold text-slate-200 text-xs">
+                    {formatInputValue(simPrimaInputs[input.key])} {input.unit || ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Colonna DOPO: Modificabile dall'operatore */}
+          <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-500/40 space-y-2.5">
+            <div className="flex items-center justify-between border-b border-indigo-500/30 pb-1.5">
+              <span className="text-[11px] font-bold text-indigo-300 flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                DOPO: Parametri di Simulazione
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[9.5px] bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-bold">
+                Modificabile
+              </span>
+            </div>
+            <div className="space-y-2">
+              {config.inputs.map(input => (
+                <div key={input.key} className="space-y-1">
+                  <label className="text-[10.5px] text-slate-300 flex justify-between">
+                    <span>{input.label}:</span>
+                    {input.unit && <span className="text-slate-500">{input.unit}</span>}
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={simDopoInputs[input.key] ?? ''}
+                    onChange={e => {
+                      const val = Number(e.target.value);
+                      setSimDopoInputs(prev => ({ ...prev, [input.key]: val }));
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-indigo-500/50 text-indigo-100 font-mono text-xs focus:ring-1 focus:ring-indigo-400 focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Pulsante Esegui Confronto */}
+        <div className="flex items-center justify-end gap-3 pt-1">
+          <button
+            type="button"
+            disabled={isSimulating}
+            onClick={() => handleRunSimulation(calc.id)}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-950/50 cursor-pointer min-h-[40px] transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            {isSimulating ? (
+              <>
+                <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                <span>Simulazione quantistica in memoria...</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Esegui Confronto</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Tabella Risultati Confronto (se eseguito) */}
+        {simComparisonResult && (
+          <div className="space-y-3 pt-3 border-t border-indigo-500/30 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                Tabella Scostamento (Delta Analitico)
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Verde = Migliorativo • Rosso = Peggiorativo
+              </span>
+            </div>
+
+            {/* Tabella Input */}
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full text-left text-[11px] font-mono border-collapse">
+                <thead>
+                  <tr className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                    <th className="p-2">Parametro Input</th>
+                    <th className="p-2">Prima</th>
+                    <th className="p-2">Dopo</th>
+                    <th className="p-2">Delta Input</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80 bg-slate-900/60">
+                  {config.inputs.map(input => {
+                    const p = simPrimaInputs[input.key];
+                    const d = simDopoInputs[input.key];
+                    const diff = (typeof d === 'number' && typeof p === 'number') ? Number((d - p).toFixed(2)) : null;
+                    return (
+                      <tr key={input.key} className="hover:bg-slate-800/40">
+                        <td className="p-2 text-slate-300 font-semibold">{input.label}</td>
+                        <td className="p-2 text-slate-400">{formatInputValue(p)} {input.unit}</td>
+                        <td className="p-2 text-indigo-300 font-bold">{formatInputValue(d)} {input.unit}</td>
+                        <td className="p-2 font-mono">
+                          {diff !== null ? (
+                            <span className={diff === 0 ? 'text-slate-400' : 'text-cyan-300'}>
+                              {diff > 0 ? `+${diff}` : diff} {input.unit}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500">{d === p ? '=' : 'MODIFICATO'}</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Tabella Output */}
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full text-left text-[11px] font-mono border-collapse">
+                <thead>
+                  <tr className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                    <th className="p-2">Metrica Output QPU</th>
+                    <th className="p-2">Prima</th>
+                    <th className="p-2">Dopo</th>
+                    <th className="p-2">Delta / Esito</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80 bg-slate-900/60">
+                  {config.outputs.map(output => {
+                    const pVal = simComparisonResult.prima[output.key];
+                    const dVal = simComparisonResult.dopo[output.key];
+                    const numP = typeof pVal === 'number' ? pVal : parseFloat(String(pVal));
+                    const numD = typeof dVal === 'number' ? dVal : parseFloat(String(dVal));
+                    const hasNumbers = !isNaN(numP) && !isNaN(numD);
+                    const diff = hasNumbers ? Number((numD - numP).toFixed(2)) : null;
+
+                    let isBetter: boolean | null = null;
+                    if (diff !== null && diff !== 0) {
+                      if (output.betterDirection === 'higher') {
+                        isBetter = diff > 0;
+                      } else if (output.betterDirection === 'lower') {
+                        isBetter = diff < 0;
+                      }
+                    } else if (typeof pVal === 'boolean' && typeof dVal === 'boolean') {
+                      if (pVal !== dVal) {
+                        isBetter = !dVal; // per allarmi, false è meglio
+                      }
+                    } else if (typeof pVal === 'string' && typeof dVal === 'string') {
+                      if (dVal.includes('REGOLARE') || dVal.includes('APPROVATO') || dVal.includes('PARETO')) {
+                        if (!pVal.includes('REGOLARE') && !pVal.includes('APPROVATO') && !pVal.includes('PARETO')) {
+                          isBetter = true;
+                        }
+                      } else if (dVal.includes('ALLARME') || dVal.includes('SCARTATO') || dVal.includes('CRITICO')) {
+                        if (!pVal.includes('ALLARME') && !pVal.includes('SCARTATO') && !pVal.includes('CRITICO')) {
+                          isBetter = false;
+                        }
+                      }
+                    }
+
+                    return (
+                      <tr key={output.key} className="hover:bg-slate-800/40">
+                        <td className="p-2 text-slate-200 font-semibold">{output.label}</td>
+                        <td className="p-2 text-slate-400">
+                          {formatInputValue(pVal)} {output.unit || ''}
+                        </td>
+                        <td className="p-2 text-white font-bold">
+                          {formatInputValue(dVal)} {output.unit || ''}
+                        </td>
+                        <td className="p-2">
+                          <span className={`px-2 py-0.5 rounded text-[10.5px] font-bold ${
+                            isBetter === true
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : isBetter === false
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}>
+                            {diff !== null ? (
+                              <>
+                                {diff > 0 ? `+${diff}` : diff} {output.unit || ''}
+                                {isBetter === true ? ' (Migliorato ✓)' : isBetter === false ? ' (Peggiorato ✗)' : ''}
+                              </>
+                            ) : (
+                              <>
+                                {String(dVal)}
+                                {isBetter === true ? ' (Migliorato ✓)' : isBetter === false ? ' (Peggiorato ✗)' : ''}
+                              </>
+                            )}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1340,6 +1846,18 @@ export const QuantumCatalog: React.FC<Props> = ({
               const isEnlarged = displayMode === 'table-focus';
 
               if (operatorMode) {
+                if (simulationCalcId === calc.id) {
+                  return (
+                    <div key={calc.id} id={`calc-card-${calc.id}`} className="col-span-full grid grid-cols-1 xl:grid-cols-2 gap-4 w-full animate-in fade-in duration-150">
+                      <div className="w-full">
+                        {renderOperatorTrafficLightCard(calc, result)}
+                      </div>
+                      <div className="w-full">
+                        {renderSimulationComparisonPanel(calc)}
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <div key={calc.id} id={`calc-card-${calc.id}`} className="space-y-4 w-full animate-in fade-in duration-150">
                     {renderOperatorTrafficLightCard(calc, result)}
@@ -1347,9 +1865,8 @@ export const QuantumCatalog: React.FC<Props> = ({
                 );
               }
 
-              return (
+              const cardContent = (
                 <div 
-                  key={calc.id}
                   id={`calc-card-${calc.id}`}
                   className={`bg-slate-900 border rounded-2xl p-3 sm:p-4 shadow-xl flex flex-col justify-between space-y-2.5 sm:space-y-3 transition-all ${
                     isEnlarged
@@ -2225,8 +2742,8 @@ export const QuantumCatalog: React.FC<Props> = ({
 
                   </div>
 
-                  {/* Pulsante Ricalcola Parametri manuali (sulla stessa riga degli input) */}
-                  <div className="shrink-0 flex items-end">
+                  {/* Pulsante Ricalcola Parametri manuali e Pulsante Simula (sulla stessa riga degli input) */}
+                  <div className="shrink-0 flex items-center gap-2 flex-wrap">
                     <button
                       onClick={() => executeCalculation(calc)}
                       disabled={isBusy}
@@ -2251,6 +2768,19 @@ export const QuantumCatalog: React.FC<Props> = ({
                       )}
                     </button>
 
+                    {/* Pulsante Simula (Prima / Dopo) SOLO per i 10 calcoli abilitati */}
+                    {SIMULATION_CONFIGS[calc.id] && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSimulation(calc)}
+                        className="w-full lg:w-auto px-3.5 py-2 h-[38px] rounded-lg bg-gradient-to-r from-purple-900/90 to-indigo-900/90 hover:from-purple-800 hover:to-indigo-800 border border-purple-500/60 hover:border-purple-400 text-purple-200 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+                        title={`Avvia simulazione di confronto Prima / Dopo per il Calcolo #${calc.id}`}
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-purple-300" />
+                        <span>Simula (Prima / Dopo)</span>
+                      </button>
+                    )}
+
                     {/* Secondo Pulsante Esplicito File Python & Risultato */}
                     {canViewPythonCode && (
                       <button
@@ -2269,6 +2799,25 @@ export const QuantumCatalog: React.FC<Props> = ({
             )}
                   </div>
                 </div>
+              );
+
+              if (simulationCalcId === calc.id) {
+                return (
+                  <div key={calc.id} className="col-span-full grid grid-cols-1 xl:grid-cols-2 gap-4 w-full animate-in fade-in duration-150">
+                    <div className="w-full">
+                      {cardContent}
+                    </div>
+                    <div className="w-full">
+                      {renderSimulationComparisonPanel(calc)}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <React.Fragment key={calc.id}>
+                  {cardContent}
+                </React.Fragment>
               );
             })
           )}

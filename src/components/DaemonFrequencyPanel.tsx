@@ -912,7 +912,7 @@ services:
                 </span>
               </div>
               <p className="text-xs text-slate-300 font-sans mt-0.5">
-                Scarica i 2 file necessari (Demone + Certificato) per collegare in sicurezza i PC di stabilimento alla telemetria quantistica.
+                Scarica i 2 file necessari (<strong>Demone</strong> + <strong>Certificato</strong>): il demone invia la telemetria delle macchine e <strong>la piattaforma usa il certificato per riconoscere il PC dello stabilimento che le invia i dati</strong> (conformità NIS2).
               </p>
             </div>
           </div>
@@ -1031,6 +1031,9 @@ services:
 
           <div className="text-xs text-slate-200 font-sans leading-relaxed space-y-2">
             <p>
+              <strong>A cosa serve il certificato?</strong> La piattaforma usa il certificato per riconoscere in modo sicuro il PC dello stabilimento che le invia i dati (così solo i computer autorizzati della fabbrica possono trasmettere, come richiesto dalla direttiva NIS2).
+            </p>
+            <p>
               Salva entrambi i file scaricati (<strong>1. File Demone</strong> e <strong>2. File Certificato NIS2</strong>) nella <strong className="text-purple-300 font-mono bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-500/40">STESSA IDENTICA CARTELLA</strong> sul computer collegato ai macchinari dello stabilimento.
             </p>
 
@@ -1095,7 +1098,7 @@ services:
                 </div>
                 <div>
                   <strong className="text-purple-300 font-mono block">2. File Certificato NIS2 (.PFX):</strong>
-                  Identità crittografica univoca dello stabilimento <code className="text-slate-200">{activeTenant.id}</code> per l'autenticazione mTLS del computer.
+                  <strong>La piattaforma usa questo certificato per riconoscere il PC dello stabilimento</strong> (<code className="text-slate-200">{activeTenant.id}</code>) <strong>che le invia i dati</strong>, verificando che sia un computer autorizzato.
                 </div>
               </div>
             </div>
@@ -1313,7 +1316,7 @@ services:
                 3. Handshake & Associazione Automatica
               </h4>
               <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                <strong>Come avviene l'associazione:</strong> All'avvio, il demone rileva il MAC Address fisico e il nome del PC. Convalida il certificato con il cloud JOKER 80 e associa istantaneamente e in modo permanente il computer a questo stabilimento.
+                <strong>Come avviene il riconoscimento:</strong> All'avvio, il demone presenta il certificato alla piattaforma, che riconosce il PC dello stabilimento che le invia i dati (rilevando anche MAC Address e nome del computer) e lo associa automaticamente a questo impianto.
               </p>
             </div>
 

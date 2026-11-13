@@ -2633,7 +2633,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400 leading-relaxed">
-                          Il download del demone di avvio (.BAT) e del certificato crittografico mTLS avviene nella console <strong>Gateway Demoni & Sicurezza NIS2</strong>.
+                          Nella console <strong>Gateway Demoni & Sicurezza NIS2</strong> scarichi il file di avvio (.BAT) e il certificato che la piattaforma usa per riconoscere il PC dello stabilimento che le invia i dati.
                         </p>
                         <button
                           type="button"
@@ -3373,7 +3373,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Canale crittografato per far comunicare il tuo PC locale / Gateway SM.I.LE80 con i server Google Cloud.
+                    La piattaforma usa il certificato mTLS per riconoscere il PC dello stabilimento / Gateway SM.I.LE80 che le invia i dati verso i server Google Cloud.
                   </p>
                 </div>
               </div>
