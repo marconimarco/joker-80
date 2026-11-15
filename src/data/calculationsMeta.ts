@@ -172,7 +172,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati: classe_rotazione (frequenza prelievo) accoppiata a celle_libere_3d nelle campate basse e tolleranza sagoma.',
       parametriAccoppiati: ['classe_rotazione', 'celle_libere_3d'],
-      soglieAnomale: 'IRREGOLARE se classe_rotazione = HIGH e celle_libere_3d < 15 o sagoma_fuori_asse = true (rischio blocco shuttle)'
+      soglieAnomale: 'IRREGOLARE se classe_rotazione = HIGH e celle_libere_3d < 25 (< 10 critico) o sagoma_fuori_asse = true (rischio blocco shuttle)'
     }
   },
   {
@@ -201,7 +201,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati strutturali: il vettore pressione interagisce con la micro_inclinazione angolare.',
       parametriAccoppiati: ['vettore_pressione_bar', 'micro_inclinazione'],
-      soglieAnomale: 'IRREGOLARE se max(vettore_pressione_bar) > 18.0 bar o micro_inclinazione > 1.2 gradi o carico_pattini_integri = false (rischio collasso campata)'
+      soglieAnomale: 'IRREGOLARE se max(vettore_pressione_bar) > 18.0 bar o micro_inclinazione > 0.40° o carico_pattini_integri = false (fattore sicurezza < 1.5x)'
     }
   },
   {
@@ -256,7 +256,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati: volume ordini pallet accoppiato al coefficiente_traffico del corridoio centrale.',
       parametriAccoppiati: ['lista_ordini_camion', 'coefficiente_traffico'],
-      soglieAnomale: 'IRREGOLARE se coefficiente_traffico > 0.80 e lista_ordini > 5 missioni contemporanee (ingorgo crocevia)'
+      soglieAnomale: 'IRREGOLARE se coefficiente_traffico >= 0.75 (ingorgo corridoi navette LGV)'
     }
   },
   {
@@ -287,7 +287,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati meccanici: volume_disponibile_mc e bilanciamento asse (lista_pesi_pallet).',
       parametriAccoppiati: ['volume_disponibile_mc', 'lista_pesi_pallet'],
-      soglieAnomale: 'IRREGOLARE se carico totale > 28000 kg o sbilanciamento tra asse anteriore e posteriore > 25%'
+      soglieAnomale: 'ATTENZIONE se carico > 28000 kg; CRITICO se > 44000 kg (Codice Strada) o saturazione > 100%'
     }
   },
   {
@@ -560,7 +560,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Potenza erogata kW accoppiata a temperatura piastre a terra per prevenire degrado termico.',
       parametriAccoppiati: ['potenza_erogata_totale_kw', 'temp_piastre_c'],
-      soglieAnomale: 'IRREGOLARE se potenza_erogata_totale_kw > 120 kW o temp_piastre_c > 45 °C (surriscaldamento induttivo)'
+      soglieAnomale: 'ATTENZIONE se potenza > 110 kW o temp_piastre_c > 45 °C; CRITICO se > 120 kW o > 65 °C'
     }
   },
   {
@@ -590,7 +590,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Forza deformazione pattini N accoppiata a umidità legno % per stimare la portanza elastica.',
       parametriAccoppiati: ['forza_deformazione_pattini_n', 'umidita_legno_pct'],
-      soglieAnomale: 'IRREGOLARE se forza_deformazione_pattini_n < 2500 N o umidita_legno_pct > 18% o asseSpaccata = true'
+      soglieAnomale: 'IRREGOLARE se forza_deformazione_pattini_n < 2600 N o umidita_legno_pct > 17.5% o difetto ottico rilevato'
     }
   },
   {

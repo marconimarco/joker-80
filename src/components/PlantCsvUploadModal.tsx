@@ -40,6 +40,7 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [parsedRows, setParsedRows] = useState<Array<Record<string, string>>>([]);
+  const [parsedInputs, setParsedInputs] = useState<Record<string, any>>({});
   const [columns, setColumns] = useState<string[]>([]);
   const [detectedNodes, setDetectedNodes] = useState<{ existing: string[]; unknown: string[] }>({ existing: [], unknown: [] });
   const [isProcessing, setIsProcessing] = useState(false);
@@ -178,6 +179,10 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
         rows.push(rowObj);
 
         if (isWideMatrix) {
+          // Rileva anche eventuale colonna nodo/macchina nei CSV orizzontali
+          if (nodeColIdx !== -1 && vals[nodeColIdx]) {
+            foundNodesSet.add(vals[nodeColIdx]);
+          }
           // Matrice orizzontale: ogni intestazione è la chiave del parametro
           rawHeaderCols.forEach((colName, cIdx) => {
             const rawVal = vals[cIdx];
@@ -225,11 +230,13 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
 
       setDetectedNodes({ existing: existingNames, unknown: unknownNames });
       setParsedRows(rows);
+      setParsedInputs(extractedInputs);
       setErrorMessage(null);
       return { rows, extractedInputs };
     } catch (err: any) {
       setErrorMessage(err.message || 'Formato CSV non valido.');
       setParsedRows([]);
+      setParsedInputs({});
       setColumns([]);
       setDetectedNodes({ existing: [], unknown: [] });
       return null;
@@ -269,32 +276,32 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
     setIsProcessing(true);
 
     try {
-      const extractedInputs: Record<string, any> = {};
+      const extractedInputs: Record<string, any> = { ...parsedInputs };
       const newCustomMachines: MachineAsset[] = [];
 
-      // Mappatura parametri
-      parsedRows.forEach(row => {
-        // Cerca la chiave del parametro
-        const key = row['parametro_tecnico'] || 
-                    row['parametro'] || 
-                    row['chiave'] || 
-                    row['tag'] || 
-                    Object.values(row)[1] || 
-                    Object.values(row)[0];
-                    
-        // Cerca il valore
-        const val = row['valore'] || 
-                    row['val'] || 
-                    row['value'] || 
-                    row['misura'] || 
-                    Object.values(row)[2] || 
-                    Object.values(row)[1];
+      // Fallback mappatura verticale se parsedInputs fosse vuoto
+      if (Object.keys(extractedInputs).length === 0) {
+        parsedRows.forEach(row => {
+          const key = row['parametro_tecnico'] || 
+                      row['parametro'] || 
+                      row['chiave'] || 
+                      row['tag'] || 
+                      Object.values(row)[1] || 
+                      Object.values(row)[0];
+                      
+          const val = row['valore'] || 
+                      row['val'] || 
+                      row['value'] || 
+                      row['misura'] || 
+                      Object.values(row)[2] || 
+                      Object.values(row)[1];
 
-        if (key && val !== undefined) {
-          const num = Number(val);
-          extractedInputs[key] = !isNaN(num) && String(val).trim() !== '' ? num : val;
-        }
-      });
+          if (key && val !== undefined) {
+            const num = Number(val);
+            extractedInputs[key] = !isNaN(num) && String(val).trim() !== '' ? num : val;
+          }
+        });
+      }
 
       // Se ci sono nodi non esistenti rilevati, li registriamo dinamicamente nella topologia dell'impianto
       if (detectedNodes.unknown.length > 0) {

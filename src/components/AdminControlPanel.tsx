@@ -9,6 +9,7 @@ import {
   Trash2, 
   CheckCircle2, 
   AlertCircle,
+  AlertTriangle,
   Network,
   Cpu,
   Globe,
@@ -112,6 +113,20 @@ export const AdminControlPanel: React.FC<Props> = ({
   const [quickOpLinea, setQuickOpLinea] = useState('');
   const [quickOpFeedback, setQuickOpFeedback] = useState<string | null>(null);
   const [plantSearchTerm, setPlantSearchTerm] = useState('');
+  const [panelFeedback, setPanelFeedback] = useState<{ type: 'error' | 'info' | 'success'; message: string } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const showPanelNotice = (message: string, type: 'error' | 'info' | 'success' = 'error') => {
+    setPanelFeedback({ type, message });
+    setTimeout(() => {
+      setPanelFeedback(prev => (prev?.message === message ? null : prev));
+    }, 5000);
+  };
 
   const [users, setUsers] = useState<UserAccount[]>(() => AuthStorage.getUsers());
 
@@ -879,7 +894,7 @@ export const AdminControlPanel: React.FC<Props> = ({
   const handleSavePlantDirectly = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!plantNome.trim() || !plantEndpoint.trim()) {
-      alert('Compilare almeno il Nome Stabilimento e l\'Endpoint Gateway!');
+      showPanelNotice('Compilare almeno il Nome Stabilimento e l\'Endpoint Gateway!');
       return;
     }
 
@@ -1068,7 +1083,7 @@ export const AdminControlPanel: React.FC<Props> = ({
       setSaveSuccessMessage(`Stabilimento "${result.tenant.nome}" collegato e configurato con successo!`);
       setTimeout(() => setSaveSuccessMessage(null), 4000);
     } catch (err: any) {
-      alert(`Errore durante il collegamento: ${err.message}`);
+      showPanelNotice(`Errore durante il collegamento: ${err.message}`);
     } finally {
       setIsDiscovering(false);
       setDiscoveryStep('');
@@ -1098,17 +1113,23 @@ export const AdminControlPanel: React.FC<Props> = ({
   // Delete Tenant
   const handleDeleteTenant = (id: string, nome: string) => {
     if (id === 'local') {
-      alert('Non è possibile eliminare l\'ambiente locale di simulazione base.');
+      showPanelNotice('Non è possibile eliminare l\'ambiente locale di simulazione base.');
       return;
     }
-    if (window.confirm(`Sei sicuro di voler rimuovere lo stabilimento "${nome}"? Gli operatori assegnati non potranno più accedere.`)) {
-      AuthStorage.deleteTenant(id);
-      const updated = AuthStorage.getTenants();
-      onUpdateTenants(updated);
-      if (activeTenant.id === id) {
-        onSelectTenant(updated[0]);
+    setConfirmDialog({
+      title: 'Conferma Rimozione Stabilimento',
+      message: `Sei sicuro di voler rimuovere lo stabilimento "${nome}"? Gli operatori assegnati non potranno più accedere.`,
+      confirmLabel: 'Rimuovi Stabilimento',
+      onConfirm: () => {
+        AuthStorage.deleteTenant(id);
+        const updated = AuthStorage.getTenants();
+        onUpdateTenants(updated);
+        if (activeTenant.id === id && updated.length > 0) {
+          onSelectTenant(updated[0]);
+        }
+        showPanelNotice(`Stabilimento "${nome}" rimosso con successo.`, 'success');
       }
-    }
+    });
   };
 
   // Copy helper
@@ -1124,14 +1145,14 @@ export const AdminControlPanel: React.FC<Props> = ({
     if (!newOpUsername.trim() || !newOpNomeCompleto.trim()) return;
 
     if (users.some(u => u.username.toLowerCase() === newOpUsername.trim().toLowerCase())) {
-      alert('Un operatore con questo username esiste già!');
+      showPanelNotice('Un operatore con questo username esiste già!');
       return;
     }
 
     const availablePool = isResponsabile ? scopedTenants : tenants;
     const targetTenant = availablePool.find(t => t.id === newOpTenantId) || availablePool[0];
     if (!targetTenant) {
-      alert('Seleziona uno stabilimento valido per la tua società.');
+      showPanelNotice('Seleziona uno stabilimento valido per la tua società.');
       return;
     }
 
@@ -1159,7 +1180,7 @@ export const AdminControlPanel: React.FC<Props> = ({
 
   const handleOpenPermissionsModal = (op: UserAccount) => {
     if (isResponsabile && !isUserInCompany(op, userAzienda)) {
-      alert(`Accesso non autorizzato: come Responsabile di ${userAzienda} puoi visualizzare e gestire esclusivamente gli operatori del tuo gruppo.`);
+      showPanelNotice(`Accesso non autorizzato: come Responsabile di ${userAzienda} puoi visualizzare e gestire esclusivamente gli operatori del tuo gruppo.`);
       return;
     }
     setEditingPermissionsUser(op);
@@ -1196,24 +1217,30 @@ export const AdminControlPanel: React.FC<Props> = ({
 
   const handleDeleteUser = (id: string, username: string) => {
     if (username === 'admin') {
-      alert('Non puoi eliminare l\'amministratore principale.');
+      showPanelNotice('Non puoi eliminare l\'amministratore principale.');
       return;
     }
     const targetUser = users.find(u => u.id === id);
     if (isResponsabile && targetUser && !isUserInCompany(targetUser, userAzienda)) {
-      alert(`Operazione non consentita: puoi rimuovere solo operatori della società ${userAzienda}.`);
+      showPanelNotice(`Operazione non consentita: puoi rimuovere solo operatori della società ${userAzienda}.`);
       return;
     }
-    if (window.confirm(`Rimuovere l'utente ${username}?`)) {
-      AuthStorage.deleteUser(id);
-      setUsers(AuthStorage.getUsers());
-    }
+    setConfirmDialog({
+      title: 'Conferma Rimozione Utente',
+      message: `Sei sicuro di voler rimuovere l'utente "${username}"?`,
+      confirmLabel: 'Rimuovi Utente',
+      onConfirm: () => {
+        AuthStorage.deleteUser(id);
+        setUsers(AuthStorage.getUsers());
+        showPanelNotice(`Utente "${username}" rimosso.`, 'success');
+      }
+    });
   };
 
   const handleToggleUserActive = (id: string) => {
     const targetUser = users.find(u => u.id === id);
     if (isResponsabile && targetUser && !isUserInCompany(targetUser, userAzienda)) {
-      alert(`Operazione non consentita: puoi modificare lo stato solo di operatori della società ${userAzienda}.`);
+      showPanelNotice(`Operazione non consentita: puoi modificare lo stato solo di operatori della società ${userAzienda}.`);
       return;
     }
     const updated = users.map(u => {
@@ -1245,6 +1272,26 @@ export const AdminControlPanel: React.FC<Props> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
+      {panelFeedback && (
+        <div className={`p-3.5 rounded-xl border font-mono text-xs flex items-center justify-between gap-3 shadow-lg ${
+          panelFeedback.type === 'error'
+            ? 'bg-rose-950/90 border-rose-500/50 text-rose-200'
+            : panelFeedback.type === 'success'
+            ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200'
+            : 'bg-cyan-950/90 border-cyan-500/50 text-cyan-200'
+        }`}>
+          <span>{panelFeedback.message}</span>
+          <button
+            type="button"
+            onClick={() => setPanelFeedback(null)}
+            className="p-1 rounded-lg hover:bg-white/10 text-current cursor-pointer shrink-0"
+            title="Chiudi avviso"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Banner: Informazioni Ruolo & Stabilimento */}
       <div className={`p-4 sm:p-5 rounded-2xl bg-slate-900 border shadow-xl space-y-4 ${
         isResponsabile 
@@ -1294,7 +1341,7 @@ export const AdminControlPanel: React.FC<Props> = ({
               }`}
             >
               <Users className="w-3.5 h-3.5 shrink-0" />
-              <span>Operatori & Permessi Nodi ({filteredOperators.length})</span>
+              <span>Operatori & Permessi Macchinari ({filteredOperators.length})</span>
             </button>
 
             <button
@@ -1318,7 +1365,7 @@ export const AdminControlPanel: React.FC<Props> = ({
               }`}
             >
               <Zap className="w-3.5 h-3.5 shrink-0" />
-              <span>{isResponsabile ? `Stabilimenti & Nodi Società (${scopedTenants.length})` : `Connessione Rapida & Sedi (${tenants.length})`}</span>
+              <span>{isResponsabile ? `Stabilimenti / Plant Società (${scopedTenants.length})` : `Connessione Rapida & Sedi (${tenants.length})`}</span>
             </button>
           </div>
 
@@ -2716,6 +2763,30 @@ export const AdminControlPanel: React.FC<Props> = ({
               </div>
             </div>
 
+            {/* Selettore Stabilimento / Plant direttamente nella scheda Digital Twin */}
+            {(isResponsabile ? scopedTenants : tenants).length > 1 && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 p-3 rounded-xl bg-slate-950/90 border border-cyan-500/30 font-mono text-xs">
+                <span className="text-cyan-300 font-bold flex items-center gap-1.5 shrink-0">
+                  <Factory className="w-4 h-4 text-cyan-400" />
+                  <span>Stabilimento / Plant da gestire:</span>
+                </span>
+                <select
+                  value={activeTenant.id}
+                  onChange={(e) => {
+                    const chosen = (isResponsabile ? scopedTenants : tenants).find(t => t.id === e.target.value);
+                    if (chosen) onSelectTenant(chosen);
+                  }}
+                  className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:border-cyan-400 focus:outline-none text-white font-bold text-xs cursor-pointer"
+                >
+                  {(isResponsabile ? scopedTenants : tenants).map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.nome} — {t.sito} ({t.plantTopology?.macchinari?.length || 0} macchinari)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* QPU Dimensioning & Hamiltonian Matrix Spec */}
             {activeTenant.plantTopology && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
@@ -2775,10 +2846,10 @@ export const AdminControlPanel: React.FC<Props> = ({
                   <div>
                     <h4 className="text-xs font-bold font-mono text-white flex items-center gap-2">
                       <Cpu className="w-4 h-4 text-emerald-400" />
-                      Interruttori Rapidi Nodi Elettric80 dello Stabilimento ({activeKeys.length}/{PLANT_MACHINERY_NODES.length} attivi)
+                      Tipologie di Macchinari Elettric80 nello Stabilimento ({activeKeys.length}/{PLANT_MACHINERY_NODES.length} attive)
                     </h4>
                     <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-                      Aggiungi o togli istantaneamente macro-nodi industriali per questo stabilimento. L'attivazione/disattivazione sincronizza i calcoli operativi e la telemetria live.
+                      Attiva o rimuovi un'intera famiglia di macchinari per lo stabilimento selezionato. Quelle in verde sono installate (puoi rimuoverle); quelle grigie sono assenti (puoi aggiungerle).
                     </p>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700 self-start sm:self-auto">
@@ -2831,7 +2902,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                           {isActive ? (
                             <>
                               <Trash2 className="w-3 h-3 text-rose-400" />
-                              <span>Rimuovi Nodo</span>
+                              <span>Rimuovi Macchinario</span>
                             </>
                           ) : (
                             <>
@@ -2906,10 +2977,11 @@ export const AdminControlPanel: React.FC<Props> = ({
                           <button
                             type="button"
                             onClick={() => handleRemoveMachineFromActivePlant(mac.id)}
-                            className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
-                            title={`Rimuovi macchinario "${mac.nome}"`}
+                            className="px-2 py-0.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/40 hover:border-rose-400 text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                            title={`Rimuovi singola unità "${mac.nome}"`}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3 h-3" />
+                            <span>Rimuovi</span>
                           </button>
                         </div>
                       </div>
@@ -3212,21 +3284,40 @@ export const AdminControlPanel: React.FC<Props> = ({
                 <select
                   value={operatorFilterTenant}
                   onChange={e => setOperatorFilterTenant(e.target.value)}
-                  className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none"
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 text-xs focus:border-cyan-400 focus:outline-none cursor-pointer"
                 >
                   <option value="all">
                     {isResponsabile ? `Tutti gli Stabilimenti ${userAzienda}` : 'Tutti gli Stabilimenti'}
                   </option>
-                  {(isResponsabile ? scopedTenants : tenants).map(t => (
-                    <option key={t.id} value={t.id}>{t.nome}</option>
-                  ))}
+                  {(isResponsabile ? scopedTenants : tenants).map(t => {
+                    const countForPlant = users.filter(u => {
+                      if (u.ruolo === 'Amministratore') return false;
+                      if (isResponsabile && !isUserInCompany(u, userAzienda)) return false;
+                      return u.tenantId === t.id || (u.allowedTenantIds && u.allowedTenantIds.includes(t.id));
+                    }).length;
+                    return (
+                      <option key={t.id} value={t.id}>
+                        {t.nome} ({countForPlant})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             </div>
 
             <div className="space-y-2.5 max-h-[550px] overflow-y-auto pr-1">
-              {filteredOperators.map((op, opIdx) => {
-                const assignedTenant = tenants.find(t => t.id === op.tenantId);
+              {filteredOperators.length === 0 ? (
+                <div className="p-6 text-center rounded-xl border border-dashed border-slate-800 bg-slate-950/40 font-mono text-xs text-slate-400">
+                  Nessun operatore abilitato per lo stabilimento selezionato.
+                </div>
+              ) : (
+                filteredOperators.map((op, opIdx) => {
+                const opTenantIds = (op.allowedTenantIds && op.allowedTenantIds.length > 0)
+                  ? op.allowedTenantIds
+                  : (op.tenantId ? [op.tenantId] : []);
+                const opTenants = opTenantIds
+                  .map(tid => tenants.find(t => t.id === tid))
+                  .filter((t): t is FactoryTenant => Boolean(t));
                 return (
                   <div
                     key={`${op.id || 'op'}-${opIdx}`}
@@ -3253,14 +3344,15 @@ export const AdminControlPanel: React.FC<Props> = ({
                             {op.azienda}
                           </span>
                         )}
-                        {assignedTenant && (
+                        {opTenants.map(pt => (
                           <span 
+                            key={pt.id}
                             className="px-2 py-0.5 rounded text-[10px] font-bold text-white"
-                            style={{ backgroundColor: `${assignedTenant.logoColor || '#3b82f6'}33`, border: `1px solid ${assignedTenant.logoColor || '#3b82f6'}88` }}
+                            style={{ backgroundColor: `${pt.logoColor || '#3b82f6'}33`, border: `1px solid ${pt.logoColor || '#3b82f6'}88` }}
                           >
-                            {assignedTenant.nome.split('(')[0].trim()}
+                            {pt.nome.includes(' - ') ? pt.nome.split(' - ')[1] : pt.nome.split('(')[0].trim()}
                           </span>
-                        )}
+                        ))}
                         {!op.attivo && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/40">
                             DISABILITATO
@@ -3349,7 +3441,8 @@ export const AdminControlPanel: React.FC<Props> = ({
                     </div>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
         </div>
@@ -4664,6 +4757,43 @@ export const AdminControlPanel: React.FC<Props> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal di Conferma Sicuro (Sostituto di window.confirm per compatibilità iFrame) */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-slate-900 border border-rose-500/50 rounded-2xl shadow-2xl p-5 space-y-4 font-mono">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-400 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm sm:text-base font-bold text-white">{confirmDialog.title}</h3>
+                <p className="text-xs text-slate-300 font-sans leading-relaxed">{confirmDialog.message}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const fn = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  fn();
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
+              >
+                {confirmDialog.confirmLabel || 'Conferma'}
+              </button>
+            </div>
           </div>
         </div>
       )}

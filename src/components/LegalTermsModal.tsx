@@ -72,8 +72,6 @@ export const LegalTermsModal: React.FC<Props> = ({
   };
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
     const contentHtml = LEGAL_SECTIONS.map(s => `
       <div style="margin-bottom: 40px; font-family: monospace; white-space: pre-wrap; font-size: 12px; line-height: 1.6;">
         <h2 style="color: #0284c7; border-bottom: 2px solid #0284c7; padding-bottom: 6px;">${s.title}</h2>
@@ -83,7 +81,7 @@ export const LegalTermsModal: React.FC<Props> = ({
       </div>
     `).join('');
 
-    printWindow.document.write(`
+    const fullHtml = `
       <html>
         <head>
           <title>JOKER 80 - Condizioni Legali (EULA, Disclaimer, NDA, Privacy Policy)</title>
@@ -98,10 +96,40 @@ export const LegalTermsModal: React.FC<Props> = ({
           ${contentHtml}
         </body>
       </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    `;
+
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow?.document;
+      if (doc && iframe.contentWindow) {
+        doc.open();
+        doc.write(fullHtml);
+        doc.close();
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        setTimeout(() => {
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }, 2000);
+        return;
+      }
+    } catch {
+      // Fallback a download HTML stampabile se la stampa da iframe fosse bloccata
+    }
+
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `JOKER80_ATTI_LEGALI_${new Date().toISOString().split('T')[0]}.html`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // Filter content if search query is present

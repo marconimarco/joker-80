@@ -4,7 +4,6 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { createNIS2MtlsAgent, getNIS2MtlsStatus, installPfxBundle } from './server/mtlsClient';
 import https from 'https';
-import { GoogleGenAI } from '@google/genai';
 
 async function startServer() {
   const app = express();
@@ -470,153 +469,6 @@ async function startServer() {
     }
   });
 
-  // 4b. Digital Human Voice & Speech Conversation (Gemini 3.8 Flash with 90+ Languages)
-  app.post('/api/avatar/converse', async (req: Request, res: Response) => {
-    try {
-      const {
-        message = '',
-        language = 'it-IT',
-        languageName = 'Italiano',
-        persona = 'laila',
-        activePlant = 'Stabilimento Barilla Pedrignano (PR)',
-        plantTopology,
-        conversationHistory = []
-      } = req.body || {};
-
-      const personaName = persona === 'marco' ? 'Marco' : 'Laila';
-      const personaRole = persona === 'marco'
-        ? 'Responsabile Sistemi Navette LGV/AGV e Logistica Industriale'
-        : 'Ingegnere Senior di Automazione e Gemello Digitale Elettric80 / SM.I.LE80';
-
-      // 1. Assistente Vocale: Prova Gemini 3.8 Flash solo se configurato con chiave reale e non in modalità offline
-      const hasRealGeminiKey = Boolean(
-        process.env.GEMINI_API_KEY &&
-        process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY' &&
-        process.env.GEMINI_API_KEY !== 'none' &&
-        process.env.OFFLINE_MODE !== 'true' &&
-        process.env.CUBA_MINSAP_OFFLINE !== 'true'
-      );
-
-      if (hasRealGeminiKey) {
-        try {
-          const ai = new GoogleGenAI();
-          const systemInstruction = `Sei ${personaName}, una persona reale e ${personaRole} presso l'impianto ${activePlant}.
-Sei l'interfaccia umana vocale e visiva di JOKER 80 Quantum Control Panel.
-Parli direttamente con l'utente con voce naturale, tono professionale, caloroso e conciso (adatto per essere ascoltato a voce, massimo 2-4 frasi chiare).
-
-REGOLE CRUCIALI SULLA LINGUA:
-- L'utente desidera parlare in lingua: ${languageName} (Codice ISO: ${language}).
-- Rispondi ESCLUSIVAMENTE in ${languageName}.
-- Tieni la risposta concisa, diretta e colloquiale per la sintesi vocale.
-
-CONTESTO INDUSTRIALE JOKER 80:
-- Macchinari: fasciatori robotici Bema Silkworm, navette LGV/AGV a guida laser, baie di carico camion, magazzino automatico SmartStore.
-- Se l'utente chiede informazioni su macchinari o stato impianto, usa questi dati reali correnti: ${JSON.stringify(plantTopology || {})}.
-- Se rilevi una richiesta di calcolo operativo (es. camion/baie -> #1, rotte LGV -> #2, turni -> #3, vibrazioni fasciatore -> #14), citalo spontaneamente.
-- Rispetta sempre la regola: nessun dato fittizio generico se l'utente fa domande generali.`;
-
-          const contents: any[] = [];
-          if (Array.isArray(conversationHistory)) {
-            for (const item of conversationHistory.slice(-4)) {
-              if (item.text) {
-                contents.push({
-                  role: item.role === 'user' ? 'user' : 'model',
-                  parts: [{ text: item.text }]
-                });
-              }
-            }
-          }
-          contents.push({
-            role: 'user',
-            parts: [{ text: message || 'Ciao, spiegami lo stato dell\'impianto' }]
-          });
-
-          const geminiRes = await ai.models.generateContent({
-            model: 'gemini-3.8-flash',
-            contents,
-            config: {
-              systemInstruction,
-              temperature: 0.7,
-              maxOutputTokens: 250
-            }
-          });
-
-          const replyText = geminiRes.text || '';
-          if (replyText.trim()) {
-            return res.json({
-              success: true,
-              replyText: replyText.trim(),
-              persona: personaName,
-              language,
-              model: 'gemini-3.8-flash'
-            });
-          }
-        } catch (geminiErr: any) {
-          console.warn('[Gemini 3.8 Flash Avatar Call Warning]', geminiErr?.message || geminiErr);
-        }
-      }
-
-      // 2. Intelligent Domain Engine Fallback (Multilingual & Plant-aware)
-      const cleanMsg = (message || '').toLowerCase();
-      let replyText = '';
-      let detectedCalculationId: number | undefined;
-
-      const isEnglish = language.startsWith('en');
-      const isSpanish = language.startsWith('es');
-      const isFrench = language.startsWith('fr');
-      const isGerman = language.startsWith('de');
-
-      if (cleanMsg.includes('bema') || cleanMsg.includes('fasciator') || cleanMsg.includes('vibrazion') || cleanMsg.includes('film')) {
-        detectedCalculationId = 14;
-        if (isEnglish) replyText = `The Bema Silkworm wrappers are operating stably. Wrapping tension is calibrated and vibration levels are within normal safety thresholds.`;
-        else if (isSpanish) replyText = `Las enfardadoras Bema Silkworm están funcionando de manera estable. La tensión del film y las vibraciones están dentro de los límites de seguridad.`;
-        else if (isFrench) replyText = `Les banderoleuses Bema Silkworm fonctionnent normalement. La tension du film et les vibrations restent sous les seuils d'alerte.`;
-        else if (isGerman) replyText = `Die Bema Silkworm Wickler laufen stabil. Wickelspannung und Vibrationswerte liegen im sicheren Normbereich.`;
-        else replyText = `I fasciatori Bema Silkworm sono operativi e stabili. La tensione del film e le vibrazioni dei cuscinetti risultano entro le soglie nominali di sicurezza.`;
-      } else if (cleanMsg.includes('lgv') || cleanMsg.includes('agv') || cleanMsg.includes('navett') || cleanMsg.includes('batteri')) {
-        detectedCalculationId = 2;
-        if (isEnglish) replyText = `The LGV fleet is coordinated smoothly. All laser-guided vehicles maintain battery levels above 82% with no path bottlenecks.`;
-        else if (isSpanish) replyText = `La flota de vehículos guiados LGV está coordinada. Todas las unidades mantienen niveles de batería superiores al 82% sin congestiones.`;
-        else if (isFrench) replyText = `La flotte de navettes LGV est parfaitement synchronisée. Le niveau moyen des batteries dépasse 82% sans congestion de trajectoire.`;
-        else if (isGerman) replyText = `Die LGV-Flotte ist synchronisiert. Die Batterieladung liegt über 82% ohne Stauungen auf den Fahrwegen.`;
-        else replyText = `La flotta di navette LGV è perfettamente sincronizzata. Il livello medio di carica è all'85% e non si registrano colli di bottiglia sui tracciati laser.`;
-      } else if (cleanMsg.includes('camion') || cleanMsg.includes('baie') || cleanMsg.includes('caric') || cleanMsg.includes('truck')) {
-        detectedCalculationId = 1;
-        if (isEnglish) replyText = `Loading bays are active. We have 3 bays currently processing pallets with automated turnaround times under 18 minutes.`;
-        else if (isSpanish) replyText = `Las bahías de carga están activas. Actualmente 3 bahías están despachando camiones con tiempos medios de 18 minutos.`;
-        else if (isFrench) replyText = `Les quais de chargement sont opérationnels avec 3 baies en cours de chargement rapide.`;
-        else if (isGerman) replyText = `Die Laderampen sind aktiv. Drei Buchten bedienen aktuell LKWs mit Abfertigungszeiten unter 18 Minuten.`;
-        else replyText = `Le baie di carico camion sono attive. 3 baie stanno completando il carico pallet con tempo medio di ciclo sotto i 18 minuti.`;
-      } else if (cleanMsg.includes('ciao') || cleanMsg.includes('hello') || cleanMsg.includes('hola') || cleanMsg.includes('bonjour') || cleanMsg.includes('hallo') || cleanMsg.includes('chi sei')) {
-        if (isEnglish) replyText = `Hello! I'm ${personaName}, your real human assistant for ${activePlant}. I'm ready to talk with you in over 90 languages. How can I help today?`;
-        else if (isSpanish) replyText = `¡Hola! Soy ${personaName}, tu asistente humano para ${activePlant}. Puedo hablar contigo en más de 90 idiomas. ¿Cómo puedo ayudarte hoy?`;
-        else if (isFrench) replyText = `Bonjour! Je suis ${personaName}, votre assistante réelle pour le site ${activePlant}. Je parle plus de 90 langues. Comment puis-je vous aider?`;
-        else if (isGerman) replyText = `Hallo! Ich bin ${personaName}, Ihr menschlicher Assistent für das Werk ${activePlant}. Ich spreche über 90 Sprachen. Wie kann ich heute helfen?`;
-        else replyText = `Ciao! Sono ${personaName}, il tuo assistente reale per ${activePlant}. Parlo direttamente con te in oltre 90 lingue. Come posso aiutarti oggi?`;
-      } else {
-        if (isEnglish) replyText = `All plant telemetry at ${activePlant} is live and healthy. I can monitor Bema Silkworm wrappers, LGVs, loading bays, or run any of our 21 quantum optimizations.`;
-        else if (isSpanish) replyText = `Toda la telemetría en ${activePlant} está activa. Puedo supervisar enfardadoras Bema, LGVs, bahías o ejecutar optimizaciones cuánticas.`;
-        else if (isFrench) replyText = `La télémétrie de l'usine ${activePlant} est parfaitement nominale. Je peux superviser les banderoleuses Bema, les LGV ou exécuter les calculs quantiques.`;
-        else if (isGerman) replyText = `Die Telemetrie im Werk ${activePlant} ist online. Ich überwache Bema-Wickler, LGVs, Laderampen und führe Quantenberechnungen aus.`;
-        else replyText = `La telemetria dell'impianto ${activePlant} è online e nominale. Posso controllare i fasciatori Bema Silkworm, la flotta LGV, le baie di carico o avviare uno dei 21 calcoli quantistici.`;
-      }
-
-      return res.json({
-        success: true,
-        replyText,
-        detectedCalculationId,
-        persona: personaName,
-        language,
-        model: 'joker80-domain-engine'
-      });
-    } catch (err: any) {
-      return res.status(500).json({
-        success: false,
-        error: 'Errore conversazione avatar: ' + (err?.message || err)
-      });
-    }
-  });
-
   // 5. Get Latest Ingested Telemetry Packets & Hardware PC Gateway Connection Status
   app.get('/api/telemetry/latest', (_req: Request, res: Response) => {
     const now = Date.now();
@@ -646,6 +498,9 @@ CONTESTO INDUSTRIALE JOKER 80:
   });
 
   // 5b. Telemetry Ingestion Frequency Configuration (Seconds, Minutes, Hours, Days)
+  const gatewayConfigDir = path.resolve(process.cwd(), 'data');
+  const gatewayConfigPath = path.join(gatewayConfigDir, 'gateway_config.json');
+
   let telemetryConfig = {
     intervalValue: 5,
     intervalUnit: 'seconds' as 'seconds' | 'minutes' | 'hours' | 'days',
@@ -655,6 +510,17 @@ CONTESTO INDUSTRIALE JOKER 80:
     activePlant: 'Barilla Pedrignano (PR) - Hub Principale E80',
     description: 'Intervallo di polling e push telemetrico dal demone Python del PC locale'
   };
+
+  try {
+    if (fs.existsSync(gatewayConfigPath)) {
+      const savedRaw = JSON.parse(fs.readFileSync(gatewayConfigPath, 'utf-8'));
+      if (savedRaw && typeof savedRaw.intervalSeconds === 'number' && savedRaw.intervalSeconds > 0) {
+        telemetryConfig = { ...telemetryConfig, ...savedRaw };
+      }
+    }
+  } catch (err) {
+    console.warn('[Telemetry Config] Impossibile leggere gateway_config.json, uso configurazione base:', err);
+  }
 
   app.get('/api/telemetry/config', (_req: Request, res: Response) => {
     res.json({
@@ -686,6 +552,15 @@ CONTESTO INDUSTRIALE JOKER 80:
         activePlant: activePlant || telemetryConfig.activePlant,
         description: `Invio telemetria impostato a ogni ${numVal} ${unit === 'seconds' ? 'secondi' : unit === 'minutes' ? 'minuti' : unit === 'hours' ? 'ore' : 'giorni'}`
       };
+
+      try {
+        if (!fs.existsSync(gatewayConfigDir)) {
+          fs.mkdirSync(gatewayConfigDir, { recursive: true });
+        }
+        fs.writeFileSync(gatewayConfigPath, JSON.stringify(telemetryConfig, null, 2), 'utf-8');
+      } catch (persistErr) {
+        console.warn('[Telemetry Config] Salvataggio su disco non riuscito:', persistErr);
+      }
 
       console.log(`[Telemetry Config] Frequenza aggiornata: ${telemetryConfig.intervalValue} ${telemetryConfig.intervalUnit} (${telemetryConfig.intervalSeconds}s totali)`);
 
@@ -742,6 +617,7 @@ CONTESTO INDUSTRIALE JOKER 80:
     }
 
     const seconds = telemetryConfig.intervalSeconds;
+    const reqGatewayKey = (req.query.gatewayKey as string) || (req.query.userKey as string) || 'JOKER80-NIS2-PEDRIGNANO-GW-2026';
 
     if (target === 'linux-service') {
       const content = `[Unit]
@@ -757,7 +633,7 @@ ExecStart=/opt/smile80-daemon/venv/bin/python3 /opt/smile80-daemon/smile80_daemo
 Restart=always
 RestartSec=5
 Environment=JOKER80_URL=${origin}
-Environment=INDUSTRIAL_GATEWAY_KEY=JOKER80-NIS2-PEDRIGNANO-GW-2026
+Environment=INDUSTRIAL_GATEWAY_KEY=${reqGatewayKey}
 Environment=TELEMETRY_INTERVAL_SEC=${seconds}
 StandardOutput=journal
 StandardError=journal
@@ -832,7 +708,7 @@ echo "==========================================================================
         <key>JOKER80_URL</key>
         <string>${origin}</string>
         <key>INDUSTRIAL_GATEWAY_KEY</key>
-        <string>JOKER80-NIS2-PEDRIGNANO-GW-2026</string>
+        <string>${reqGatewayKey}</string>
         <key>TELEMETRY_INTERVAL_SEC</key>
         <string>${seconds}</string>
     </dict>
@@ -902,7 +778,7 @@ echo "==========================================================================
     }
 
     if (target === 'windows-bat') {
-      const userGatewayKey = (req.query.gatewayKey as string) || (req.query.userKey as string) || 'JOKER80-NIS2-PEDRIGNANO-GW-2026';
+      const userGatewayKey = reqGatewayKey;
       const plantName = (req.query.plantName as string) || 'Stabilimento Barilla Pedrignano (PR)';
       const plantId = (req.query.plantId as string) || 'barilla-pedrignano';
       
@@ -1391,7 +1267,7 @@ services:
     restart: always
     environment:
       - JOKER80_URL=${origin}
-      - INDUSTRIAL_GATEWAY_KEY=JOKER80-NIS2-PEDRIGNANO-GW-2026
+      - INDUSTRIAL_GATEWAY_KEY=${reqGatewayKey}
       - TELEMETRY_INTERVAL_SEC=${seconds}
     command: >
       sh -c "pip install requests &&
@@ -1405,17 +1281,6 @@ services:
     }
 
     return res.status(404).send('Target non supportato');
-  });
-
-  // 5d. Dedicated route to serve the python daemon file directly without SPA fallback
-  app.get('/smile80_daemon.py', (_req: Request, res: Response) => {
-    const filePath = path.join(process.cwd(), 'public', 'smile80_daemon.py');
-    if (fs.existsSync(filePath)) {
-      res.setHeader('Content-Type', 'text/x-python; charset=utf-8');
-      res.setHeader('Content-Disposition', 'attachment; filename="smile80_daemon.py"');
-      return res.sendFile(filePath);
-    }
-    return res.status(404).send('File non trovato');
   });
 
   // 6. Vite Middleware for Development / Static for Production

@@ -29,7 +29,9 @@ import {
   Signal,
   CheckCircle,
   Lock,
-  Key
+  Key,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { FactoryTenant, UserAccount } from '../types/quantum';
 
@@ -63,6 +65,7 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
   // OS Documentation & Kit State (Default: Windows 10/11 IoT per PC industriali)
   const [selectedOS, setSelectedOS] = useState<OSType>('windows');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   // Live Test Simulation State (Browser-side simulation)
   const [isSendingTest, setIsSendingTest] = useState(false);
@@ -230,11 +233,12 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
     };
 
     try {
+      const activeGatewayKey = activeTenant.wmsApiKey || `JOKER80-NIS2-${(activeTenant.id || 'PEDRIGNANO').toUpperCase()}-GW-2026`;
       const res = await fetch('/api/telemetry/push', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Industrial-Gateway-Key': 'JOKER80-NIS2-PEDRIGNANO-GW-2026'
+          'X-Industrial-Gateway-Key': activeGatewayKey
         },
         body: JSON.stringify(testPayload)
       });
@@ -875,6 +879,7 @@ goto LOOP_RUN
   }, [serverOrigin, activeTenant.id, totalSeconds, pythonDaemonContent]);
 
   // Docker Compose content
+  const activeGatewayKey = activeTenant.wmsApiKey || `JOKER80-NIS2-${(activeTenant.id || 'PEDRIGNANO').toUpperCase()}-GW-2026`;
   const dockerComposeContent = `version: '3.8'
 services:
   smile80-telemetry-daemon:
@@ -883,7 +888,9 @@ services:
     restart: always
     environment:
       - JOKER80_URL=${serverOrigin}
-      - INDUSTRIAL_GATEWAY_KEY=JOKER80-NIS2-PEDRIGNANO-GW-2026
+      - INDUSTRIAL_GATEWAY_KEY=${activeGatewayKey}
+      - PLANT_NAME=${activeTenant.nome}
+      - PLANT_ID=${activeTenant.id}
       - TELEMETRY_INTERVAL_SEC=${totalSeconds}
     command: >
       sh -c "pip install requests &&
@@ -891,10 +898,20 @@ services:
              python /app/smile80_daemon.py"
     working_dir: /app`;
 
+  const wizardSteps = [
+    { step: 1 as const, label: 'Sistema Operativo', short: '1. Sistema' },
+    { step: 2 as const, label: 'Frequenza Invii', short: '2. Frequenza' },
+    { step: 3 as const, label: 'Scarica i 2 File', short: '3. Download' },
+    { step: 4 as const, label: 'Salvataggio & Avvio', short: '4. Installazione' },
+    { step: 5 as const, label: 'Handshake & Feed', short: '5. Handshake' }
+  ];
+
+  const safeTenantFileId = (activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-5 animate-in fade-in duration-200">
       {/* ========================================================================= */}
-      {/* GUIDA VISUALE UNIFICATA: COLLEGA IL TUO STABILIMENTO IN 3 PASSI           */}
+      {/* INTESTAZIONE WIZARD + BARRA PROGRESSIONE A 5 PASSAGGI                     */}
       {/* ========================================================================= */}
       <div className="bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 border-2 border-cyan-500/50 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-cyan-500/30 pb-4">
@@ -904,23 +921,23 @@ services:
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-bold text-white font-mono tracking-tight flex items-center gap-2">
-                  <span>Guida Connessione Hardware: Collega il PC dello Stabilimento</span>
+                <h2 className="text-base sm:text-lg font-bold text-white font-mono tracking-tight">
+                  Configurazione Guidata Gateway PC di Stabilimento
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                  Zero Configurazione Manuale
+                  Passaggio {wizardStep} di 5
                 </span>
               </div>
-              <p className="text-xs text-slate-300 font-sans mt-0.5">
-                Scarica i 2 file necessari (<strong>Demone</strong> + <strong>Certificato</strong>): il demone invia la telemetria delle macchine e <strong>la piattaforma usa il certificato per riconoscere il PC dello stabilimento che le invia i dati</strong> (conformità NIS2).
+              <p className="text-xs sm:text-sm text-slate-300 font-sans mt-1">
+                Segui i 5 passaggi guidati: scegli il sistema operativo, imposta la frequenza di invio dati, scarica demone e certificato NIS2 e verifica l'handshake del PC.
               </p>
             </div>
           </div>
 
           {/* SELETTORE STABILIMENTO TARGET + STATO HARDWARE */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
             <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-cyan-500/40">
-              <span className="text-[11px] font-mono text-slate-400 font-bold shrink-0">Stabilimento:</span>
+              <span className="text-xs font-mono text-slate-400 font-bold shrink-0">Stabilimento:</span>
               {availableTenants && availableTenants.length > 0 && onSelectTenant ? (
                 <select
                   value={activeTenant.id}
@@ -945,7 +962,7 @@ services:
 
             <span className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-2 border shadow-sm ${
               gatewayClient?.mac || gatewayClient?.hostname
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                 : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
             }`}>
               <span className={`w-2 h-2 rounded-full ${gatewayClient?.mac || gatewayClient?.hostname ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'}`} />
@@ -954,1000 +971,918 @@ services:
           </div>
         </div>
 
-        {/* SELETTORE SISTEMA OPERATIVO UNIFICATO */}
-        <div className="space-y-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <Server className="w-4 h-4 text-cyan-400" />
-              <span>Seleziona il Sistema Operativo del Computer di Linea:</span>
-            </span>
-            <span className="text-[11px] font-mono text-cyan-300">
-              {selectedOS === 'windows' && '🪟 Windows 10/11 IoT Enterprise (Script Batch .BAT)'}
-              {selectedOS === 'linux' && '🐧 Linux Ubuntu / Debian / RHEL (Servizio di sistema systemd)'}
-              {selectedOS === 'mac' && '🍎 Apple macOS Silicon & Intel (Agente launchd daemon)'}
-              {selectedOS === 'docker' && '🐳 Docker / Podman (Container isolato multipiattaforma)'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-xs">
-            <button
-              type="button"
-              onClick={() => setSelectedOS('windows')}
-              className={`p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
-                selectedOS === 'windows'
-                  ? 'bg-cyan-500/25 text-white border-cyan-400 shadow-md ring-1 ring-cyan-500/50'
-                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
-              }`}
-            >
-              <span>🪟 Windows (.bat)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedOS('linux')}
-              className={`p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
-                selectedOS === 'linux'
-                  ? 'bg-amber-500/25 text-white border-amber-400 shadow-md ring-1 ring-amber-500/50'
-                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
-              }`}
-            >
-              <span>🐧 Linux (.sh)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedOS('mac')}
-              className={`p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
-                selectedOS === 'mac'
-                  ? 'bg-purple-500/25 text-white border-purple-400 shadow-md ring-1 ring-purple-500/50'
-                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
-              }`}
-            >
-              <span>🍎 macOS (.sh)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedOS('docker')}
-              className={`p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
-                selectedOS === 'docker'
-                  ? 'bg-blue-500/25 text-white border-blue-400 shadow-md ring-1 ring-blue-500/50'
-                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
-              }`}
-            >
-              <span>🐳 Docker (.yml)</span>
-            </button>
-          </div>
+        {/* BARRA STEPPER CLICCABILE */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono">
+          {wizardSteps.map((item) => {
+            const isActive = wizardStep === item.step;
+            const isCompleted = wizardStep > item.step;
+            return (
+              <button
+                key={item.step}
+                type="button"
+                onClick={() => setWizardStep(item.step)}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2 ${
+                  isActive
+                    ? 'bg-cyan-600/25 border-cyan-400 text-white shadow-md ring-1 ring-cyan-400/50'
+                    : isCompleted
+                    ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/50'
+                    : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <span className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                  isActive
+                    ? 'bg-cyan-400 text-slate-950'
+                    : isCompleted
+                    ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-slate-800 text-slate-400'
+                }`}>
+                  {isCompleted ? '✓' : item.step}
+                </span>
+                <span className="text-xs font-bold truncate">{item.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* BANNER INEQUIVOCABILE: DOVE SALVARE IL CERTIFICATO NIS2 */}
-        <div className="p-4 rounded-xl bg-purple-950/40 border-2 border-purple-500/50 shadow-xl space-y-2.5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-500/30 pb-2">
-            <div className="flex items-center gap-2 text-purple-200 font-mono font-bold text-xs sm:text-sm">
-              <Key className="w-4 h-4 text-purple-400 shrink-0" />
-              <span>📍 DOVE SALVARE IL FILE CERTIFICATO NIS2 (.PFX):</span>
+        {/* ===================================================================== */}
+        {/* SCHERMATA STEP 1: SCELTA DEL SISTEMA OPERATIVO                        */}
+        {/* ===================================================================== */}
+        {wizardStep === 1 && (
+          <div className="p-5 rounded-2xl bg-slate-950/85 border border-slate-800 space-y-5 animate-in fade-in duration-150">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-cyan-300 font-mono font-bold text-sm sm:text-base">
+                <Server className="w-5 h-5 text-cyan-400" />
+                <span>Passaggio 1: Seleziona il Sistema Operativo del Computer di Linea</span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
+                Scegli su quale computer verrà installato il demone di telemetria per <strong>{activeTenant.nome}</strong>. Nel passaggio successivo imposterai la frequenza di invio così da generare file già configurati su misura.
+              </p>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
-              Regola Fondamentale: Stessa Cartella
-            </span>
-          </div>
 
-          <div className="text-xs text-slate-200 font-sans leading-relaxed space-y-2">
-            <p>
-              <strong>A cosa serve il certificato?</strong> La piattaforma usa il certificato per riconoscere in modo sicuro il PC dello stabilimento che le invia i dati (così solo i computer autorizzati della fabbrica possono trasmettere, come richiesto dalla direttiva NIS2).
-            </p>
-            <p>
-              Salva entrambi i file scaricati (<strong>1. File Demone</strong> e <strong>2. File Certificato NIS2</strong>) nella <strong className="text-purple-300 font-mono bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-500/40">STESSA IDENTICA CARTELLA</strong> sul computer collegato ai macchinari dello stabilimento.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 font-mono text-[11px]">
-              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
-                <span className="text-cyan-300 font-bold flex items-center gap-1">
-                  <HardDrive className="w-3.5 h-3.5" />
-                  <span>Su Windows:</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono text-xs sm:text-sm">
+              <button
+                type="button"
+                onClick={() => setSelectedOS('windows')}
+                className={`p-4 rounded-xl font-bold flex flex-col items-start gap-2 transition-all cursor-pointer border text-left ${
+                  selectedOS === 'windows'
+                    ? 'bg-cyan-500/20 text-white border-cyan-400 shadow-lg ring-1 ring-cyan-500/50'
+                    : 'bg-slate-900/80 text-slate-300 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span className="text-base">🪟 Windows (.bat)</span>
+                <span className="text-[11px] font-sans font-normal text-slate-400">
+                  Windows 10/11 IoT Enterprise (Script Batch .BAT)
                 </span>
-                <p className="text-[10.5px] text-slate-300 font-sans leading-relaxed">
-                  Salva entrambi i file in una cartella a piacere (es. sul <code>Desktop\JOKER80\</code>, in una chiavetta USB o direttamente in <code className="text-cyan-300">C:\JOKER80\</code>). Quando avvii il file <code className="text-cyan-300">.bat</code> come amministratore, rileverà e copierà automaticamente il certificato presente al suo fianco!
-                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedOS('linux')}
+                className={`p-4 rounded-xl font-bold flex flex-col items-start gap-2 transition-all cursor-pointer border text-left ${
+                  selectedOS === 'linux'
+                    ? 'bg-amber-500/20 text-white border-amber-400 shadow-lg ring-1 ring-amber-500/50'
+                    : 'bg-slate-900/80 text-slate-300 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span className="text-base">🐧 Linux (.sh)</span>
+                <span className="text-[11px] font-sans font-normal text-slate-400">
+                  Linux Ubuntu / Debian / RHEL (Servizio di sistema systemd)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedOS('mac')}
+                className={`p-4 rounded-xl font-bold flex flex-col items-start gap-2 transition-all cursor-pointer border text-left ${
+                  selectedOS === 'mac'
+                    ? 'bg-purple-500/20 text-white border-purple-400 shadow-lg ring-1 ring-purple-500/50'
+                    : 'bg-slate-900/80 text-slate-300 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span className="text-base">🍎 macOS (.sh)</span>
+                <span className="text-[11px] font-sans font-normal text-slate-400">
+                  Apple macOS Silicon & Intel (Agente launchd daemon)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedOS('docker')}
+                className={`p-4 rounded-xl font-bold flex flex-col items-start gap-2 transition-all cursor-pointer border text-left ${
+                  selectedOS === 'docker'
+                    ? 'bg-blue-500/20 text-white border-blue-400 shadow-lg ring-1 ring-blue-500/50'
+                    : 'bg-slate-900/80 text-slate-300 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span className="text-base">🐳 Docker (.yml)</span>
+                <span className="text-[11px] font-sans font-normal text-slate-400">
+                  Docker / Podman (Container isolato multipiattaforma)
+                </span>
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-purple-950/30 border border-purple-500/40 text-xs sm:text-sm font-sans text-slate-200 flex items-start gap-2.5">
+              <ShieldCheck className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+              <div>
+                <strong>Sicurezza Direttiva NIS2:</strong> la piattaforma usa un certificato dedicato per riconoscere in modo sicuro il PC dello stabilimento che le invia i dati, così solo i computer autorizzati della fabbrica possono trasmettere.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setWizardStep(2)}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg cursor-pointer"
+              >
+                <span>Avanti: Imposta Frequenza Invii</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* SCHERMATA STEP 2: CADENZA, PRESET E RIEPILOGO IMPATTO TECNICO         */}
+        {/* (Prima del download, così la frequenza viene inserita nei file)       */}
+        {/* ===================================================================== */}
+        {wizardStep === 2 && (
+          <div className="p-5 rounded-2xl bg-slate-950/85 border border-slate-800 space-y-5 animate-in fade-in duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 shrink-0">
+                  <Clock className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-white font-mono">
+                      Passaggio 2: Cadenza e Frequenza Ricezione Dati dal PC di Stabilimento
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                      {savedConfig ? `Attiva: ogni ${savedConfig.intervalValue} ${savedConfig.intervalUnit}` : 'Attiva: ogni 5 seconds'}
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-300 font-sans mt-1">
+                    Configura ogni quanto tempo ricevere i dati telemetrici delle macchine (BEMA Silkworm, Navette LGV, Baie di carico) inviati dal demone Python in locale sullo stabilimento <strong>{activeTenant.nome}</strong>. Il valore scelto verrà inserito subito nei file scaricabili al passaggio successivo.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              {/* Colonna Sinistra: Modifica Valore, Unità & Preset */}
+              <div className="lg:col-span-7 space-y-4">
+                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-4">
+                  <div className="text-xs sm:text-sm font-mono font-bold text-slate-200 flex items-center justify-between flex-wrap gap-2">
+                    <span>Imposta Intervallo di Invio:</span>
+                    <span className="text-cyan-400 text-xs">Totale calcolato: {totalSeconds} secondi</span>
+                  </div>
+
+                  {isOperator && (
+                    <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/40 text-xs font-mono flex items-start gap-3">
+                      <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <div className="font-bold text-amber-300">Accesso Sola Lettura (Operatore di Linea)</div>
+                        <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                          La modifica della frequenza di campionamento è riservata al Responsabile di Stabilimento e all'Amministratore.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-mono text-slate-300">Valore numerico:</span>
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          disabled={isOperator}
+                          onClick={() => setFrequencyValue(prev => Math.max(1, prev - 1))}
+                          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 rounded-l-xl font-mono font-bold text-sm cursor-pointer disabled:cursor-not-allowed min-h-[42px]"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          max="9999"
+                          disabled={isOperator}
+                          value={frequencyValue}
+                          onChange={(e) => setFrequencyValue(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          className="w-full text-center py-2 bg-slate-950 border-y border-slate-700 text-white font-mono font-bold text-base focus:outline-none focus:border-cyan-500 disabled:opacity-60 min-h-[42px]"
+                        />
+                        <button
+                          type="button"
+                          disabled={isOperator}
+                          onClick={() => setFrequencyValue(prev => prev + 1)}
+                          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 rounded-r-xl font-mono font-bold text-sm cursor-pointer disabled:cursor-not-allowed min-h-[42px]"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-mono text-slate-300">Unità di tempo:</span>
+                      <select
+                        disabled={isOperator}
+                        value={frequencyUnit}
+                        onChange={(e) => setFrequencyUnit(e.target.value as FrequencyUnit)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 font-mono text-xs sm:text-sm focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-50 min-h-[42px]"
+                      >
+                        <option value="seconds">Secondi (Alta Frequenza)</option>
+                        <option value="minutes">Minuti (Cadenza Standard)</option>
+                        <option value="hours">Ore (Sintesi Energetica)</option>
+                        <option value="days">Giorni (Report Periodico)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveConfig()}
+                      disabled={isSaving || isOperator}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-mono text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-lg cursor-pointer disabled:opacity-50 min-h-[44px]"
+                    >
+                      {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      <span>{isOperator ? 'Modifica Riservata ai Responsabili' : 'Salva e Applica Frequenza'}</span>
+                    </button>
+
+                    <div className="text-xs font-mono text-slate-300 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Sincronizzazione automatica M2M (Zero Downtime)</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-cyan-950/25 border border-cyan-500/30 text-xs font-mono space-y-1.5">
+                    <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                      <Activity className="w-4 h-4 text-cyan-400" />
+                      <span>Propagazione Dinamica al File .BAT, Python e ai PC Attivi ({totalSeconds}s)</span>
+                    </div>
+                    <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                      ✓ <strong>Nei file scaricabili (.BAT, .PY, .SH):</strong> La frequenza di <span className="text-cyan-300 font-bold font-mono">{frequencyValue} {frequencyUnit} ({totalSeconds}s)</span> viene inserita in tempo reale nel codice sorgente dei file generati.<br />
+                      ✓ <strong>Sui PC già attivi in fabbrica:</strong> Non è necessario riscaricare il file! Il demone Python riceve la cadenza configurata dal cloud e si sincronizza a caldo in automatico.
+                    </p>
+                  </div>
+
+                  {feedback && (
+                    <div className={`p-3 rounded-xl border text-xs font-mono flex items-start gap-2.5 ${
+                      feedback.success ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                    }`}>
+                      {feedback.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />}
+                      <span className="flex-1">{feedback.message}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Preset Rapidi */}
+                <div className="space-y-2">
+                  <span className="text-xs font-mono font-bold text-slate-300 flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    Scelta Rapida Preset Consigliati:
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs font-mono">
+                    <button type="button" disabled={isOperator} onClick={() => handleApplyPreset(3, 'seconds')} className="p-2.5 rounded-lg bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-center transition-all cursor-pointer disabled:opacity-40 flex flex-col justify-center">
+                      <span className="font-bold text-cyan-400">3 Secondi</span>
+                      <span className="text-[10px] text-slate-400">Real-Time BEMA</span>
+                    </button>
+                    <button type="button" disabled={isOperator} onClick={() => handleApplyPreset(10, 'seconds')} className="p-2.5 rounded-lg bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-center transition-all cursor-pointer disabled:opacity-40 flex flex-col justify-center">
+                      <span className="font-bold text-blue-400">10 Secondi</span>
+                      <span className="text-[10px] text-slate-400">Standard Linea</span>
+                    </button>
+                    <button type="button" disabled={isOperator} onClick={() => handleApplyPreset(1, 'minutes')} className="p-2.5 rounded-lg bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-center transition-all cursor-pointer disabled:opacity-40 flex flex-col justify-center">
+                      <span className="font-bold text-emerald-400">1 Minuto</span>
+                      <span className="text-[10px] text-slate-400">Bilanciato OT</span>
+                    </button>
+                    <button type="button" disabled={isOperator} onClick={() => handleApplyPreset(1, 'hours')} className="p-2.5 rounded-lg bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-center transition-all cursor-pointer disabled:opacity-40 flex flex-col justify-center">
+                      <span className="font-bold text-purple-400">1 Ora</span>
+                      <span className="text-[10px] text-slate-400">Sintesi Oraria</span>
+                    </button>
+                    <button type="button" disabled={isOperator} onClick={() => handleApplyPreset(1, 'days')} className="p-2.5 rounded-lg bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-center transition-all cursor-pointer disabled:opacity-40 flex flex-col justify-center col-span-2 sm:col-span-1">
+                      <span className="font-bold text-amber-400">1 Giorno</span>
+                      <span className="text-[10px] text-slate-400">Report NIS2</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
-                <span className="text-amber-300 font-bold flex items-center gap-1">
-                  <Server className="w-3.5 h-3.5" />
-                  <span>Su Linux / macOS / Docker:</span>
-                </span>
-                <p className="text-[10.5px] text-slate-300 font-sans leading-relaxed">
-                  Salva entrambi i file nella cartella di installazione (es. <code className="text-amber-300">/opt/smile80-daemon/</code> su Linux, <code className="text-purple-300">~/smile80-daemon/</code> su macOS, o la directory del file <code className="text-blue-300">docker-compose.yml</code>).
-                </p>
+              {/* Colonna Destra: Riepilogo Impatto Tecnico Stimato */}
+              <div className="lg:col-span-5 p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3 font-mono text-xs">
+                <div className="flex items-center gap-2 text-cyan-400 font-bold border-b border-slate-800 pb-2 text-sm">
+                  <Activity className="w-4 h-4" />
+                  <span>Riepilogo Impatto Tecnico Stimato</span>
+                </div>
+
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-800/70">
+                    <span className="text-slate-400">Intervallo Ciclo:</span>
+                    <span className="font-bold text-white">
+                      {frequencyValue} {frequencyUnit === 'seconds' ? 'secondi' : frequencyUnit === 'minutes' ? 'minuti' : frequencyUnit === 'hours' ? 'ore' : 'giorni'} ({totalSeconds}s)
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-800/70">
+                    <span className="text-slate-400">Cadenza Invii:</span>
+                    <span className="font-bold text-cyan-300">{packetsPerDay.toLocaleString()} pacchetti / giorno</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-800/70">
+                    <span className="text-slate-400">Consumo Banda Stimato:</span>
+                    <span className="font-bold text-emerald-400">~{estimatedKBytesPerDay > 1024 ? `${(estimatedKBytesPerDay / 1024).toFixed(1)} MB` : `${estimatedKBytesPerDay} KB`} / giorno</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-800/70">
+                    <span className="text-slate-400">Carico CPU su PC/IPC:</span>
+                    <span className="font-bold text-purple-300">&lt; 0.1% (Nessun impatto PLC)</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-400">Reattività Allarmi:</span>
+                    <span className={`font-bold ${totalSeconds <= 10 ? 'text-emerald-400' : totalSeconds <= 60 ? 'text-amber-400' : 'text-slate-300'}`}>
+                      {totalSeconds <= 5 ? 'Istantanea (<5s)' : totalSeconds <= 60 ? 'Rapida (1 min)' : 'Periodica differita'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-blue-950/25 border border-blue-500/30 text-xs font-sans text-slate-300 leading-relaxed">
+                  <strong className="text-blue-300 font-mono block mb-1">Come Funziona la Sincronizzazione:</strong>
+                  Il demone Python che gira sullo stabilimento interroga all'avvio e ciclicamente l'endpoint <code className="text-cyan-300 font-mono text-[11px]">/api/telemetry/config</code>. Quando modifichi questo valore, tutti i demoni (Linux, Mac Apple, Windows) recepiscono il nuovo tempo di attesa senza dover riavviare il servizio.
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-[10.5px] font-mono text-purple-300 bg-purple-900/20 p-2 rounded-lg border border-purple-500/30">
-              <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
-              <span>
-                <strong>Non rinominare il file:</strong> Il demone identifica il certificato dal nome <code className="text-white">certificato_nis2_{activeTenant.id}.pfx.txt</code> o dall'estensione <code className="text-white">.pfx</code>.
-              </span>
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setWizardStep(1)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 font-mono text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Indietro</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWizardStep(3)}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg cursor-pointer"
+              >
+                <span>Avanti: Scarica i 2 File ({totalSeconds}s)</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* 3 SCHEDE STEP-BY-STEP */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* STEP 1: SCARICA I 2 FILE (DEMONE + CERTIFICATO) */}
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-3 relative overflow-hidden group hover:border-cyan-500/50 transition-colors">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 font-mono font-bold text-xs flex items-center justify-center">
-                  1
+        {/* ===================================================================== */}
+        {/* SCHERMATA STEP 3: SCARICA I 2 FILE NECESSARI (DEMONE + CERTIFICATO)   */}
+        {/* ===================================================================== */}
+        {wizardStep === 3 && (
+          <div className="p-5 rounded-2xl bg-slate-950/85 border border-slate-800 space-y-5 animate-in fade-in duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white font-mono">
+                  Passaggio 3: Scarica i 2 File Necessari ({selectedOS === 'windows' ? 'Windows .BAT' : selectedOS === 'linux' ? 'Linux .SH' : selectedOS === 'mac' ? 'macOS .SH' : 'Docker .YML'})
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 font-sans mt-0.5">
+                  Scarica entrambi i file qui sotto per collegare il PC dello stabilimento <strong>{activeTenant.nome}</strong> (frequenza preconfigurata nello script: <strong className="text-cyan-300 font-mono">{totalSeconds}s</strong>).
+                </p>
+              </div>
+              <div className="flex items-center gap-2 self-start">
+                <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                  Cadenza: {totalSeconds}s
                 </span>
-                <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider">
+                <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
                   2 File Richiesti
                 </span>
               </div>
-              <h4 className="text-sm font-bold text-white font-mono">
-                1. Scarica i 2 File Necessari
-              </h4>
+            </div>
 
-              {/* DESCRIZIONE DINAMICA DEI 2 FILE PER IL SISTEMA SELEZIONATO */}
-              <div className="space-y-2 text-[11px] font-sans text-slate-300 leading-relaxed bg-slate-900/70 p-2.5 rounded-lg border border-slate-800">
-                <div>
-                  <strong className="text-cyan-300 font-mono block">
-                    1. File Demone {selectedOS === 'windows' ? 'Windows (.BAT)' : selectedOS === 'linux' ? 'Linux (.SH)' : selectedOS === 'mac' ? 'macOS (.SH)' : 'Docker (.YML)'}:
-                  </strong>
-                  {selectedOS === 'windows' && 'Script .BAT con watchdog, auto-riavvio cmd, venv Python isolato e cartella locale C:\\JOKER80\\spool.'}
-                  {selectedOS === 'linux' && 'Script .SH che crea il servizio di sistema systemd smile80-daemon.service e cartella /opt/smile80-daemon/spool.'}
-                  {selectedOS === 'mac' && 'Script .SH per Apple Mac che configura il demone permanente launchd (.plist) e spool locale ~/smile80-daemon/spool.'}
-                  {selectedOS === 'docker' && 'File docker-compose.yml pronto per containerizzazione Docker con montaggio volume e variabili NIS2.'}
+            {isOperator && (
+              <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/40 text-xs font-mono flex items-start gap-3">
+                <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-bold text-amber-300">Download riservato a Responsabile / Amministratore</div>
+                  <p className="text-xs text-slate-300 font-sans">
+                    In conformità alle direttive NIS2, il download dei file demone di sistema e del certificato è riservato al Responsabile di Stabilimento e all'Amministratore.
+                  </p>
                 </div>
-                <div>
-                  <strong className="text-purple-300 font-mono block">2. File Certificato NIS2 (.PFX):</strong>
-                  <strong>La piattaforma usa questo certificato per riconoscere il PC dello stabilimento</strong> (<code className="text-slate-200">{activeTenant.id}</code>) <strong>che le invia i dati</strong>, verificando che sia un computer autorizzato.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* File 1: Demone */}
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-cyan-500/40 flex flex-col justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-xs sm:text-sm font-mono font-bold text-cyan-300">
+                    1. File Demone {selectedOS === 'windows' ? 'Windows (.BAT)' : selectedOS === 'linux' ? 'Linux (.SH)' : selectedOS === 'mac' ? 'macOS (.SH)' : 'Docker (.YML)'}
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
+                    {selectedOS === 'windows' && `Script .BAT configurato a ${totalSeconds}s con watchdog, auto-riavvio cmd, venv Python isolato e cartella locale C:\\JOKER80\\spool.`}
+                    {selectedOS === 'linux' && `Script .SH configurato a ${totalSeconds}s che crea il servizio di sistema systemd smile80-daemon.service e cartella /opt/smile80-daemon/spool.`}
+                    {selectedOS === 'mac' && `Script .SH per Apple Mac configurato a ${totalSeconds}s che installa il demone permanente launchd (.plist) e spool locale ~/smile80-daemon/spool.`}
+                    {selectedOS === 'docker' && `File docker-compose.yml configurato a ${totalSeconds}s pronto per containerizzazione Docker con variabili di ambiente NIS2.`}
+                  </p>
                 </div>
+
+                <div className="space-y-2">
+                  {selectedOS === 'windows' && (
+                    <button
+                      type="button"
+                      disabled={isOperator}
+                      onClick={() => downloadAsBlob(windowsBatFullContent, `avvia_gateway_${safeTenantFileId}.bat`)}
+                      className="w-full py-2.5 px-3.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs sm:text-sm font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                    >
+                      <span className="flex items-center gap-2">
+                        <HardDrive className="w-4 h-4" />
+                        <span>1. Scarica Demone Windows (.BAT)</span>
+                      </span>
+                      <Download className="w-4 h-4 shrink-0" />
+                    </button>
+                  )}
+
+                  {selectedOS === 'linux' && (
+                    <button
+                      type="button"
+                      disabled={isOperator}
+                      onClick={() => downloadAsBlob(linuxInstallContent, `install_linux_${safeTenantFileId}.sh`)}
+                      className="w-full py-2.5 px-3.5 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-mono text-xs sm:text-sm font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Server className="w-4 h-4" />
+                        <span>1. Scarica Demone Linux (.SH)</span>
+                      </span>
+                      <Download className="w-4 h-4 shrink-0" />
+                    </button>
+                  )}
+
+                  {selectedOS === 'mac' && (
+                    <button
+                      type="button"
+                      disabled={isOperator}
+                      onClick={() => downloadAsBlob(macInstallContent, `install_mac_${safeTenantFileId}.sh`)}
+                      className="w-full py-2.5 px-3.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-mono text-xs sm:text-sm font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Laptop className="w-4 h-4" />
+                        <span>1. Scarica Demone macOS (.SH)</span>
+                      </span>
+                      <Download className="w-4 h-4 shrink-0" />
+                    </button>
+                  )}
+
+                  {selectedOS === 'docker' && (
+                    <button
+                      type="button"
+                      disabled={isOperator}
+                      onClick={() => downloadAsBlob(dockerComposeContent, `docker-compose_${safeTenantFileId}.yml`, 'text/yaml;charset=utf-8')}
+                      className="w-full py-2.5 px-3.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-mono text-xs sm:text-sm font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Layers className="w-4 h-4" />
+                        <span>1. Scarica Docker Compose (.YML)</span>
+                      </span>
+                      <Download className="w-4 h-4 shrink-0" />
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const code = selectedOS === 'windows' ? windowsBatFullContent : selectedOS === 'linux' ? linuxInstallContent : selectedOS === 'mac' ? macInstallContent : dockerComposeContent;
+                      handleCopy(code, 'quick-script-copy');
+                    }}
+                    className="w-full py-2 px-3 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 font-mono text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    {copiedKey === 'quick-script-copy' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
+                    <span>{copiedKey === 'quick-script-copy' ? 'Codice Copiato negli Appunti!' : 'Copia Codice Script Negli Appunti'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* File 2: Certificato NIS2 */}
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-purple-500/40 flex flex-col justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-xs sm:text-sm font-mono font-bold text-purple-300">
+                    2. File Certificato NIS2 (.PFX)
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
+                    <strong>La piattaforma usa questo certificato per riconoscere il PC dello stabilimento</strong> (<code className="text-purple-200 font-mono">{activeTenant.id}</code>) <strong>che le invia i dati</strong>, verificando che sia un computer autorizzato.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isOperator}
+                  onClick={() => {
+                    const certText = `-----BEGIN JOKER 80 INDUSTRIAL GATEWAY CERTIFICATE-----\nPlant-ID: ${activeTenant.id}\nPlant-Name: ${activeTenant.nome}\nCompany: ${activeTenant.azienda || 'Azienda'}\nEndpoint: ${activeTenant.endpoint}\nKey: ${activeTenant.wmsApiKey || `JOKER80-NIS2-${(activeTenant.id || 'GW').toUpperCase()}-2026`}\nSecurity: NIS2 / IEC 62443 Certified\n-----END JOKER 80 INDUSTRIAL GATEWAY CERTIFICATE-----\n`;
+                    downloadAsBlob(certText, `certificato_nis2_${safeTenantFileId}.pfx.txt`);
+                  }}
+                  className="w-full py-2.5 px-3.5 rounded-lg bg-purple-600/35 hover:bg-purple-600/55 text-purple-100 border border-purple-500/50 font-mono text-xs sm:text-sm font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
+                >
+                  <span className="flex items-center gap-2">
+                    <Key className="w-4 h-4 text-purple-300" />
+                    <span>2. Scarica Certificato NIS2 (.PFX)</span>
+                  </span>
+                  <Download className="w-4 h-4 shrink-0" />
+                </button>
               </div>
             </div>
 
-            {/* PULSANTI DI DOWNLOAD DINAMICI PER IL SO ATTIVO */}
-            <div className="space-y-2 pt-1">
-              {/* PULSANTE 1: DEMONE SPECIFICO PER IL SISTEMA SELEZIONATO */}
-              {selectedOS === 'windows' && (
-                <button
-                  type="button"
-                  disabled={isOperator}
-                  onClick={() => downloadAsBlob(windowsBatFullContent, `avvia_gateway_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.bat`)}
-                  className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
-                  title={`Scarica script demone Windows .BAT per ${activeTenant.nome}`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <HardDrive className="w-3.5 h-3.5" />
-                    <span>1. Scarica Demone Windows (.BAT)</span>
-                  </span>
-                  <Download className="w-3.5 h-3.5 shrink-0" />
-                </button>
-              )}
-
-              {selectedOS === 'linux' && (
-                <button
-                  type="button"
-                  disabled={isOperator}
-                  onClick={() => downloadAsBlob(linuxInstallContent, `install_linux_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.sh`)}
-                  className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
-                  title={`Scarica script installatore Linux .SH per ${activeTenant.nome}`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Server className="w-3.5 h-3.5" />
-                    <span>1. Scarica Demone Linux (.SH)</span>
-                  </span>
-                  <Download className="w-3.5 h-3.5 shrink-0" />
-                </button>
-              )}
-
-              {selectedOS === 'mac' && (
-                <button
-                  type="button"
-                  disabled={isOperator}
-                  onClick={() => downloadAsBlob(macInstallContent, `install_mac_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.sh`)}
-                  className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
-                  title={`Scarica script installatore macOS .SH per ${activeTenant.nome}`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Laptop className="w-3.5 h-3.5" />
-                    <span>1. Scarica Demone macOS (.SH)</span>
-                  </span>
-                  <Download className="w-3.5 h-3.5 shrink-0" />
-                </button>
-              )}
-
-              {selectedOS === 'docker' && (
-                <button
-                  type="button"
-                  disabled={isOperator}
-                  onClick={() => downloadAsBlob(dockerComposeContent, `docker-compose_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.yml`, 'text/yaml;charset=utf-8')}
-                  className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
-                  title={`Scarica file docker-compose.yml per ${activeTenant.nome}`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>1. Scarica Docker Compose (.YML)</span>
-                  </span>
-                  <Download className="w-3.5 h-3.5 shrink-0" />
-                </button>
-              )}
-
-              {/* PULSANTE 2: CERTIFICATO NIS2 mTLS (OBBLIGATORIO PER TUTTI I SISTEMI) */}
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
               <button
                 type="button"
-                disabled={isOperator}
-                onClick={() => {
-                  const certText = `-----BEGIN JOKER 80 INDUSTRIAL GATEWAY CERTIFICATE-----\nPlant-ID: ${activeTenant.id}\nPlant-Name: ${activeTenant.nome}\nCompany: ${activeTenant.azienda || 'Azienda'}\nEndpoint: ${activeTenant.endpoint}\nKey: ${activeTenant.wmsApiKey || `JOKER80-NIS2-${(activeTenant.id || 'GW').toUpperCase()}-2026`}\nSecurity: NIS2 / IEC 62443 Certified\n-----END JOKER 80 INDUSTRIAL GATEWAY CERTIFICATE-----\n`;
-                  downloadAsBlob(certText, `certificato_nis2_${(activeTenant.id || 'plant').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.pfx.txt`);
-                }}
-                className="w-full py-2 px-3 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 font-mono text-xs font-bold flex items-center justify-between transition-colors shadow-sm cursor-pointer disabled:opacity-40"
-                title={`Scarica certificato crittografico mTLS per ${activeTenant.nome}`}
+                onClick={() => setWizardStep(2)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 font-mono text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer"
               >
-                <span className="flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5 text-purple-400" />
-                  <span>2. Scarica Certificato NIS2 (.PFX)</span>
-                </span>
-                <Download className="w-3.5 h-3.5 shrink-0" />
+                <ChevronLeft className="w-4 h-4" />
+                <span>Indietro</span>
               </button>
-
-              {/* COPIA RAPIDA DEL CODICE NEGLI APPUNTI */}
               <button
                 type="button"
-                onClick={() => {
-                  const code = selectedOS === 'windows' ? windowsBatFullContent : selectedOS === 'linux' ? linuxInstallContent : selectedOS === 'mac' ? macInstallContent : dockerComposeContent;
-                  handleCopy(code, 'quick-script-copy');
-                }}
-                className="w-full py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 font-mono text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                title="Copia l'intero contenuto dello script negli appunti per ispezione"
+                onClick={() => setWizardStep(4)}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg cursor-pointer"
               >
-                {copiedKey === 'quick-script-copy' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
-                <span>{copiedKey === 'quick-script-copy' ? 'Codice Copiato negli Appunti!' : 'Copia Codice Script Negli Appunti'}</span>
+                <span>Avanti: Dove Salvare e Avvio</span>
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
+        )}
 
-          {/* STEP 2: AVVIA SUL PC DI FABBRICA (CON ISTRUZIONE TASTO DESTRO "RUN AS ADMINISTRATOR") */}
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-3 relative overflow-hidden group hover:border-cyan-500/50 transition-colors">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/40 font-mono font-bold text-xs flex items-center justify-center">
-                  2
-                </span>
-                <span className="text-[10px] font-mono font-bold text-blue-400 uppercase tracking-wider">
-                  Esecuzione PC
+        {/* ===================================================================== */}
+        {/* SCHERMATA STEP 4: DOVE SALVARE IL CERTIFICATO & AVVIO SUL PC          */}
+        {/* ===================================================================== */}
+        {wizardStep === 4 && (
+          <div className="p-5 rounded-2xl bg-slate-950/85 border border-slate-800 space-y-5 animate-in fade-in duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-purple-200 font-mono font-bold text-sm sm:text-base">
+                <Key className="w-5 h-5 text-purple-400 shrink-0" />
+                <span>Passaggio 4: Dove Salvare i 2 File & Avvio sul Computer di Linea</span>
+              </div>
+              <span className="text-xs font-mono px-2.5 py-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 self-start">
+                Regola Fondamentale: Stessa Cartella
+              </span>
+            </div>
+
+            {/* Regola Stessa Cartella */}
+            <div className="p-4 rounded-xl bg-purple-950/35 border border-purple-500/40 space-y-3 text-xs sm:text-sm font-sans text-slate-200 leading-relaxed">
+              <p>
+                <strong>A cosa serve il certificato?</strong> La piattaforma usa il certificato per riconoscere in modo sicuro il PC dello stabilimento che le invia i dati (così solo i computer autorizzati della fabbrica possono trasmettere, come richiesto dalla direttiva NIS2).
+              </p>
+              <p>
+                Salva entrambi i file scaricati (<strong>1. File Demone</strong> e <strong>2. File Certificato NIS2</strong>) nella <strong className="text-purple-200 font-mono bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-500/40">STESSA IDENTICA CARTELLA</strong> sul computer collegato ai macchinari dello stabilimento (es. tramite chiavetta USB o cartella condivisa).
+              </p>
+              <div className="flex items-center gap-2 text-xs font-mono text-purple-200 bg-purple-900/25 p-2.5 rounded-lg border border-purple-500/30">
+                <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>
+                  <strong>Non rinominare il file:</strong> Il demone identifica il certificato dal nome <code className="text-white">certificato_nis2_{activeTenant.id}.pfx.txt</code> o dall'estensione <code className="text-white">.pfx</code>.
                 </span>
               </div>
-              
-              <h4 className="text-sm font-bold text-white font-mono">
-                {selectedOS === 'windows' && '2. Clic Destro: Esegui come Amministratore'}
-                {selectedOS === 'linux' && '2. Esegui con Privilegi Root (sudo)'}
-                {selectedOS === 'mac' && '2. Esegui da Terminale macOS'}
-                {selectedOS === 'docker' && '2. Avvia Container con Docker'}
-              </h4>
+            </div>
 
-              <p className="text-xs text-slate-300 font-sans leading-relaxed">
-                Copia i 2 file scaricati sul computer collegato ai macchinari Elettric80 (tramite chiavetta USB o cartella condivisa di stabilimento).
-              </p>
-
-              {/* ISTRUZIONE DETTAGLIATA SPECIFICA PER SO */}
+            {/* Istruzione specifica per il SO scelto */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {selectedOS === 'windows' && (
-                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs font-sans space-y-1">
-                  <div className="font-bold flex items-center gap-1.5 text-amber-300 font-mono text-[11px]">
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 space-y-2.5">
+                  <div className="font-bold flex items-center gap-2 text-amber-300 font-mono text-xs sm:text-sm">
                     <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>IMPORTANTE (Windows):</span>
+                    <span>Esecuzione su Windows (IMPORTANTE):</span>
                   </div>
-                  <p className="text-[11px] leading-relaxed">
-                    Fai <strong>clic con il pulsante destro del mouse</strong> sul file scaricato <code className="text-amber-100 font-mono bg-black/40 px-1 py-0.5 rounded">.bat</code> e seleziona <strong>"Esegui come amministratore"</strong> (<em>Run as administrator</em>).
+                  <p className="text-xs sm:text-sm text-slate-200 font-sans leading-relaxed">
+                    Salva entrambi i file in una cartella a piacere (es. su <code className="text-cyan-300 font-mono">Desktop\JOKER80\</code>, su chiavetta USB o in <code className="text-cyan-300 font-mono">C:\JOKER80\</code>).
+                  </p>
+                  <p className="text-xs sm:text-sm text-amber-100 font-sans leading-relaxed">
+                    Fai <strong>clic con il pulsante destro del mouse</strong> sul file <code className="text-amber-200 font-mono bg-black/40 px-1.5 py-0.5 rounded">avvia_gateway_{safeTenantFileId}.bat</code> e seleziona <strong>"Esegui come amministratore"</strong> (<em>Run as administrator</em>). Rileverà e copierà automaticamente il certificato al suo fianco!
                   </p>
                 </div>
               )}
 
               {selectedOS === 'linux' && (
-                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs font-sans space-y-1">
-                  <div className="font-bold flex items-center gap-1.5 text-amber-300 font-mono text-[11px]">
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 space-y-2.5">
+                  <div className="font-bold flex items-center gap-2 text-amber-300 font-mono text-xs sm:text-sm">
                     <Terminal className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>COMANDO TERMINALE LINUX:</span>
+                    <span>Esecuzione su Linux:</span>
                   </div>
-                  <code className="text-[11px] block bg-black/60 p-1.5 rounded text-cyan-300 font-mono select-all">
-                    chmod +x install_linux_*.sh && sudo ./install_linux_*.sh
+                  <p className="text-xs sm:text-sm text-slate-200 font-sans leading-relaxed">
+                    Salva entrambi i file in <code className="text-amber-300 font-mono">/opt/smile80-daemon/</code> (o nella stessa cartella di lavoro) ed esegui da terminale con privilegi root:
+                  </p>
+                  <code className="text-xs block bg-black/60 p-2.5 rounded-lg text-cyan-300 font-mono select-all">
+                    chmod +x install_linux_{safeTenantFileId}.sh && sudo ./install_linux_{safeTenantFileId}.sh
                   </code>
                 </div>
               )}
 
               {selectedOS === 'mac' && (
-                <div className="p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/40 text-purple-200 text-xs font-sans space-y-1">
-                  <div className="font-bold flex items-center gap-1.5 text-purple-300 font-mono text-[11px]">
+                <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/40 space-y-2.5">
+                  <div className="font-bold flex items-center gap-2 text-purple-300 font-mono text-xs sm:text-sm">
                     <Terminal className="w-4 h-4 text-purple-400 shrink-0" />
-                    <span>COMANDO TERMINALE MAC:</span>
+                    <span>Esecuzione su macOS:</span>
                   </div>
-                  <code className="text-[11px] block bg-black/60 p-1.5 rounded text-cyan-300 font-mono select-all">
-                    chmod +x install_mac_*.sh && ./install_mac_*.sh
+                  <p className="text-xs sm:text-sm text-slate-200 font-sans leading-relaxed">
+                    Salva entrambi i file nella cartella <code className="text-purple-300 font-mono">~/smile80-daemon/</code> (o nella stessa cartella) ed esegui dal Terminale:
+                  </p>
+                  <code className="text-xs block bg-black/60 p-2.5 rounded-lg text-cyan-300 font-mono select-all">
+                    chmod +x install_mac_{safeTenantFileId}.sh && ./install_mac_{safeTenantFileId}.sh
                   </code>
                 </div>
               )}
 
               {selectedOS === 'docker' && (
-                <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/40 text-blue-200 text-xs font-sans space-y-1">
-                  <div className="font-bold flex items-center gap-1.5 text-blue-300 font-mono text-[11px]">
+                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/40 space-y-2.5">
+                  <div className="font-bold flex items-center gap-2 text-blue-300 font-mono text-xs sm:text-sm">
                     <Layers className="w-4 h-4 text-blue-400 shrink-0" />
-                    <span>COMANDO DOCKER:</span>
+                    <span>Avvio Container Docker:</span>
                   </div>
-                  <code className="text-[11px] block bg-black/60 p-1.5 rounded text-cyan-300 font-mono select-all">
-                    docker compose up -d
+                  <p className="text-xs sm:text-sm text-slate-200 font-sans leading-relaxed">
+                    Salva entrambi i file nella directory del file <code className="text-blue-300 font-mono">docker-compose.yml</code> e avvia il container:
+                  </p>
+                  <code className="text-xs block bg-black/60 p-2.5 rounded-lg text-cyan-300 font-mono select-all">
+                    docker compose -f docker-compose_{safeTenantFileId}.yml up -d
                   </code>
                 </div>
               )}
-            </div>
 
-            <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300 space-y-1">
-              <div className="text-cyan-400 font-bold flex items-center gap-1">
-                <Folder className="w-3.5 h-3.5" />
-                <span>Cartelle Spool Riconosciute:</span>
-              </div>
-              <div className="text-[10px] text-slate-400 truncate">
-                • Win: <code className="text-slate-200">C:\JOKER80\spool\</code>
-              </div>
-              <div className="text-[10px] text-slate-400 truncate">
-                • Rete: <code className="text-slate-200">\\server-stabilimento\e80_export\</code>
-              </div>
-            </div>
-          </div>
-
-          {/* STEP 3: CONFERMA AUTOMATICA & MAC ADDRESS */}
-          <div className={`p-4 rounded-xl border flex flex-col justify-between gap-3 relative overflow-hidden transition-colors ${
-            gatewayClient?.mac || gatewayClient?.hostname
-              ? 'bg-emerald-950/30 border-emerald-500/50 ring-1 ring-emerald-500/30'
-              : 'bg-slate-950/80 border-slate-800'
-          }`}>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className={`w-7 h-7 rounded-lg font-mono font-bold text-xs flex items-center justify-center border ${
-                  gatewayClient?.mac || gatewayClient?.hostname
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                    : 'bg-slate-800 text-slate-400 border-slate-700'
-                }`}>
-                  3
-                </span>
-                <span className={`text-[10px] font-mono font-bold uppercase tracking-wider ${
-                  gatewayClient?.mac || gatewayClient?.hostname ? 'text-emerald-400' : 'text-slate-500'
-                }`}>
-                  {gatewayClient?.mac || gatewayClient?.hostname ? 'Confermato' : 'In Ascolto'}
-                </span>
-              </div>
-              <h4 className="text-sm font-bold text-white font-mono">
-                3. Handshake & Associazione Automatica
-              </h4>
-              <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                <strong>Come avviene il riconoscimento:</strong> All'avvio, il demone presenta il certificato alla piattaforma, che riconosce il PC dello stabilimento che le invia i dati (rilevando anche MAC Address e nome del computer) e lo associa automaticamente a questo impianto.
-              </p>
-            </div>
-
-            {/* BOX STATO ATTUALE HARDWARE */}
-            {gatewayClient?.mac || gatewayClient?.hostname ? (
-              <div className="p-2.5 rounded-lg bg-emerald-950/60 border border-emerald-500/40 font-mono text-[11px] text-emerald-200 space-y-1">
-                <div className="flex items-center gap-1.5 font-bold text-emerald-300">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>PC Riconosciuto & Associato:</span>
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2 font-mono text-xs">
+                <div className="text-cyan-400 font-bold flex items-center gap-1.5 text-xs sm:text-sm">
+                  <Folder className="w-4 h-4" />
+                  <span>Cartelle Spool Riconosciute:</span>
                 </div>
-                <div className="text-[10px] text-slate-300 truncate">
-                  Hostname: <strong className="text-white">{gatewayClient.hostname || 'PC-LINEA'}</strong>
-                </div>
-                <div className="text-[10px] text-slate-300 truncate">
-                  MAC: <strong className="text-cyan-300">{gatewayClient.mac || 'Riconosciuto'}</strong>
-                </div>
-                <div className="text-[10px] text-emerald-300/80 truncate">
-                  Pacchetti M2M ricevuti: <strong>{physicalCount}</strong>
+                <p className="text-xs text-slate-300 font-sans">
+                  Il demone legge automaticamente i file esportati da SM.I.LE80 o dai PLC dalle seguenti cartelle:
+                </p>
+                <div className="space-y-1 text-xs text-slate-300 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                  <div>• Windows: <code className="text-cyan-300">C:\JOKER80\spool\</code></div>
+                  <div>• Linux: <code className="text-amber-300">/opt/smile80-daemon/spool/</code></div>
+                  <div>• macOS: <code className="text-purple-300">~/smile80-daemon/spool/</code></div>
+                  <div>• Rete condivisa: <code className="text-slate-100">\\server-stabilimento\e80_export\</code></div>
                 </div>
               </div>
-            ) : (
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-dashed border-slate-800 font-mono text-[11px] text-slate-400 flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
-                <span className="text-[10.5px]">In attesa del primo avvio dal PC fisico...</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 1. SEZIONE MODIFICA FREQUENZA TELEMETRIA */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 shrink-0">
-              <Clock className="w-5 h-5 animate-pulse" />
             </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm sm:text-base font-bold text-white font-mono">
-                  Cadenza e Frequenza Ricezione Dati dal PC di Stabilimento
-                </h3>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30">
-                  {savedConfig ? `Attiva: ogni ${savedConfig.intervalValue} ${savedConfig.intervalUnit}` : 'Attiva: ogni 5 secondi'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 font-sans mt-0.5">
-                Configura ogni quanto tempo ricevere i dati telemetrici delle macchine (BEMA Silkworm, Navette LGV, Baie di carico) inviati dal demone Python in locale sullo stabilimento.
-              </p>
+
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setWizardStep(3)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 font-mono text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Indietro</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWizardStep(5)}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg cursor-pointer"
+              >
+                <span>Avanti: Verifica Handshake & Feed</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
+        )}
 
-          <div className="text-right font-mono text-[11px] text-slate-400 hidden md:block">
-            <span>Stabilimento: </span>
-            <strong className="text-cyan-300">{activeTenant.nome}</strong>
-          </div>
-        </div>
+        {/* ===================================================================== */}
+        {/* SCHERMATA STEP 5: HANDSHAKE, STATO PC FISICO & FEED TELEMETRIA LIVE   */}
+        {/* ===================================================================== */}
+        {wizardStep === 5 && (
+          <div className="space-y-5 animate-in fade-in duration-150">
+            <div className="p-5 rounded-2xl bg-slate-950/85 border border-slate-800 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-white font-mono">
+                      Passaggio 5: Handshake & Associazione Automatica PC Fisico
+                    </h3>
+                    {gatewayClient?.isOnline ? (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        <span>CONFERMATO (ONLINE)</span>
+                      </span>
+                    ) : gatewayClient ? (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400" />
+                        <span>IN PAUSA ({gatewayClient.secondsSinceLastPing}s fa)</span>
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 border border-slate-700 text-slate-300 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                        <span>IN ASCOLTO</span>
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-300 font-sans mt-1 leading-relaxed">
+                    <strong>Come avviene il riconoscimento:</strong> All'avvio, il demone presenta il certificato alla piattaforma, che riconosce il PC dello stabilimento che le invia i dati (rilevando anche MAC Address e nome del computer) e lo associa automaticamente a questo impianto.
+                  </p>
+                </div>
 
-        {/* CONTROLLI INPUT: NUMERO + UNITA DI MISURA */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          {/* Colonna Sinistra: Modifica Valore e Unità */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
-              <label className="text-xs font-mono font-bold text-slate-300 flex items-center justify-between">
-                <span>Imposta Intervallo di Invio:</span>
-                <span className="text-cyan-400 text-[11px]">Totale calcolato: {totalSeconds} secondi</span>
-              </label>
+                <button
+                  type="button"
+                  onClick={fetchGatewayStatus}
+                  className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-mono text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer self-start shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Verifica Connessione PC</span>
+                </button>
+              </div>
 
-              {isOperator && (
-                <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/40 text-xs font-mono flex items-start gap-3">
-                  <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              {gatewayClient?.isOnline ? (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/50 flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <div className="font-bold text-amber-300">Accesso Sola Lettura (Operatore di Linea)</div>
-                    <p className="text-[11px] text-slate-300 font-sans leading-relaxed">
-                      In conformità alle direttive di sicurezza industriale NIS2, la modifica della frequenza di campionamento e il download dei file demone di sistema (.BAT, .SH, .PY) sono riservati al <strong>Responsabile di Stabilimento</strong> e all'<strong>Amministratore</strong>. Come operatore puoi consultare i 21 calcoli e i dati telemetrici live in tempo reale.
+                    <div className="text-xs sm:text-sm font-mono font-bold text-emerald-300">
+                      COLLEGAMENTO TRA PC E PIATTAFORMA ONLINE CONFERMATO AL 100%!
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
+                      Il computer <strong className="text-white font-mono">{gatewayClient.hostname}</strong> ({gatewayClient.osLabel}) si è agganciato con successo alla piattaforma cloud con crittografia end-to-end.
                     </p>
                   </div>
                 </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-dashed border-slate-700 font-mono text-xs text-slate-300 flex items-center gap-2.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+                  <span>In attesa del primo avvio dal PC fisico... (appena lanci il demone sul PC, questo riquadro diventa verde automaticamente).</span>
+                </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Valore Numerico */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-mono text-slate-400">Valore numerico:</span>
-                  <div className="flex items-center">
-                    <button
-                      type="button"
-                      disabled={isOperator}
-                      onClick={() => setFrequencyValue(prev => Math.max(1, prev - 1))}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 rounded-l-xl font-mono font-bold text-sm cursor-pointer disabled:cursor-not-allowed min-h-[42px]"
-                      title="Diminuisci"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      max="9999"
-                      disabled={isOperator}
-                      value={frequencyValue}
-                      onChange={(e) => setFrequencyValue(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      className="w-full text-center py-2 bg-slate-900 border-y border-slate-700 text-white font-mono font-bold text-base focus:outline-none focus:border-cyan-500 disabled:opacity-60 min-h-[42px]"
-                    />
-                    <button
-                      type="button"
-                      disabled={isOperator}
-                      onClick={() => setFrequencyValue(prev => prev + 1)}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 rounded-r-xl font-mono font-bold text-sm cursor-pointer disabled:cursor-not-allowed min-h-[42px]"
-                      title="Aumenta"
-                    >
-                      +
-                    </button>
+              {/* 6 SCHEDE DIAGNOSTICHE HARDWARE PC */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+                    <span>Nome Computer (Host)</span>
+                    <HardDrive className="w-3.5 h-3.5 text-slate-500" />
                   </div>
+                  <div className="text-sm font-bold text-white font-mono truncate">
+                    {gatewayClient?.hostname || <span className="text-slate-500 font-normal italic">In attesa del PC...</span>}
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-mono block">
+                    {gatewayClient ? `Architettura: ${gatewayClient.architecture}` : 'Riconoscimento automatico'}
+                  </span>
                 </div>
 
-                {/* Unità di Misura (Secondi, Minuti, Ore, Giorni) */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-mono text-slate-400">Unità di tempo:</span>
-                  <select
-                    disabled={isOperator}
-                    value={frequencyUnit}
-                    onChange={(e) => setFrequencyUnit(e.target.value as FrequencyUnit)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-xs focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[42px]"
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+                    <span className="flex items-center gap-1">
+                      <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>MAC Address</span>
+                    </span>
+                    {gatewayClient?.macAddress && gatewayClient.macAddress !== 'N/D' && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(gatewayClient.macAddress, 'mac-copy')}
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        {copiedKey === 'mac-copy' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedKey === 'mac-copy' ? 'Copiato' : 'Copia'}</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="text-sm font-bold text-emerald-300 font-mono tracking-wider truncate">
+                    {gatewayClient?.macAddress && gatewayClient.macAddress !== 'N/D'
+                      ? gatewayClient.macAddress
+                      : <span className="text-slate-500 font-normal italic">Rilevamento hardware...</span>}
+                  </div>
+                  <span className="text-[11px] text-cyan-400/90 font-mono block truncate">
+                    Stabilimento: <strong>{gatewayClient?.plantName || activeTenant.nome}</strong>
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+                    <span>Sistema Operativo</span>
+                    <Laptop className="w-3.5 h-3.5 text-slate-500" />
+                  </div>
+                  <div className="text-sm font-bold text-cyan-300 font-mono truncate">
+                    {gatewayClient?.osLabel || <span className="text-slate-500 font-normal italic">In attesa del PC...</span>}
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-mono block">
+                    {gatewayClient ? `Runtime: ${gatewayClient.pythonVersion}` : 'Windows / Linux / Mac'}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+                    <span>Indirizzo IP Sorgente</span>
+                    <Globe className="w-3.5 h-3.5 text-slate-500" />
+                  </div>
+                  <div className="text-sm font-bold text-amber-300 font-mono truncate">
+                    {gatewayClient?.clientIp || <span className="text-slate-500 font-normal italic">In attesa...</span>}
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-mono block truncate">
+                    Auth: {gatewayClient?.authType || 'NIS2 Industrial Gateway'}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+                    <span>Cartella Spool & Rete</span>
+                    <Folder className="w-3.5 h-3.5 text-purple-400" />
+                  </div>
+                  <div className="text-xs font-bold text-purple-300 font-mono truncate">
+                    {gatewayClient?.spoolPath || 'Locale: spool/'}
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono block truncate">
+                    Rete: {gatewayClient?.networkSharePath || '\\\\server-stabilimento\\e80_export'}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+                    <span>Ultimo Battito</span>
+                    <Signal className="w-3.5 h-3.5 text-slate-500" />
+                  </div>
+                  <div className="text-sm font-bold font-mono">
+                    {gatewayClient?.isOnline ? (
+                      <span className="text-emerald-400">{gatewayClient.secondsSinceLastPing}s fa</span>
+                    ) : gatewayClient ? (
+                      <span className="text-amber-400">{gatewayClient.secondsSinceLastPing}s fa</span>
+                    ) : (
+                      <span className="text-slate-500 font-normal italic">Nessun battito</span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-emerald-400/90 font-mono block">
+                    Pacchetti PC Reali: <strong>{physicalCount}</strong> <span className="text-slate-500">(Simulati: {browserSimCount})</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Collaudo Live & Feed Pacchetti */}
+              <div className="pt-4 border-t border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold text-white font-mono flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-emerald-400" />
+                      <span>Feed Pacchetti Telemetrici Ricevuti ({telemetryHistory.length})</span>
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Puoi usare <strong>Simula Pacchetto</strong> solo per testare il server senza un PC fisico collegato.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSendTestTelemetry}
+                    disabled={isSendingTest}
+                    className="px-3.5 py-2 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white font-mono text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 border border-blue-500/40 self-start"
                   >
-                    <option value="seconds">Secondi (Alta Frequenza)</option>
-                    <option value="minutes">Minuti (Cadenza Standard)</option>
-                    <option value="hours">Ore (Sintesi Energetica)</option>
-                    <option value="days">Giorni (Report Periodico)</option>
-                  </select>
+                    {isSendingTest ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                    <span>🧪 Simula Pacchetto (Test Browser)</span>
+                  </button>
                 </div>
-              </div>
 
-              {/* Pulsante di Salvataggio e Info Propagazione */}
-              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleSaveConfig()}
-                  disabled={isSaving || isOperator}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
-                >
-                  {isSaving ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  <span>{isOperator ? 'Modifica Riservata ai Responsabili' : 'Salva e Applica Frequenza'}</span>
-                </button>
-
-                <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>Sincronizzazione automatica M2M (Zero Downtime)</span>
-                </div>
-              </div>
-
-              {/* Box Spiegazione Propagazione Frequenza */}
-              <div className="p-3 rounded-xl bg-cyan-950/20 border border-cyan-500/30 text-xs font-mono space-y-1.5">
-                <div className="flex items-center gap-2 text-cyan-300 font-bold">
-                  <Activity className="w-4 h-4 text-cyan-400" />
-                  <span>Propagazione Dinamica al File .BAT, Python e ai PC Attivi ({totalSeconds}s)</span>
-                </div>
-                <p className="text-[11px] text-slate-300 font-sans leading-relaxed">
-                  ✓ <strong>Nei file scaricabili (.BAT, .PY, .SH):</strong> La frequenza di <span className="text-cyan-300 font-bold font-mono">{frequencyValue} {frequencyUnit} ({totalSeconds}s)</span> viene inserita in tempo reale nel codice sorgente dei file generati per questo stabilimento.<br />
-                  ✓ <strong>Sui PC già attivi in fabbrica:</strong> Non è necessario riscaricare il file! Il demone Python riceve la cadenza configurata nel pacchetto di risposta cloud e si sincronizza a caldo in automatico.
-                </p>
-              </div>
-
-              {/* Feedback Alert */}
-              {feedback && (
-                <div className={`p-3 rounded-xl border text-xs font-mono flex items-start gap-2.5 animate-in fade-in duration-200 ${
-                  feedback.success 
-                    ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' 
-                    : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
-                }`}>
-                  {feedback.success ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  )}
-                  <span className="flex-1">{feedback.message}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Presets Rapidi */}
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-mono font-bold text-slate-400 flex items-center gap-1.5">
-                <Zap className="w-3 h-3 text-amber-400" />
-                Scelta Rapida Preset Consigliati:
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-xs font-mono">
-                <button
-                  type="button"
-                  onClick={() => handleApplyPreset(3, 'seconds')}
-                  className="p-2 rounded-lg bg-slate-950 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-200 text-center transition-all cursor-pointer min-h-[44px] flex flex-col justify-center"
-                >
-                  <span className="font-bold text-cyan-400">3 Secondi</span>
-                  <span className="text-[9px] text-slate-500">Real-Time BEMA</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleApplyPreset(10, 'seconds')}
-                  className="p-2 rounded-lg bg-slate-950 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-200 text-center transition-all cursor-pointer min-h-[44px] flex flex-col justify-center"
-                >
-                  <span className="font-bold text-blue-400">10 Secondi</span>
-                  <span className="text-[9px] text-slate-500">Standard Linea</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleApplyPreset(1, 'minutes')}
-                  className="p-2 rounded-lg bg-slate-950 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-200 text-center transition-all cursor-pointer min-h-[44px] flex flex-col justify-center"
-                >
-                  <span className="font-bold text-emerald-400">1 Minuto</span>
-                  <span className="text-[9px] text-slate-500">Bilanciato OT</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleApplyPreset(1, 'hours')}
-                  className="p-2 rounded-lg bg-slate-950 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-200 text-center transition-all cursor-pointer min-h-[44px] flex flex-col justify-center"
-                >
-                  <span className="font-bold text-purple-400">1 Ora</span>
-                  <span className="text-[9px] text-slate-500">Sintesi Oraria</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleApplyPreset(1, 'days')}
-                  className="p-2 rounded-lg bg-slate-950 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-200 text-center transition-all cursor-pointer min-h-[44px] flex flex-col justify-center col-span-2 sm:col-span-1"
-                >
-                  <span className="font-bold text-amber-400">1 Giorno</span>
-                  <span className="text-[9px] text-slate-500">Report NIS2</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Colonna Destra: Scheda Riepilogo Impatto & Banda */}
-          <div className="lg:col-span-5 p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs">
-            <div className="flex items-center gap-2 text-cyan-400 font-bold border-b border-slate-800 pb-2">
-              <Activity className="w-4 h-4" />
-              <span>Riepilogo Impatto Tecnico Stimato</span>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between items-center py-1 border-b border-slate-900">
-                <span className="text-slate-400">Intervallo Ciclo:</span>
-                <span className="font-bold text-white">
-                  {frequencyValue} {frequencyUnit === 'seconds' ? 'secondi' : frequencyUnit === 'minutes' ? 'minuti' : frequencyUnit === 'hours' ? 'ore' : 'giorni'} ({totalSeconds}s)
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center py-1 border-b border-slate-900">
-                <span className="text-slate-400">Cadenza Invii:</span>
-                <span className="font-bold text-cyan-300">{packetsPerDay.toLocaleString()} pacchetti / giorno</span>
-              </div>
-
-              <div className="flex justify-between items-center py-1 border-b border-slate-900">
-                <span className="text-slate-400">Consumo Banda Stimato:</span>
-                <span className="font-bold text-emerald-400">~{estimatedKBytesPerDay > 1024 ? `${(estimatedKBytesPerDay / 1024).toFixed(1)} MB` : `${estimatedKBytesPerDay} KB`} / giorno</span>
-              </div>
-
-              <div className="flex justify-between items-center py-1 border-b border-slate-900">
-                <span className="text-slate-400">Carico CPU su PC/IPC:</span>
-                <span className="font-bold text-purple-300">&lt; 0.1% (Nessun impatto PLC)</span>
-              </div>
-
-              <div className="flex justify-between items-center py-1">
-                <span className="text-slate-400">Reattività Allarmi:</span>
-                <span className={`font-bold ${totalSeconds <= 10 ? 'text-emerald-400' : totalSeconds <= 60 ? 'text-amber-400' : 'text-slate-300'}`}>
-                  {totalSeconds <= 5 ? 'Istantanea (&lt;5s)' : totalSeconds <= 60 ? 'Rapida (1 min)' : 'Periodica differita'}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-blue-950/20 border border-blue-500/30 text-[11px] font-sans text-slate-300 leading-relaxed">
-              <strong className="text-blue-300 font-mono block mb-1">Come Funziona la Sincronizzazione:</strong>
-              Il demone Python che gira sullo stabilimento interroga all'avvio e ciclicamente l'endpoint <code className="text-cyan-300 font-mono text-[10px]">/api/telemetry/config</code>. Quando modifichi questo valore, tutti i demoni (Linux, Mac Apple, Windows) recepiscono il nuovo tempo di attesa senza dover riavviare il servizio.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. SIMULATORE & FEED LIVE DEI PACCHETTI TELEMETRICI */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-          <div>
-            <h4 className="text-xs font-bold text-white font-mono flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-              <span>Collaudo Live & Feed Pacchetti Telemetrici Ricevuti ({telemetryHistory.length})</span>
-            </h4>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              Feed in tempo reale dei dati ricevuti. I pacchetti contrassegnati con <span className="text-emerald-400 font-bold">PC FISICO</span> provengono dal tuo computer reale, mentre quelli con <span className="text-blue-300">SIMULAZIONE</span> sono generati internamente dal browser.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSendTestTelemetry}
-              disabled={isSendingTest}
-              className="px-3.5 py-1.5 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white font-mono text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[38px] disabled:opacity-50 border border-blue-500/40"
-              title="Genera un pacchetto simulato direttamente dal browser web per testare le API cloud"
-            >
-              {isSendingTest ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-              <span>🧪 Simula Pacchetto (Browser Web)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                fetchGatewayStatus();
-                onRefreshTelemetry();
-              }}
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
-              title="Aggiorna Feed e Stato Gateway"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Chiarimento importante tra test simulato e PC fisico */}
-        <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-start gap-2.5 text-[11px] text-slate-400 font-sans">
-          <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-          <div className="leading-relaxed">
-            <strong className="text-slate-200">Perché esiste il pulsante "Simula Pacchetto"?</strong> Serve solo per collaudare se il server cloud risponde quando non si ha un PC fisico sottomano. Se stai eseguendo il demone sul tuo computer reale Windows/Linux/Mac, <strong>non serve cliccare il pulsante</strong>: il tuo PC trasmetterà automaticamente i dati reali secondo la frequenza configurata e li vedrai accreditati qui sotto.
-          </div>
-        </div>
-
-        {testResult && (
-          <div className="p-3 rounded-xl bg-slate-950 border border-emerald-500/40 text-emerald-300 font-mono text-xs flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{testResult}</span>
-          </div>
-        )}
-
-        {/* FEED DEGLI ULTIMI PACCHETTI */}
-        {telemetryHistory.length === 0 ? (
-          <div className="p-8 rounded-xl bg-slate-950 border border-slate-800 text-center space-y-2">
-            <Activity className="w-8 h-8 text-slate-600 mx-auto animate-pulse" />
-            <div className="text-xs font-bold text-slate-300 font-mono">Nessun pacchetto ancora ricevuto</div>
-            <p className="text-[11px] text-slate-500 font-mono">
-              Avvia il demone Python sul tuo PC Windows (o Linux/Mac) per iniziare la ricezione automatica continua.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-            {telemetryHistory.map((pkt, pIdx) => {
-              const isAlarm = pkt.stato === 'ALLARME' || pkt.parametri?.allarmeAttivo;
-              const osInfo = pkt.rawPayload?.nodeMetadata?.os || pkt.nodeMetadata?.os || 'PC Locale';
-              const isRealPC = pkt.isPhysicalPC || pkt.rawPayload?.clientType === 'PHYSICAL_PC_DAEMON';
-
-              return (
-                <div
-                  key={`${pkt.id}-${pIdx}`}
-                  className={`p-3.5 rounded-xl border text-xs font-mono transition-all ${
-                    isAlarm
-                      ? 'bg-rose-950/20 border-rose-500/40 text-rose-200'
-                      : isRealPC
-                        ? 'bg-emerald-950/20 border-emerald-500/40 text-slate-200'
-                        : 'bg-slate-950 border-slate-800 text-slate-300'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/60 pb-2 mb-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${isAlarm ? 'bg-rose-500 animate-ping' : isRealPC ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
-                      <strong className="text-white">{pkt.nomeMacchinario}</strong>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-300">
-                        {pkt.macchinarioId}
-                      </span>
-                      
-                      {/* Distinzione sorgente: Hardware PC Reale vs Simulazione Web */}
-                      {isRealPC ? (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 font-bold flex items-center gap-1">
-                          <Laptop className="w-3 h-3 text-emerald-400" />
-                          <span>PC FISICO REALE</span>
-                        </span>
-                      ) : (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-blue-300 flex items-center gap-1">
-                          <Radio className="w-3 h-3 text-blue-400" />
-                          <span>SIMULAZIONE BROWSER</span>
-                        </span>
-                      )}
-
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-purple-950/60 border border-purple-800/60 text-purple-300 font-semibold">
-                        OS: {osInfo}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                      <span>Auth: <strong className="text-emerald-400">{pkt.authType}</strong></span>
-                      <span>|</span>
-                      <span>Ricevuto: <strong className="text-slate-300">{new Date(pkt.receivedAt).toLocaleTimeString()}</strong></span>
-                    </div>
+                {testResult && (
+                  <div className="p-3 rounded-xl bg-slate-900 border border-emerald-500/40 text-emerald-300 font-mono text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{testResult}</span>
                   </div>
+                )}
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                    <div className="p-2 rounded bg-slate-900/60 border border-slate-800">
-                      <span className="text-slate-500 text-[10px] block">Rotazione BEMA:</span>
-                      <strong className="text-cyan-300">{pkt.parametri?.velocitaRotazioneRpm ?? '--'} RPM</strong>
-                    </div>
-
-                    <div className="p-2 rounded bg-slate-900/60 border border-slate-800">
-                      <span className="text-slate-500 text-[10px] block">Temp. Inverter:</span>
-                      <strong className="text-emerald-300">{pkt.parametri?.temperaturaInverterC ?? '--'} °C</strong>
-                    </div>
-
-                    <div className="p-2 rounded bg-slate-900/60 border border-slate-800">
-                      <span className="text-slate-500 text-[10px] block">Produzione Pallet:</span>
-                      <strong className="text-amber-300">{pkt.parametri?.palletOra ?? '--'} pallet/h</strong>
-                    </div>
-
-                    <div className="p-2 rounded bg-slate-900/60 border border-slate-800">
-                      <span className="text-slate-500 text-[10px] block">Navetta LGV:</span>
-                      <strong className="text-purple-300">{pkt.lgv ? `${pkt.lgv.id} (${pkt.lgv.batteriaSoC}% SoC)` : 'Standby'}</strong>
-                    </div>
+                {telemetryHistory.length === 0 ? (
+                  <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-400 font-mono">
+                    Nessun pacchetto ricevuto finora. Avvia il demone sul PC o premi "Simula Pacchetto" per collaudare la ricezione.
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* 3. CONFERMA COLLEGAMENTO PC FISICO & HANDSHAKE HARDWARE LIVE */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
-          <div className="flex items-start gap-3">
-            <div className={`p-2.5 rounded-xl border shrink-0 ${
-              gatewayClient?.isOnline
-                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                : gatewayClient
-                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
-                  : 'bg-slate-800/80 border-slate-700 text-slate-400'
-            }`}>
-              <Laptop className={`w-5 h-5 ${gatewayClient?.isOnline ? 'animate-bounce' : ''}`} />
-            </div>
-
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm sm:text-base font-bold text-white font-mono">
-                  Stato Connessione Hardware & Handshake PC Fisico (M2M)
-                </h3>
-
-                {/* Badge Stato Connessione Reale */}
-                {gatewayClient?.isOnline ? (
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 flex items-center gap-1.5 shadow-lg shadow-emerald-500/10">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>PC FISICO COLLEGATO ED ATTIVO (ONLINE)</span>
-                  </span>
-                ) : gatewayClient ? (
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-400" />
-                    <span>PC IN PAUSA (OFFLINE DA {gatewayClient.secondsSinceLastPing}s)</span>
-                  </span>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-slate-800 border border-slate-700 text-slate-400 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-slate-500" />
-                    <span>IN ATTESA DEL PRIMO COLLEGAMENTO DAL TUO PC</span>
-                  </span>
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {telemetryHistory.slice(0, 10).map((pkt, pIdx) => {
+                      const isAlarm = pkt.stato === 'ALLARME' || pkt.parametri?.allarmeAttivo;
+                      const isRealPC = pkt.isPhysicalPC || pkt.rawPayload?.clientType === 'PHYSICAL_PC_DAEMON';
+                      return (
+                        <div
+                          key={`${pkt.id}-${pIdx}`}
+                          className={`p-3 rounded-xl border text-xs font-mono flex flex-wrap items-center justify-between gap-2 ${
+                            isAlarm ? 'bg-rose-950/20 border-rose-500/40 text-rose-200' : isRealPC ? 'bg-emerald-950/20 border-emerald-500/40 text-slate-200' : 'bg-slate-900 border-slate-800 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${isAlarm ? 'bg-rose-500' : isRealPC ? 'bg-emerald-400' : 'bg-blue-400'}`} />
+                            <strong className="text-white">{pkt.nomeMacchinario}</strong>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isRealPC ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/15 text-blue-300'}`}>
+                              {isRealPC ? 'PC FISICO' : 'SIMULAZIONE'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            {pkt.parametri?.velocitaRotazioneRpm ?? '--'} RPM • {pkt.parametri?.temperaturaInverterC ?? '--'} °C • {new Date(pkt.receivedAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
-              <p className="text-xs text-slate-400 font-sans mt-0.5">
-                Riconoscimento e telemetria diretta dal computer reale di stabilimento. Anche se non sono ancora collegati sensori PLC fisici, questo modulo conferma che la connessione di rete e l'handshake M2M tra il tuo PC e la piattaforma sono perfettamente riusciti.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={fetchGatewayStatus}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-mono text-xs flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
-            title="Interroga subito il server"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Verifica Connessione PC</span>
-          </button>
-        </div>
-
-        {/* BANNER INFORMATIVO DI CONFERMA / ISTRUZIONE */}
-        {gatewayClient?.isOnline ? (
-          <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/50 flex items-start gap-3">
-            <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <div className="text-xs font-mono font-bold text-emerald-300 flex items-center gap-2">
-                <span>COLLEGAMENTO TRA PC E PIATTAFORMA ONLINE CONFERMATO AL 100%!</span>
-                <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px]">VERIFICATO</span>
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(4)}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 font-mono text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Indietro</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(1)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/40 font-mono text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Torna all'inizio (Step 1)</span>
+                </button>
               </div>
-              <p className="text-xs text-slate-300 font-sans leading-relaxed">
-                Il computer <strong className="text-white font-mono">{gatewayClient.hostname}</strong> ({gatewayClient.osLabel}) si è agganciato con successo alla piattaforma cloud con crittografia end-to-end. Lo script demone è in esecuzione e mantiene attivo il canale di comunicazione con battiti cardiaci (Heartbeat) regolari.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="p-4 rounded-xl bg-gradient-to-r from-slate-950 to-slate-900 border border-slate-800 flex items-start gap-3">
-            <Info className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <div className="text-xs font-mono font-bold text-cyan-300">
-                Come collegare il tuo PC Windows e vedere la conferma verde:
-              </div>
-              <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                1. Apri la cartella <code className="text-cyan-300 font-mono">C:\JOKER80</code> sul tuo computer.<br />
-                2. Fai doppio clic su <code className="text-emerald-300 font-mono">start_daemon_windows.bat</code> per avviarlo.<br />
-                3. Non appena il file si avvia, invia istantaneamente un <strong>Handshake di presenza</strong> a questa piattaforma e questo riquadro si illuminerà di verde mostrando il nome del tuo computer, l'IP pubblico e l'orario esatto del collegamento!
-              </p>
             </div>
           </div>
         )}
-
-        {/* SCHEDE DIAGNOSTICHE DETTAGLIATE HARDWARE PC (6 CARDS) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {/* Card 1: Computer Hostname */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
-              <span>Nome Computer (Host)</span>
-              <HardDrive className="w-3.5 h-3.5 text-slate-500" />
-            </div>
-            <div className="text-sm font-bold text-white font-mono truncate" title={gatewayClient?.hostname}>
-              {gatewayClient?.hostname || (
-                <span className="text-slate-500 font-normal italic">In attesa del PC...</span>
-              )}
-            </div>
-            <span className="text-[10px] text-slate-500 font-mono block">
-              {gatewayClient ? `Architettura: ${gatewayClient.architecture}` : 'Riconoscimento automatico'}
-            </span>
-          </div>
-
-          {/* Card 2: MAC Address Hardware & Stabilimento */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
-              <span className="flex items-center gap-1">
-                <Radio className="w-3.5 h-3.5 text-emerald-400" />
-                <span>MAC Address Hardware</span>
-              </span>
-              {gatewayClient?.macAddress && gatewayClient.macAddress !== 'N/D' && (
-                <button
-                  type="button"
-                  onClick={() => handleCopy(gatewayClient.macAddress, 'mac-copy')}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 hover:text-white transition-colors cursor-pointer"
-                  title="Copia MAC Address"
-                >
-                  {copiedKey === 'mac-copy' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'mac-copy' ? 'Copiato' : 'Copia'}</span>
-                </button>
-              )}
-            </div>
-            <div className="text-sm font-bold text-emerald-300 font-mono tracking-wider truncate">
-              {gatewayClient?.macAddress && gatewayClient.macAddress !== 'N/D' ? (
-                gatewayClient.macAddress
-              ) : (
-                <span className="text-slate-500 font-normal italic">Rilevamento hardware...</span>
-              )}
-            </div>
-            <span className="text-[10px] text-cyan-400/90 font-mono block truncate">
-              Stabilimento: <strong>{gatewayClient?.plantName || activeTenant.nome}</strong>
-            </span>
-          </div>
-
-          {/* Card 3: Sistema Operativo Reale */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
-              <span>Sistema Operativo Riconosciuto</span>
-              <Laptop className="w-3.5 h-3.5 text-slate-500" />
-            </div>
-            <div className="text-sm font-bold text-cyan-300 font-mono truncate" title={gatewayClient?.osLabel}>
-              {gatewayClient?.osLabel || (
-                <span className="text-slate-500 font-normal italic">In attesa del PC...</span>
-              )}
-            </div>
-            <span className="text-[10px] text-slate-500 font-mono block">
-              {gatewayClient ? `Runtime: ${gatewayClient.pythonVersion}` : 'Windows / Linux / Mac'}
-            </span>
-          </div>
-
-          {/* Card 4: Indirizzo IP Sorgente & Canale M2M */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
-              <span>Indirizzo IP Sorgente PC</span>
-              <Globe className="w-3.5 h-3.5 text-slate-500" />
-            </div>
-            <div className="text-sm font-bold text-amber-300 font-mono truncate">
-              {gatewayClient?.clientIp || (
-                <span className="text-slate-500 font-normal italic">In attesa...</span>
-              )}
-            </div>
-            <span className="text-[10px] text-slate-500 font-mono block truncate" title="X-Industrial-Gateway-Key">
-              Auth: {gatewayClient?.authType || 'NIS2 Industrial Gateway'}
-            </span>
-          </div>
-
-          {/* Card 5: Cartelle Spool & Rete E80 */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
-              <span className="flex items-center gap-1">
-                <Folder className="w-3.5 h-3.5 text-purple-400" />
-                <span>Cartella Dati Spool & Rete</span>
-              </span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300">Auto-Scan</span>
-            </div>
-            <div className="text-xs font-bold text-purple-300 font-mono truncate" title={gatewayClient?.spoolPath || 'C:\\JOKER80\\spool'}>
-              {gatewayClient?.spoolPath || 'Locale: spool/'}
-            </div>
-            <span className="text-[10px] text-slate-400 font-mono block truncate" title={gatewayClient?.networkSharePath || '\\\\server-stabilimento\\e80_export'}>
-              Rete: {gatewayClient?.networkSharePath || '\\\\server-stabilimento\\e80_export'}
-            </span>
-          </div>
-
-          {/* Card 6: Ultimo Battito & Pacchetti Reali */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
-              <span>Ultimo Battito (Heartbeat)</span>
-              <Signal className="w-3.5 h-3.5 text-slate-500" />
-            </div>
-            <div className="text-sm font-bold font-mono">
-              {gatewayClient?.isOnline ? (
-                <span className="text-emerald-400">{gatewayClient.secondsSinceLastPing}s fa</span>
-              ) : gatewayClient ? (
-                <span className="text-amber-400">{gatewayClient.secondsSinceLastPing}s fa</span>
-              ) : (
-                <span className="text-slate-500 font-normal italic">Nessun battito</span>
-              )}
-            </div>
-            <span className="text-[10px] text-emerald-400/90 font-mono block">
-              Pacchetti PC Reali: <strong>{physicalCount}</strong>
-              <span className="text-slate-500 font-normal"> (Simulati: {browserSimCount})</span>
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   );

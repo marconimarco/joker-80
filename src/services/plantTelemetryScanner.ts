@@ -1,5 +1,6 @@
 import { FactoryTenant, QuantumExecutionResult } from '../types/quantum';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
+import { evaluateCalculationStatus } from '../data/industrialThresholds';
 import { QuantumEngine } from './quantumEngine';
 import { PlantTelemetryHistoryService } from './plantTelemetryHistory';
 
@@ -233,7 +234,7 @@ export class PlantTelemetryScanner {
           : [0, 0];
         return {
           coordinate_partenza: startCoord,
-          nodi_prelievo: 5
+          nodi_prelievo_count: 5
         };
       }
       case 9: {
@@ -386,7 +387,7 @@ export class PlantTelemetryScanner {
     calcId: number,
     res: any,
     inputs: Record<string, any>,
-    tenant: FactoryTenant,
+    _tenant: FactoryTenant,
     subFunction: string = 'Operazione'
   ): {
     livelloAllarme: 'NORMALE' | 'ATTENZIONE' | 'CRITICO';
@@ -396,214 +397,14 @@ export class PlantTelemetryScanner {
     valore: string | number;
     azione: string;
   } {
-    if (calcId === 1) {
-      if (res.trigger_azione_classica === 99 || (inputs.camion_attesa > 5 && inputs.saturazione_wms > 85)) {
-        return {
-          livelloAllarme: 'CRITICO',
-          titolo: 'Collasso Inbound Imminente: Blocco Piazzale & Magazzino Saturo',
-          dettaglio: `Rilevati ${inputs.camion_attesa} camion con magazzino saturo al ${inputs.saturazione_wms}%. Indice Rischio QBM: ${res.indice_rischio_blocco || 'CRITICO'}.`,
-          parametro: 'saturazione_wms / camion_attesa',
-          valore: `${inputs.saturazione_wms}% | ${inputs.camion_attesa} camion`,
-          azione: res.azione_correttiva_suggerita || 'Deviare i camion al polmone esterno e congelare i gate secondari.'
-        };
-      }
-    }
-
-    if (calcId === 2) {
-      if (res.codice_allarme_fabbrica === 88 || inputs.ritardo_stimato_minuti > 50) {
-        return {
-          livelloAllarme: 'CRITICO',
-          titolo: 'Rischio Fermo Linea a Valle (Simulazione Monte Carlo)',
-          dettaglio: `Ritardo accumulato fornitore di ${inputs.ritardo_stimato_minuti} min con solo ${inputs.baie_libere} baia libera. Rischio stocastico al ${res.rischio_stocastico || '78%'}.`,
-          parametro: 'ritardo_stimato_minuti',
-          valore: `${inputs.ritardo_stimato_minuti} min`,
-          azione: res.azione_misure_sicurezza || 'Attivare baia di emergenza e rallentare assorbimento silos.'
-        };
-      }
-    }
-
-    if (calcId === 4) {
-      if (inputs.umidita_rilevata > 14.5) {
-        return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: 'Umidità Eccessiva Materie Prime (Grano/Impasti)',
-          dettaglio: `Sensore silos rileva umidità al ${inputs.umidita_rilevata}% (soglia max 14.0%). Rischio alterazione viscosità impasto e agglomerazione prodotto.`,
-          parametro: 'umidita_rilevata',
-          valore: `${inputs.umidita_rilevata}%`,
-          azione: 'Attivare ricircolo deumidificatore silos e deviare lotto a linea secondaria.'
-        };
-      }
-    }
-
-    if (calcId === 6) {
-      if (inputs.celle_libere_3d < 25) {
-        return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: 'Saturazione Celle Magazzino Automatico SmartStore',
-          dettaglio: `Rilevate solo ${inputs.celle_libere_3d} celle libere disponibili per stoccaggio ad alta rotazione. Rischio saturazione imminente.`,
-          parametro: 'celle_libere_3d',
-          valore: `${inputs.celle_libere_3d} celle`,
-          azione: 'Avviare riallocazione predittiva dei colli verso il magazzino polmone secondario.'
-        };
-      }
-    }
-
-    if (calcId === 7) {
-      if (inputs.micro_inclinazione > 0.40 || res.codice_stato_struttura === 333) {
-        return {
-          livelloAllarme: 'CRITICO',
-          titolo: 'Deformazione Strutturale Scaffalatura SmartStore',
-          dettaglio: `Sensore di inclinazione corsia 2 rileva micro-inclinazione di ${inputs.micro_inclinazione}° (soglia max 0.35°). Pattern anomalo Hopfield.`,
-          parametro: 'micro_inclinazione',
-          valore: `${inputs.micro_inclinazione}°`,
-          azione: res.azione_sicurezza_wms || 'Bloccare trasloelevatore corsia 2 per ispezione meccanica.'
-        };
-      }
-    }
-
-    if (calcId === 9) {
-      if (inputs.coefficiente_traffico > 0.75) {
-        return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: 'Congestione Traffico Flotta Navette LGV',
-          dettaglio: `Coefficiente di traffico all'${Math.round(inputs.coefficiente_traffico * 100)}% con ${inputs.ordini_in_coda} ordini in coda. Tempo medio attesa navetta +35%.`,
-          parametro: 'coefficiente_traffico / ordini',
-          valore: `${Math.round(inputs.coefficiente_traffico * 100)}% | ${inputs.ordini_in_coda} ordini`,
-          azione: 'Ribilanciare nodi di transito LGV e dare priorità alle baie di pallettizzazione veloci.'
-        };
-      }
-    }
-
-    if (calcId === 13) {
-      if (inputs.codice_saturazione_buffer > 0.75) {
-        return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: 'Saturazione Area Polmone Piazzale Superiore all\'80%',
-          dettaglio: `Buffer piazzale saturo all'${Math.round(inputs.codice_saturazione_buffer * 100)}% con ${inputs.camion_in_attesa} veicoli in coda al varco.`,
-          parametro: 'codice_saturazione_buffer',
-          valore: `${Math.round(inputs.codice_saturazione_buffer * 100)}%`,
-          azione: res.direttiva_operatore_barra || 'Aprire varco secondario B e assegnare stalli polmone 04-06.'
-        };
-      }
-    }
-
-    if (calcId === 14) {
-      if (inputs.giri_minuto > 46.0 || res.codice_allarme_ecs === 414) {
-        return {
-          livelloAllarme: 'CRITICO',
-          titolo: 'Allarme Cuscinetto Braccio Rotante Bema Silkworm',
-          dettaglio: `Velocità a ${inputs.giri_minuto} rpm con spettro armonico anomalo rilevato tramite Quantum Fourier Transform. Rischio grippaggio cuscinetto principale.`,
-          parametro: 'giri_minuto (RPM)',
-          valore: `${inputs.giri_minuto} rpm`,
-          azione: res.direttiva_manutettiva_predittiva || res.direttiva_manutenzione_predittiva || 'Rallentare fasciatore Bema a 38 rpm e programmare ingrassaggio cuscinetto.'
-        };
-      }
-    }
-
-    if (calcId === 15) {
-      if (inputs.tensione_newton > 145.0 || res.codice_stato_macchina === 100) {
-        return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: 'Tensione Eccessiva Film Estensibile Bema (Rischio Strappo)',
-          dettaglio: `Tensione cella di carico a ${inputs.tensione_newton} N (soglia max 140 N). Il classificatore QSVM predice 92% probabilità di rottura film su prossimo bancale.`,
-          parametro: 'tensione_newton',
-          valore: `${inputs.tensione_newton} N`,
-          azione: res.azione_correttiva_plc || 'Inviare comando PLC di decelerazione pre-stiro film (-15%).'
-        };
-      }
-    }
-
-    if (calcId === 16) {
-      const coordValues = Object.values(inputs.coordinate_agv_attivi || {});
-      const hasConflict = coordValues.length > 1 && new Set(coordValues).size < coordValues.length;
-      if (hasConflict) {
-        return {
-          livelloAllarme: 'CRITICO',
-          titolo: 'Rischio Collisione / Deadlock Incrocio Navette LGV',
-          dettaglio: `Rilevate due navette LGV in convergenza sullo stesso nodo critico. Rischio stallo o collisione intercettato dal circuito QAOA.`,
-          parametro: 'coordinate_agv_attivi',
-          valore: 'Conflitto Nodo N-04',
-          azione: 'Fermare temporaneamente LGV_02 e assegnare diritto di precedenza ad alta priorità a LGV_01.'
-        };
-      }
-    }
-
-    if (calcId === 17) {
-      const batEntries = Object.entries(inputs.telemetria_batterie_agv || {}) as [string, any][];
-      const lowBatt = batEntries.find(([_, data]) => data && Number(data.SoC) < 50);
-      if (lowBatt) {
-        return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: `Navetta ${lowBatt[0]} con Batteria Bassa (<50%)`,
-          dettaglio: `Stato di carica rilevato ${lowBatt[1]?.SoC}% con temp ${lowBatt[1]?.Temp}°C. Possibile ritardo missioni pallet.`,
-          parametro: `SoC ${lowBatt[0]}`,
-          valore: `${lowBatt[1]?.SoC}%`,
-          azione: 'Inviare veicolo alla stazione di ricarica rapida e riallocare missioni ad altre navette.'
-        };
-      }
-    }
-
-    if (calcId === 18) {
-      const maxTorque = inputs.coppia_motori_nm ? Math.max(...inputs.coppia_motori_nm) : 250;
-      if (res.codice_controllo_robot === 518 || inputs.pressione_vuoto_bar > -0.65 || maxTorque > 390) {
-        return {
-          livelloAllarme: 'CRITICO',
-          titolo: 'Allarme Presa Sottovuoto / Sovraccarico Robot Pallettizzazione',
-          dettaglio: `Pressione vuoto a ${inputs.pressione_vuoto_bar} bar con picco coppia robot a ${maxTorque} Nm. Rischio caduta collo o strappo ventosa.`,
-          parametro: 'pressione_vuoto_bar / coppia_motori_nm',
-          valore: `${inputs.pressione_vuoto_bar} bar | ${maxTorque} Nm`,
-          azione: res.direttiva_cinematica_robot || 'Rallentare asse robot J2 e verificare tenuta ventose pneumatiche.'
-        };
-      }
-    }
-
-    if (calcId === 19) {
-      if (res.codice_gestione_rete === 519 || inputs.potenza_erogata_totale_kw > 110 || inputs.temp_piastre_c > 44) {
-        return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: 'Picco Assorbimento Fast-Charge / Surriscaldamento Piastre Induttive',
-          dettaglio: `Potenza ricarica flotta a ${inputs.potenza_erogata_totale_kw} kW con piastra terra a ${inputs.temp_piastre_c}°C. Supercondensatori shuttle al ${inputs.livello_supercondensatori_pct}%.`,
-          parametro: 'potenza_erogata_totale_kw',
-          valore: `${inputs.potenza_erogata_totale_kw} kW`,
-          azione: res.allocazione_potenza_fast_charge || 'Attivare modulazione knapsack e modulare erogazione a 25 kW.'
-        };
-      }
-    }
-
-    if (calcId === 20) {
-      if (res.codice_esito_woodpecker === 520 || inputs.forza_deformazione_pattini_n < 2600 || inputs.umidita_legno_pct > 17.5) {
-        return {
-          livelloAllarme: 'CRITICO',
-          titolo: 'Pallet Difettoso Scartato all\'Ingresso (Ispezione Woodpecker)',
-          dettaglio: `Resistenza pattini a ${inputs.forza_deformazione_pattini_n} N (soglia min 2600 N) o umidità al ${inputs.umidita_legno_pct}%. Pallet respinto dal classificatore QSVM.`,
-          parametro: 'forza_deformazione_pattini_n',
-          valore: `${inputs.forza_deformazione_pattini_n} N`,
-          azione: res.direttiva_smistamento_scarto || 'Espellere bancale su rulliera scarti ed evitare stoccaggio in altezza nello SmartStore.'
-        };
-      }
-    }
-
-    if (calcId === 21) {
-      if (res.codice_validazione_raptor === 521 || inputs.grado_qualita_stampa_iso !== 'CLASSE_A') {
-        return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: 'Degrado Qualità Stampa Etichetta Raptor GS1/SSCC',
-          dettaglio: `Qualità lettura ottica a ${inputs.grado_qualita_stampa_iso} (richiesta CLASSE_A). Temp testina termica a ${inputs.temp_testina_termica_c}°C. Prova ZKP reticolo post-quantum a rischio.`,
-          parametro: 'grado_qualita_stampa_iso',
-          valore: `${inputs.grado_qualita_stampa_iso}`,
-          azione: res.qualita_stampa_status || 'Pulire testina termica etichettatrice e ricalibrare fotocellule.'
-        };
-      }
-    }
-
-    // Default: in normal line operations
+    const unified = evaluateCalculationStatus(calcId, res, inputs, subFunction);
     return {
-      livelloAllarme: 'NORMALE',
-      titolo: `Processo Regolare (${subFunction})`,
-      dettaglio: `Tutti i parametri quantistici rientrano nelle tolleranze di processo ammesse dal circuito CUDA-Q.`,
-      parametro: 'Stato Globale',
-      valore: 'A NORMA',
-      azione: 'Nessuna azione correttiva richiesta al momento.'
+      livelloAllarme: unified.livelloAllarme,
+      titolo: unified.titolo,
+      dettaglio: unified.dettaglio,
+      parametro: unified.parametro,
+      valore: unified.valore,
+      azione: unified.azione
     };
   }
 

@@ -1,4 +1,5 @@
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
+import { evaluateCalculationStatus } from '../data/industrialThresholds';
 import { QuantumEngine } from './quantumEngine';
 import { QuantumExecutionResult, FactoryTenant, ChatOptionChoice } from '../types/quantum';
 
@@ -575,28 +576,27 @@ Verifica la terminologia utilizzata oppure specifica il reparto/macchinario di i
       extractedSource.id_lotto_materiale = saved.id_lotto_materiale ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
 
     } else if (targetId === 6) {
-      inputs.classe_rotazione = saved.classe_rotazione || (text.includes('alta') ? 'A' : text.includes('bassa') ? 'C' : 'A');
-      inputs.celle_libere = saved.celle_libere ?? (topology?.magazziniSmartStore?.[0]?.strutturaSpazio?.matrice3dOccupazione?.vuote ?? 142);
-      inputs.peso_kg = saved.peso_kg ?? 780;
-      extractedSource.celle_libere = saved.celle_libere ? 'OPERATORE_MEMORIZZATO' : 'TELEMETRIA_IMPIANTO';
+      inputs.classe_rotazione = saved.classe_rotazione || (text.includes('alta') ? 'HIGH' : text.includes('bassa') ? 'LOW' : 'HIGH');
+      inputs.celle_libere_3d = saved.celle_libere_3d ?? saved.celle_libere ?? (topology?.magazziniSmartStore?.[0]?.strutturaSpazio?.matrice3dOccupazione?.vuote ?? 124);
+      inputs.peso_bilancia_kg = saved.peso_bilancia_kg ?? saved.peso_kg ?? 780;
+      inputs.sagoma_fuori_asse = saved.sagoma_fuori_asse ?? text.includes('fuori asse');
+      extractedSource.celle_libere_3d = (saved.celle_libere_3d ?? saved.celle_libere) !== undefined ? 'OPERATORE_MEMORIZZATO' : 'TELEMETRIA_IMPIANTO';
 
     } else if (targetId === 7) {
-      inputs.inclinazione_gradi = saved.inclinazione_gradi ?? (text.includes('gradi') ? 0.95 : 0.42);
-      inputs.peso_carico_kg = saved.peso_carico_kg ?? 18400;
-      inputs.vibrazioni_fondo_g = saved.vibrazioni_fondo_g ?? 0.08;
-      extractedSource.inclinazione_gradi = saved.inclinazione_gradi ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
+      inputs.micro_inclinazione = saved.micro_inclinazione ?? saved.inclinazione_gradi ?? (text.includes('gradi') ? 0.95 : 0.40);
+      inputs.pressione_pattini_bar = saved.pressione_pattini_bar ?? 15.0;
+      inputs.carico_pattini_integri = saved.carico_pattini_integri ?? !text.includes('danneggi');
+      extractedSource.micro_inclinazione = (saved.micro_inclinazione ?? saved.inclinazione_gradi) !== undefined ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
 
     } else if (targetId === 8) {
-      inputs.punti_picking = saved.punti_picking ?? 7;
-      inputs.capacita_carrello_kg = saved.capacita_carrello_kg ?? 1200;
-      inputs.corridoio_prioritario = saved.corridoio_prioritario ?? 'C-04';
-      extractedSource.punti_picking = saved.punti_picking ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
+      inputs.nodi_prelievo_count = saved.nodi_prelievo_count ?? saved.punti_picking ?? 7;
+      inputs.distanza_totale_metri = saved.distanza_totale_metri ?? (inputs.nodi_prelievo_count * 85);
+      extractedSource.nodi_prelievo_count = (saved.nodi_prelievo_count ?? saved.punti_picking) !== undefined ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
 
     } else if (targetId === 9) {
-      inputs.numero_ordini = saved.numero_ordini ?? 16;
-      inputs.soglia_affinita_lotto = saved.soglia_affinita_lotto ?? 0.85;
-      inputs.destinazione_comune = true;
-      extractedSource.numero_ordini = saved.numero_ordini ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
+      inputs.ordini_in_coda = saved.ordini_in_coda ?? saved.numero_ordini ?? 16;
+      inputs.coefficiente_traffico = saved.coefficiente_traffico ?? saved.soglia_affinita_lotto ?? 0.45;
+      extractedSource.ordini_in_coda = (saved.ordini_in_coda ?? saved.numero_ordini) !== undefined ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
 
     } else if (targetId === 10) {
       const colliMatch = text.match(/(\d+)\s*colli/i) || text.match(/colli\s*[:=]?\s*(\d+)/i);
@@ -605,25 +605,24 @@ Verifica la terminologia utilizzata oppure specifica il reparto/macchinario di i
       inputs.volume_cassone_m3 = volMatch ? parseFloat(volMatch[1]) : (saved.volume_cassone_m3 ?? 86.0);
       inputs.volume_disponibile_mc = inputs.volume_cassone_m3;
       inputs.peso_totale_kg = saved.peso_totale_kg ?? 24500.0;
-      extractedSource.colli_da_caricare = colliMatch ? 'OPERATORE' : (saved.colli_da_caricare ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE');
+      extractedSource.colli_da_caricare = colliMatch ? 'OPERATORE' : (saved.colli_da_caricare !== undefined ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE');
 
     } else if (targetId === 11) {
       inputs.id_spedizione = saved.id_spedizione || 'SHP-2026-9901';
-      inputs.vettore_piva = saved.vettore_piva || 'IT12345678901';
-      inputs.destinazione_hub = saved.destinazione_hub || 'BOLOGNA_INTERPORTO';
+      inputs.vettore_logistico = saved.vettore_logistico || saved.vettore_piva || 'FERCAM-LOGISTICS-IT';
+      inputs.destinazione = saved.destinazione || saved.destinazione_hub || 'HUB-INTERPORTO-BOLOGNA';
       extractedSource.id_spedizione = saved.id_spedizione ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
 
     } else if (targetId === 12) {
-      inputs.camion_in_coda = saved.camion_in_coda ?? (saved.camion_attesa ?? 6);
-      inputs.baie_outbound = saved.baie_outbound ?? (topology ? topology.baie.length : 4);
-      inputs.finestra_oraria_urgente = true;
-      extractedSource.camion_in_coda = (saved.camion_in_coda || saved.camion_attesa) ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
+      inputs.camion_in_coda = saved.camion_in_coda ?? saved.camion_in_piazzale ?? saved.camion_attesa ?? 6;
+      inputs.baie_disponibili = saved.baie_disponibili ?? saved.baie_outbound ?? (topology ? topology.baie.length : 4);
+      inputs.costo_orario_attesa_eur = saved.costo_orario_attesa_eur ?? 65.0;
+      extractedSource.camion_in_coda = (saved.camion_in_coda ?? saved.camion_in_piazzale ?? saved.camion_attesa) !== undefined ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
 
     } else if (targetId === 13) {
-      inputs.flusso_orario_camion = saved.flusso_orario_camion ?? 12;
-      inputs.tempo_medio_stazionamento_min = saved.tempo_medio_stazionamento_min ?? 42;
-      inputs.capacita_buffer_piazzale = saved.capacita_buffer_piazzale ?? 18;
-      extractedSource.flusso_orario_camion = saved.flusso_orario_camion ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
+      inputs.camion_attesa = saved.camion_attesa ?? saved.camion_in_attesa ?? saved.flusso_orario_camion ?? 12;
+      inputs.saturazione_buffer = saved.saturazione_buffer ?? saved.codice_saturazione_buffer ?? 0.72;
+      extractedSource.camion_attesa = (saved.camion_attesa ?? saved.camion_in_attesa ?? saved.flusso_orario_camion) !== undefined ? 'OPERATORE_MEMORIZZATO' : 'VALORE_BASE';
 
     } else if (targetId === 14) {
       const rpmMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:rpm|giri)/i) || text.match(/rpm\s*[:=]?\s*(\d+(?:\.\d+)?)/i) || (hasNumbers ? text.match(/(\d+(?:\.\d+)?)/) : null);
@@ -684,28 +683,29 @@ Verifica la terminologia utilizzata oppure specifica il reparto/macchinario di i
       }
 
       if (sMatch) { 
-        inputs.velocita_svolgimento_ms = parseFloat(sMatch[1]); 
-        extractedSource.velocita_svolgimento_ms = 'OPERATORE'; 
-      } else if (saved.velocita_svolgimento_ms !== undefined) {
-        inputs.velocita_svolgimento_ms = saved.velocita_svolgimento_ms;
-        extractedSource.velocita_svolgimento_ms = 'OPERATORE_MEMORIZZATO';
+        inputs.velocita_svolgimento = parseFloat(sMatch[1]); 
+        extractedSource.velocita_svolgimento = 'OPERATORE'; 
+      } else if (saved.velocita_svolgimento !== undefined || saved.velocita_svolgimento_ms !== undefined) {
+        inputs.velocita_svolgimento = saved.velocita_svolgimento ?? saved.velocita_svolgimento_ms;
+        extractedSource.velocita_svolgimento = 'OPERATORE_MEMORIZZATO';
         hasTransferredParams = true;
       } else { 
-        inputs.velocita_svolgimento_ms = 11.2; 
-        extractedSource.velocita_svolgimento_ms = 'VALORE_BASE'; 
+        inputs.velocita_svolgimento = 11.2; 
+        extractedSource.velocita_svolgimento = 'VALORE_BASE'; 
       }
 
     } else if (targetId === 16) {
-      inputs.numero_agv_attivi = saved.numero_agv_attivi ?? (topology ? topology.flottaAgv.filter(a => a.stato === 'MISSIONE').length : 12);
-      inputs.incroci_congestionati = saved.incroci_congestionati ?? 3;
-      inputs.tempo_risoluzione_max_sec = 2.0;
-      extractedSource.numero_agv_attivi = saved.numero_agv_attivi ? 'OPERATORE_MEMORIZZATO' : (topology ? 'TELEMETRIA_IMPIANTO' : 'VALORE_BASE');
+      inputs.navette_attive = saved.navette_attive ?? saved.numero_agv_attivi ?? (topology ? topology.flottaAgv.filter(a => a.stato === 'MISSIONE').length : 6);
+      inputs.nodi_critici = saved.nodi_critici ?? saved.incroci_congestionati ?? 1;
+      extractedSource.navette_attive = (saved.navette_attive ?? saved.numero_agv_attivi) !== undefined ? 'OPERATORE_MEMORIZZATO' : (topology ? 'TELEMETRIA_IMPIANTO' : 'VALORE_BASE');
 
     } else if (targetId === 17) {
-      inputs.agv_disponibili = saved.agv_disponibili ?? (topology ? topology.flottaAgv.length : 14);
-      inputs.missioni_pendenti = saved.missioni_pendenti ?? 9;
-      inputs.soglia_minima_soc_pct = saved.soglia_minima_soc_pct ?? 25.0;
-      extractedSource.agv_disponibili = saved.agv_disponibili ? 'OPERATORE_MEMORIZZATO' : (topology ? 'TELEMETRIA_IMPIANTO' : 'VALORE_BASE');
+      inputs.missioni_urgenti = saved.missioni_urgenti ?? saved.missioni_pendenti ?? 8;
+      inputs.soc_medio_flotta_pct = saved.soc_medio_flotta_pct ?? (topology && topology.flottaAgv.length > 0
+        ? Number((topology.flottaAgv.reduce((s, a) => s + a.batteriaSoC, 0) / topology.flottaAgv.length).toFixed(1))
+        : 64.5);
+      inputs.temperatura_batterie_c = saved.temperatura_batterie_c ?? 34.2;
+      extractedSource.soc_medio_flotta_pct = saved.soc_medio_flotta_pct !== undefined ? 'OPERATORE_MEMORIZZATO' : (topology ? 'TELEMETRIA_IMPIANTO' : 'VALORE_BASE');
 
     } else if (targetId === 18) {
       const vMatch = text.match(/(-\d+(?:\.\d+)?)\s*(?:bar)?/i) || text.match(/vuoto\s*(?:a)?\s*(-\d+(?:\.\d+)?)/i);
@@ -839,74 +839,10 @@ Verifica la terminologia utilizzata oppure specifica il reparto/macchinario di i
     // 7. EXECUTE CIRCUIT IN QUANTUM ENGINE WITH THOSE EXACT INPUTS
     const res: Record<string, any> = await QuantumEngine.executeCalculation(targetId, inputs);
 
-    // 8. DETERMINE LEVEL OF ALARM AND IMMEDIATE ACTION
-    let immediateAction = '';
-    let alarmLevel: 'NORMALE' | 'ATTENZIONE' | 'CRITICO' = 'NORMALE';
-
-    if (res.indice_rischio_blocco) {
-      immediateAction = res.azione_correttiva_suggerita;
-      alarmLevel = res.trigger_azione_classica === 99 ? 'CRITICO' : 'NORMALE';
-    } else if (res.rischio_stocastico) {
-      immediateAction = res.azione_misure_sicurezza;
-      alarmLevel = res.codice_allarme_fabbrica === 88 ? 'CRITICO' : 'NORMALE';
-    } else if (res.efficienza_schedulazione) {
-      immediateAction = res.nota_operativa_fabbrica;
-      alarmLevel = res.codice_configurazione_baia === 404 ? 'ATTENZIONE' : 'NORMALE';
-    } else if (res.validazione_qualita) {
-      immediateAction = res.azione_logistica_immediata;
-      alarmLevel = res.codice_stato_materiale === 505 ? 'CRITICO' : 'NORMALE';
-    } else if (res.stato_sicurezza) {
-      immediateAction = `Token di sicurezza generato: ${res.token_crittografico_generato?.slice(0, 16)}... Sigillo applicato con successo.`;
-      alarmLevel = 'NORMALE';
-    } else if (res.area_magazzino_assegnata) {
-      immediateAction = `Assegnare a ${res.area_magazzino_assegnata} alle coordinate ${res.coordinata_3d_esatta}. Trigger inviato a SDM.`;
-      alarmLevel = 'NORMALE';
-    } else if (res.diagnostica_integrita) {
-      immediateAction = res.azione_sicurezza_wms;
-      alarmLevel = res.codice_stato_struttura === 333 ? 'CRITICO' : 'NORMALE';
-    } else if (res.sequenza_prelievo_consigliata) {
-      immediateAction = `Percorso picking: ${res.sequenza_prelievo_consigliata.join(' ➔ ')}. Risparmio: ${res.metri_lineari_risparmiati}m.`;
-      alarmLevel = 'NORMALE';
-    } else if (res.validazione_logica_lotto) {
-      immediateAction = res.istruzione_operativa_picking;
-      alarmLevel = res.validazione_logica_lotto.includes('RIFIUTATO') ? 'ATTENZIONE' : 'NORMALE';
-    } else if (res.efficienza_volumetrica) {
-      immediateAction = `${res.efficienza_volumetrica}. ${res.bilanciamento_statico_assi}`;
-      alarmLevel = res.codice_validazione_camion === 200 ? 'NORMALE' : 'ATTENZIONE';
-    } else if (res.firma_post_quantum_esadecimale) {
-      immediateAction = `Firma e-CMR sigillata (${res.firma_post_quantum_esadecimale}). Documento validato.`;
-      alarmLevel = 'NORMALE';
-    } else if (res.ottimizzazione_finestra_baia) {
-      immediateAction = `${res.ottimizzazione_finestra_baia}. Direttiva: ${res.istruzione_driver_piazzale}`;
-      alarmLevel = res.codice_priorita_yms === 220 ? 'NORMALE' : 'ATTENZIONE';
-    } else if (res.classificazione_traffico_piazzale) {
-      immediateAction = `${res.classificazione_traffico_piazzale}. Direttiva: ${res.direttiva_operatore_barra}`;
-      alarmLevel = res.codice_flusso_yms === 707 ? 'ATTENZIONE' : 'NORMALE';
-    } else if (res.diagnostica_spettrale) {
-      immediateAction = res.direttiva_manutettiva_predittiva || res.direttiva_manutenzione_predittiva;
-      alarmLevel = res.codice_allarme_ecs === 414 ? 'CRITICO' : 'NORMALE';
-    } else if (res.analisi_predittiva_film) {
-      immediateAction = res.azione_correttiva_plc;
-      alarmLevel = res.codice_stato_macchina === 100 ? 'CRITICO' : 'NORMALE';
-    } else if (res.stato_fluidita_traffico) {
-      immediateAction = res.direttiva_navigazione_flotta;
-      alarmLevel = res.codice_instradamento_sdm === 303 ? 'ATTENZIONE' : 'NORMALE';
-    } else if (res.matrice_assegnazione_task) {
-      immediateAction = `Accoppiamento task eseguito. ${res.bilanciamento_flotta_status}`;
-      alarmLevel = res.codice_azione_sdm === 200 ? 'NORMALE' : 'ATTENZIONE';
-    } else if (res.stabilita_presa_vuoto) {
-      immediateAction = `${res.stabilita_presa_vuoto}. Direttiva: ${res.direttiva_cinematica_robot}`;
-      alarmLevel = res.codice_controllo_robot === 518 ? 'CRITICO' : 'NORMALE';
-    } else if (res.stato_microrete_industriale) {
-      immediateAction = `${res.stato_microrete_industriale}. Direttiva: ${res.allocazione_potenza_fast_charge}`;
-      alarmLevel = res.codice_gestione_rete === 519 ? 'ATTENZIONE' : 'NORMALE';
-    } else if (res.esito_ispezione_pallet) {
-      immediateAction = `${res.esito_ispezione_pallet}. Direttiva: ${res.direttiva_smistamento_scarto}`;
-      alarmLevel = res.codice_esito_woodpecker === 520 ? 'CRITICO' : 'NORMALE';
-    } else if (res.verifica_post_quantum_zkp) {
-      immediateAction = `${res.verifica_post_quantum_zkp}. Direttiva: ${res.qualita_stampa_status}`;
-      alarmLevel = res.codice_validazione_raptor === 521 ? 'ATTENZIONE' : 'NORMALE';
-    }
+    // 8. DETERMINE LEVEL OF ALARM AND IMMEDIATE ACTION VIA UNIFIED THRESHOLDS
+    const unifiedEval = evaluateCalculationStatus(targetId, res, inputs, calcMeta.subFunction);
+    const immediateAction = unifiedEval.azione || res.azione_correttiva_suggerita || unifiedEval.dettaglio;
+    const alarmLevel: 'NORMALE' | 'ATTENZIONE' | 'CRITICO' = unifiedEval.livelloAllarme;
 
     // 9. BUILD INTRODUCTORY EXPLANATION WITH TRANSPARENT INPUT ORIGINS
     const entanglementLabel = calcMeta.entanglement === 'OBBLIGATORIO' 
