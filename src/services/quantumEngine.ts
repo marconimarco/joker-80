@@ -292,7 +292,7 @@ export const QuantumEngine = {
     const bias = Math.min(0.95, Math.max(0.05, (100.0 - indice_conformita_lotto_pct) / 100.0));
     const { most_probable, distribution } = sampleQuantumCircuit(4, false, bias, `c4:${u}:${sp_mm}:${forzaVal ?? 'na'}`);
 
-    const esito = indice_conformita_lotto_pct >= 90.0 && u <= INDUSTRIAL_THRESHOLDS.UMIDITA_MATERIE_WARN + 0.5
+    const esito = indice_conformita_lotto_pct >= 90.0 && u <= INDUSTRIAL_THRESHOLDS.UMIDITA_MATERIE_WARN
       ? "CONFORME STANDARD BARILLA"
       : (indice_conformita_lotto_pct >= 80.0 ? "ATTENZIONE - Umidità/Spessore al Limite" : "LOTTO SOSPESO PER CONTROLLO");
 
@@ -486,7 +486,7 @@ export const QuantumEngine = {
     const fattore_sicurezza = Number((limite_acciaio / stress).toFixed(2));
     const anomalia = fattore_sicurezza < INDUSTRIAL_THRESHOLDS.SCAFFALI_FATTORE_SICUREZZA_MIN ||
       incl > INDUSTRIAL_THRESHOLDS.SCAFFALI_INCLINAZIONE_CRIT ||
-      (press <= 30 && press > INDUSTRIAL_THRESHOLDS.SCAFFALI_PRESSIONE_MAX_BAR) ||
+      press > INDUSTRIAL_THRESHOLDS.SCAFFALI_PRESSIONE_MAX_BAR ||
       !pattiniOk;
     const conformita = anomalia ? "ALLARME SOVRACCARICO" : "CONFORME NORMA EN 15635";
 
@@ -494,7 +494,7 @@ export const QuantumEngine = {
     if (anomalia) {
       const reasons: string[] = [];
       if (incl > INDUSTRIAL_THRESHOLDS.SCAFFALI_INCLINAZIONE_CRIT) reasons.push(`Micro-inclinazione ${incl}° > ${INDUSTRIAL_THRESHOLDS.SCAFFALI_INCLINAZIONE_CRIT}°`);
-      if (press <= 30 && press > INDUSTRIAL_THRESHOLDS.SCAFFALI_PRESSIONE_MAX_BAR) reasons.push(`Pressione ${press} bar > ${INDUSTRIAL_THRESHOLDS.SCAFFALI_PRESSIONE_MAX_BAR} bar`);
+      if (press > INDUSTRIAL_THRESHOLDS.SCAFFALI_PRESSIONE_MAX_BAR) reasons.push(`Pressione ${press} bar > ${INDUSTRIAL_THRESHOLDS.SCAFFALI_PRESSIONE_MAX_BAR} bar`);
       if (!pattiniOk) reasons.push("Pattini pallet danneggiati");
       if (fattore_sicurezza < INDUSTRIAL_THRESHOLDS.SCAFFALI_FATTORE_SICUREZZA_MIN) reasons.push(`Fattore sicurezza ${fattore_sicurezza}x < 1.5x`);
       motivo_allarme = reasons.join(" + ");
@@ -1093,6 +1093,11 @@ export const QuantumEngine = {
         "Missioni Urgenti": `${m}`,
         "Qubit Allocazione": most_probable
       },
+      stato_flotta_bms: isCrit
+        ? `CRITICO - Ricarica Urgente Richiesta (${efficienza_matching}%)`
+        : isWarn
+          ? `ATTENZIONE - Monitoraggio Batteria LGV (${efficienza_matching}%)`
+          : `OTTIMALE - Accoppiamento BMS Approvato (${efficienza_matching}%)`,
       azione_correttiva_suggerita: !isCrit && !isWarn ? "Assegnazione missioni approvata." : "Inviare navette con batteria scarica o calda alle piastre di ricarica.",
       dati_elaborati: { missioni_urgenti: m, soc_medio_flotta_pct: soc, temperatura_batterie_c: temp }
     };

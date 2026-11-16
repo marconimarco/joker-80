@@ -56,13 +56,17 @@ export const QuantumPythonCodeModal: React.FC<Props> = ({
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionTimestamp, setExecutionTimestamp] = useState<string>(new Date().toLocaleString('it-IT'));
 
-  // Sync result from prop or auto-generate on open if missing
+  // Sync result from prop or auto-generate on open / calculation change so previous calc result never leaks
   useEffect(() => {
-    if (initialResult) {
+    if (!isOpen || !calculation) {
+      setCurrentResult(null);
+      return;
+    }
+    if (initialResult && initialResult.calcolo_id === calculation.id) {
       setCurrentResult(initialResult);
       setExecutionTimestamp(new Date().toLocaleString('it-IT'));
-    } else if (isOpen && calculation && !currentResult) {
-      // Auto-compute baseline result so the modal is never empty
+    } else {
+      setCurrentResult(null);
       handleRunCalculation();
     }
   }, [initialResult, isOpen, calculation?.id]);

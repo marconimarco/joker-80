@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
-import { QuantumChatTerminal } from './components/QuantumChatTerminal';
 import { QuantumCatalog } from './components/QuantumCatalog';
 import { NotificationsView } from './components/NotificationsView';
 import { CompanyPlantSelectorModal } from './components/CompanyPlantSelectorModal';
 import { CircuitVisualizerModal } from './components/CircuitVisualizerModal';
-import { LoginModal } from './components/LoginModal';
 import { PreAccessGate } from './components/PreAccessGate';
 import { AdminControlPanel } from './components/AdminControlPanel';
 import { PlantCsvUploadModal } from './components/PlantCsvUploadModal';
@@ -14,7 +12,7 @@ import { TrialDisclaimerModal } from './components/TrialDisclaimerModal';
 import { FactoryTenant, QuantumCalculationMeta, UserAccount } from './types/quantum';
 import { AuthStorage } from './services/authStorage';
 import { PlantTelemetryScanner, AutoScanSummary } from './services/plantTelemetryScanner';
-import { Terminal, LayoutGrid, Bell, Sliders } from 'lucide-react';
+import { LayoutGrid, Bell, Sliders } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => AuthStorage.getCurrentUser());
@@ -29,11 +27,7 @@ export default function App() {
     return all[0];
   });
 
-  const [activeView, setActiveView] = useState<'chat' | 'catalog' | 'notifications' | 'admin'>(() => {
-    const user = AuthStorage.getCurrentUser();
-    if (user && user.ruolo !== 'Amministratore') return 'catalog';
-    return 'chat';
-  });
+  const [activeView, setActiveView] = useState<'catalog' | 'notifications' | 'admin'>('catalog');
   const [isPreAccessGranted, setIsPreAccessGranted] = useState<boolean>(() => {
     try {
       return (
@@ -62,10 +56,11 @@ export default function App() {
   const [importedCsvInputs, setImportedCsvInputs] = useState<Record<string, any>>({});
 
   // Automatic plant telemetry scan state
+  const activeTenantIdRef = React.useRef<string>(activeTenant?.id);
+  activeTenantIdRef.current = activeTenant?.id;
+
   const [scanSummary, setScanSummary] = useState<AutoScanSummary | null>(() => {
-    const all = AuthStorage.getTenants();
-    const firstTenant = all[0];
-    return PlantTelemetryScanner.getStoredSummary(firstTenant?.id);
+    return PlantTelemetryScanner.getStoredSummary(activeTenant?.id);
   });
   const [isScanning, setIsScanning] = useState<boolean>(false);
 
@@ -74,25 +69,28 @@ export default function App() {
   const [selectedCircuitState, setSelectedCircuitState] = useState<string | undefined>(undefined);
   const [selectedPythonCalc, setSelectedPythonCalc] = useState<QuantumCalculationMeta | null>(null);
 
-  const [voiceQueryToExecute, setVoiceQueryToExecute] = useState<string | null>(null);
   const [targetInspectCalcId, setTargetInspectCalcId] = useState<number | null>(null);
-  const [openScenariTrigger, setOpenScenariTrigger] = useState<number>(0);
 
   // Function to execute the auto-upload of plant data and run all 21 quantum calculations
   const runAutoTelemetryScan = useCallback(async (tenant: FactoryTenant) => {
     setIsScanning(true);
     try {
       const result = await PlantTelemetryScanner.scanPlantAndRun21Calculations(tenant);
-      setScanSummary(result);
+      if (activeTenantIdRef.current === tenant.id) {
+        setScanSummary(result);
+      }
     } catch (e) {
       console.error('Error scanning plant telemetry', e);
     } finally {
-      setIsScanning(false);
+      if (activeTenantIdRef.current === tenant.id) {
+        setIsScanning(false);
+      }
     }
   }, []);
 
   // Safe handler to select tenant, clear obsolete summaries immediately and trigger scan
   const handleSelectTenant = useCallback((tenant: FactoryTenant) => {
+    activeTenantIdRef.current = tenant.id;
     setActiveTenant(tenant);
     setIsCompanyPlantSelectorOpen(false);
     const cached = PlantTelemetryScanner.getStoredSummary(tenant.id);
@@ -141,10 +139,9 @@ export default function App() {
       if (match) setActiveTenant(match);
     }
 
-    // If logged-in user is not admin, prevent access to chat terminal
     // Responsabile di Stabilimento can access admin view for their company operators and node permissions
     if (currentUser && currentUser.ruolo !== 'Amministratore') {
-      if (activeView === 'chat' || (activeView === 'admin' && currentUser.ruolo !== 'Responsabile di Stabilimento')) {
+      if (activeView === 'admin' && currentUser.ruolo !== 'Responsabile di Stabilimento') {
         setActiveView('catalog');
       }
     }
@@ -175,16 +172,15 @@ export default function App() {
       runAutoTelemetryScan(allTenants[0]);
     }
     
-    // Gli utenti normali (operatori) non hanno bisogno della Chat Terminal: vanno direttamente al Catalogo con i calcoli del proprio stabilimento
+    // Tutti i ruoli accedono direttamente al Catalogo con i calcoli del proprio stabilimento
+    setActiveView('catalog');
     if (user.ruolo !== 'Amministratore') {
-      setActiveView('catalog');
       const accepted = (
         localStorage.getItem(`joker80_trial_accepted_${user.id}`) === 'true' ||
         sessionStorage.getItem(`joker80_trial_accepted_${user.id}`) === 'true'
       );
       setIsTrialAccepted(accepted);
     } else {
-      setActiveView('chat');
       setIsTrialAccepted(true);
     }
   };
@@ -281,22 +277,6 @@ export default function App() {
 
       {/* Main Content View */}
       <main className="flex-1 min-h-0 w-full max-w-[1600px] mx-auto px-2 sm:px-4 py-1.5 sm:py-2 flex flex-col overflow-hidden">
-        {activeView === 'chat' && (
-          <QuantumChatTerminal
-            onOpenCircuit={handleOpenCircuit}
-            allowPlcWrite={false}
-            activeTenantEndpoint={activeTenant.endpoint}
-            activeTenantName={activeTenant.nome}
-            userRole={currentUser.ruolo}
-            activeTenant={activeTenant}
-            anomaliesCount={scanSummary && scanSummary.stabilimentoId === activeTenant.id ? scanSummary.anomalieTrovate : 0}
-            onNavigateToNotifications={() => setActiveView('notifications')}
-            voiceQueryToExecute={voiceQueryToExecute}
-            onVoiceQueryHandled={() => setVoiceQueryToExecute(null)}
-            openScenariTrigger={openScenariTrigger}
-          />
-        )}
-
         {activeView === 'catalog' && (
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             <QuantumCatalog
@@ -381,21 +361,6 @@ export default function App() {
 
       {/* Mobile Bottom Navigation Bar (Visible only on smartphones < 640px) */}
       <nav aria-label="Navigazione Mobile" className="sm:hidden border-t border-slate-800 bg-slate-950/95 backdrop-blur-md px-1 py-1 flex items-center justify-around shrink-0 pb-safe z-30 shadow-lg">
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setActiveView('chat')}
-            className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer min-h-[44px] ${
-              activeView === 'chat'
-                ? 'text-cyan-400 font-bold bg-cyan-500/10'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Terminal className="w-4 h-4 mb-0.5" />
-            <span>Chat</span>
-          </button>
-        )}
-
         <button
           type="button"
           onClick={() => setActiveView('catalog')}
@@ -463,10 +428,20 @@ export default function App() {
 
       {/* Modal for Python CUDA-Q Code & Results (Reserved for Administrator and Plant Manager) */}
       <QuantumPythonCodeModal
-        isOpen={!!selectedPythonCalc}
+        isOpen={Boolean(selectedPythonCalc)}
         onClose={() => setSelectedPythonCalc(null)}
         calculation={selectedPythonCalc}
         canView={isAdmin || isResponsabile}
+        result={
+          selectedPythonCalc && scanSummary?.stabilimentoId === activeTenant.id
+            ? scanSummary.notifiche.find(n => n.calcoloId === selectedPythonCalc.id)?.risultatoPayload
+            : undefined
+        }
+        inputs={
+          selectedPythonCalc && scanSummary?.stabilimentoId === activeTenant.id
+            ? scanSummary.notifiche.find(n => n.calcoloId === selectedPythonCalc.id)?.inputsUtilizzati
+            : undefined
+        }
         userRole={currentUser.ruolo}
         userName={currentUser.nomeCompleto || currentUser.username}
       />

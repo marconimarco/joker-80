@@ -675,7 +675,7 @@ sudo curl -fsSL "${origin}/smile80_daemon.py" -o /opt/smile80-daemon/smile80_dae
 sudo chmod +x /opt/smile80-daemon/smile80_daemon.py
 
 echo "[5/5] Installazione e avvio del Servizio systemd..."
-sudo curl -fsSL "${origin}/api/daemon/download/linux-service" -o /etc/systemd/system/smile80-daemon.service
+sudo curl -fsSL "${origin}/api/daemon/download/linux-service?gatewayKey=${encodeURIComponent(reqGatewayKey)}" -o /etc/systemd/system/smile80-daemon.service
 sudo systemctl daemon-reload
 sudo systemctl enable smile80-daemon.service
 sudo systemctl restart smile80-daemon.service
@@ -757,7 +757,7 @@ curl -fsSL "${origin}/smile80_daemon.py" -o "$INSTALL_DIR/smile80_daemon.py"
 chmod +x "$INSTALL_DIR/smile80_daemon.py"
 
 echo "[4/4] Configurazione del demone launchd Apple..."
-curl -fsSL "${origin}/api/daemon/download/mac-plist" -o "$LAUNCH_AGENTS_DIR/$PLIST_NAME"
+curl -fsSL "${origin}/api/daemon/download/mac-plist?gatewayKey=${encodeURIComponent(reqGatewayKey)}" -o "$LAUNCH_AGENTS_DIR/$PLIST_NAME"
 
 # Se era gia registrato, scaricalo prima
 launchctl unload "$LAUNCH_AGENTS_DIR/$PLIST_NAME" 2>/dev/null || true

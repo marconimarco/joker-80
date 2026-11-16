@@ -22,6 +22,7 @@ import {
 import { QuantumCalculationMeta, FactoryTenant, UserAccount } from '../types/quantum';
 import { QUANTUM_PYTHON_CODES, QuantumPythonCodeInfo } from '../data/quantumPythonCalculations';
 import { QuantumEngine } from '../services/quantumEngine';
+import { extractDiagnosticSummary } from '../data/industrialThresholds';
 
 interface Props {
   isOpen: boolean;
@@ -169,7 +170,7 @@ ${inputLines}
 # Risultato JSON Elaborato da SM.I.LE80 Quantum Engine:
 ${resultFormatted}
 #
-# Diagnosi: ${res?.indice_rischio_blocco || res?.livello_rischio || res?.validazione_qualita || res?.digital_twin_status || 'ESECUZIONE CONFORME'}
+# Diagnosi: ${extractDiagnosticSummary(res) || 'ESECUZIONE CONFORME'}
 # Azione Consigliata: ${res?.azione_correttiva_suggerita || res?.azione_logistica_immediata || res?.azione_sicurezza_wms || 'Nessuna anomalia rilevata'}
 # ------------------------------------------------------------------------------
 `;

@@ -426,7 +426,9 @@ export class PlantTelemetryScanner {
     try {
       if (tenantId) {
         const tenantStr = localStorage.getItem(`${LAST_SCAN_KEY}_${tenantId}`);
-        if (tenantStr) return JSON.parse(tenantStr);
+        if (!tenantStr) return null;
+        const parsed = JSON.parse(tenantStr);
+        return parsed?.stabilimentoId === tenantId ? parsed : null;
       }
       const str = localStorage.getItem(LAST_SCAN_KEY);
       return str ? JSON.parse(str) : null;

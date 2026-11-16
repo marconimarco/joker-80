@@ -3943,7 +3943,7 @@ export const AdminControlPanel: React.FC<Props> = ({
                     <span>Scarica smile80_daemon.py</span>
                   </a>
                   <a
-                    href={`/api/daemon/download/windows-bat?origin=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : '')}`}
+                    href={`/api/daemon/download/windows-bat?origin=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : '')}&gatewayKey=${encodeURIComponent(activeTenant?.wmsApiKey || `JOKER80-NIS2-${(activeTenant?.id || 'PEDRIGNANO').toUpperCase()}-GW-2026`)}&plantName=${encodeURIComponent(activeTenant?.nome || 'Stabilimento')}&plantId=${encodeURIComponent(activeTenant?.id || 'plant')}`}
                     download="start_daemon_windows.bat"
                     className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
                   >
@@ -3964,7 +3964,9 @@ export const AdminControlPanel: React.FC<Props> = ({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] font-mono">
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
                   <span className="text-slate-500 text-[10px] block">Chiave Gateway M2M</span>
-                  <code className="text-cyan-300 text-xs break-all">X-Industrial-Gateway-Key: JOKER80-NIS2-PEDRIGNANO-GW-2026</code>
+                  <code className="text-cyan-300 text-xs break-all">
+                    X-Industrial-Gateway-Key: {activeTenant?.wmsApiKey || `JOKER80-NIS2-${(activeTenant?.id || 'PEDRIGNANO').toUpperCase()}-GW-2026`}
+                  </code>
                 </div>
 
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1">

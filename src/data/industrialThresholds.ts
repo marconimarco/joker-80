@@ -15,6 +15,37 @@ export interface UnifiedAlarmEvaluation {
   azione: string;
 }
 
+export function extractDiagnosticSummary(res: Record<string, any> | undefined | null): string | undefined {
+  if (!res) return undefined;
+  return (
+    res.indice_rischio_blocco ||
+    res.livello_rischio ||
+    res.rischio_stocastico ||
+    res.efficienza_schedulazione ||
+    res.validazione_qualita ||
+    res.stato_sicurezza ||
+    res.digital_twin_status ||
+    res.diagnostica_integrita ||
+    res.conformita_asrs ||
+    res.stato_ottimizzazione_rotta ||
+    res.validazione_logica_lotto ||
+    res.efficienza_volumetrica ||
+    res.efficienza_piazzale ||
+    res.stato_polmone_buffer ||
+    res.diagnostica_spettrale ||
+    res.analisi_predittiva_film ||
+    res.valutazione_traffico ||
+    res.stato_flotta_bms ||
+    res.diagnostica_pallettizzatore ||
+    res.stato_ricarica ||
+    res.diagnosi_integrita ||
+    res.esito_collaudo ||
+    res.validazione_zkp ||
+    res.diagnosi ||
+    undefined
+  );
+}
+
 export const INDUSTRIAL_THRESHOLDS = {
   CAMION_ATTESA_WARN: 6,
   CAMION_ATTESA_CRIT: 10,
@@ -102,7 +133,20 @@ export function evaluateCalculationStatus(
     res.esito_lettura,
     res.validazione_logica_lotto,
     res.digital_twin_status,
-    res.stato_sicurezza
+    res.stato_sicurezza,
+    res.efficienza_schedulazione,
+    res.diagnostica_integrita,
+    res.stato_ottimizzazione_rotta,
+    res.efficienza_volumetrica,
+    res.efficienza_piazzale,
+    res.stato_polmone_buffer,
+    res.diagnostica_spettrale,
+    res.analisi_predittiva_film,
+    res.stato_flotta_bms,
+    res.diagnostica_pallettizzatore,
+    res.stato_ricarica,
+    res.diagnosi_integrita,
+    res.validazione_zkp
   ]
     .filter(Boolean)
     .map(v => String(v).toUpperCase())
@@ -245,18 +289,20 @@ export function evaluateCalculationStatus(
     case 7: {
       const fs = Number(res.fattore_sicurezza ?? 2.0);
       const incl = Number(res.micro_inclinazione ?? inputs.micro_inclinazione ?? 0);
+      const press = Number(res.pressione_pattini_bar ?? inputs.pressione_pattini_bar ?? 15);
       if (
         fs < INDUSTRIAL_THRESHOLDS.SCAFFALI_FATTORE_SICUREZZA_MIN ||
         incl > INDUSTRIAL_THRESHOLDS.SCAFFALI_INCLINAZIONE_CRIT ||
+        press > INDUSTRIAL_THRESHOLDS.SCAFFALI_PRESSIONE_MAX_BAR ||
         textBag.includes('ALLARME') ||
         res.carico_pattini_integri === false
       ) {
         return {
           livelloAllarme: 'CRITICO',
           titolo: 'Deformazione Strutturale Scaffalatura SmartStore',
-          dettaglio: `Fattore sicurezza ${fs}x (min 1.5x) | Inclinazione ${incl}°.`,
-          parametro: 'fattore_sicurezza',
-          valore: `${fs}x`,
+          dettaglio: res.motivo_allarme || `Fattore sicurezza ${fs}x (min 1.5x) | Pressione ${press} bar | Inclinazione ${incl}°.`,
+          parametro: press > INDUSTRIAL_THRESHOLDS.SCAFFALI_PRESSIONE_MAX_BAR ? 'pressione_pattini_bar' : 'fattore_sicurezza',
+          valore: press > INDUSTRIAL_THRESHOLDS.SCAFFALI_PRESSIONE_MAX_BAR ? `${press} bar` : `${fs}x`,
           azione: res.azione_correttiva_suggerita || 'Bloccare trasloelevatore corsia per ispezione EN 15635.'
         };
       }
@@ -296,7 +342,7 @@ export function evaluateCalculationStatus(
     case 10: {
       const peso = Number(res.peso_totale_kg ?? inputs.peso_totale_kg ?? 24500);
       const sat = Number(res.saturazione_volumetrica_pct ?? 90);
-      if (peso > INDUSTRIAL_THRESHOLDS.CARICO_PESO_CRIT_KG || textBag.includes('CRITICO') || textBag.includes('ECCEDENZA')) {
+      if (peso > INDUSTRIAL_THRESHOLDS.CARICO_PESO_CRIT_KG) {
         return {
           livelloAllarme: 'CRITICO',
           titolo: 'Superamento Limite Portata Stradale (44 t)',
@@ -304,6 +350,16 @@ export function evaluateCalculationStatus(
           parametro: 'peso_totale_kg',
           valore: `${peso} kg`,
           azione: res.azione_correttiva_suggerita || 'Rimuovere pallet in eccesso prima della partenza.'
+        };
+      }
+      if (textBag.includes('CRITICO') || textBag.includes('ECCEDENZA')) {
+        return {
+          livelloAllarme: 'CRITICO',
+          titolo: 'Eccedenza Volume Cassone Camion',
+          dettaglio: res.motivo_allarme || `Capacità volumetrica cassone superata (${res.colli_allocati ?? ''} colli su ${res.volume_cassone_m3 ?? ''} m³).`,
+          parametro: 'saturazione_volumetrica_pct',
+          valore: `${sat}%`,
+          azione: res.azione_correttiva_suggerita || 'Ridurre numero colli o suddividere su secondo bilico.'
         };
       }
       if (peso > INDUSTRIAL_THRESHOLDS.CARICO_PESO_WARN_KG || sat < 65) {
@@ -362,12 +418,22 @@ export function evaluateCalculationStatus(
       const bufPct = Number(res.saturazione_buffer_pct ?? 0);
       if (waitMin > INDUSTRIAL_THRESHOLDS.BUFFER_TEMPO_ATTESA_CRIT_MIN || bufPct >= 85 || textBag.includes('ROSSO')) {
         return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: 'Congestione Yard & Buffer Polmone',
+          livelloAllarme: 'CRITICO',
+          titolo: 'Congestione Yard & Buffer Polmone Critica',
           dettaglio: `Tempo attesa ${waitMin} min | Buffer al ${bufPct}%.`,
           parametro: 'tempo_medio_attesa_min',
           valore: `${waitMin} min`,
           azione: res.azione_correttiva_suggerita || 'Accelerare scarico baie e liberare polmone.'
+        };
+      }
+      if (waitMin > 20 || bufPct >= INDUSTRIAL_THRESHOLDS.BUFFER_PIAzzALE_WARN * 100 || textBag.includes('GIALLO')) {
+        return {
+          livelloAllarme: 'ATTENZIONE',
+          titolo: 'Saturazione Yard & Buffer in Aumento',
+          dettaglio: `Tempo attesa ${waitMin} min | Buffer al ${bufPct}%.`,
+          parametro: 'tempo_medio_attesa_min',
+          valore: `${waitMin} min`,
+          azione: res.azione_correttiva_suggerita || 'Monitorare deflusso piazzale e pre-baie.'
         };
       }
       break;
@@ -470,14 +536,21 @@ export function evaluateCalculationStatus(
     case 18: {
       const pBar = Number(res.pressione_vuoto_bar ?? -0.8);
       const coppia = Number(res.coppia_motori_nm ?? 200);
-      if (pBar > INDUSTRIAL_THRESHOLDS.ROBOT_VUOTO_MAX_BAR || coppia > INDUSTRIAL_THRESHOLDS.ROBOT_COPPIA_MAX_NM || textBag.includes('ALLARME') || textBag.includes('ISPEZIONE')) {
+      const pinze = Number(res.forza_pinze_n ?? inputs.forza_pinze_n ?? 480);
+      if (
+        pBar > INDUSTRIAL_THRESHOLDS.ROBOT_VUOTO_MAX_BAR ||
+        coppia > INDUSTRIAL_THRESHOLDS.ROBOT_COPPIA_MAX_NM ||
+        pinze < INDUSTRIAL_THRESHOLDS.ROBOT_PINZE_MIN_N ||
+        textBag.includes('ALLARME') ||
+        textBag.includes('ISPEZIONE')
+      ) {
         return {
           livelloAllarme: 'CRITICO',
           titolo: 'Allarme Presa Vuoto / Sovraccarico Robot 6-Assi',
-          dettaglio: res.motivo_allarme || `Vuoto: ${pBar} bar | Coppia max: ${coppia} Nm.`,
-          parametro: 'pressione_vuoto_bar',
+          dettaglio: res.motivo_allarme || `Vuoto: ${pBar} bar | Coppia max: ${coppia} Nm | Pinze: ${pinze} N.`,
+          parametro: pinze < INDUSTRIAL_THRESHOLDS.ROBOT_PINZE_MIN_N ? 'forza_pinze_n' : 'pressione_vuoto_bar',
           valore: `${pBar} bar | ${coppia} Nm`,
-          azione: res.azione_correttiva_suggerita || 'Verificare circuito ventose e riduttori assi robot.'
+          azione: res.azione_correttiva_suggerita || 'Verificare circuito ventose, pinze e riduttori assi robot.'
         };
       }
       break;
@@ -537,7 +610,17 @@ export function evaluateCalculationStatus(
       const aff = Number(res.affidabilita_ricostruzione_barcode_pct ?? 95);
       const tempHead = Number(res.temp_testina_termica_c ?? 54);
       const grado = String(res.grado_qualita_stampa_iso ?? 'CLASSE_A').toUpperCase();
-      if (aff < INDUSTRIAL_THRESHOLDS.RAPTOR_AFFIDABILITA_MIN_PCT || grado.includes('_C') || grado.includes('_F') || textBag.includes('ANOMAL')) {
+      if (grado.includes('_F') || aff < 65) {
+        return {
+          livelloAllarme: 'CRITICO',
+          titolo: 'Scarto Stampa / Barcode Illeggibile Raptor (CLASSE_F)',
+          dettaglio: `Affidabilità ${aff}% | Grado ${grado} | Temp testina ${tempHead}°C.`,
+          parametro: 'grado_qualita_stampa_iso',
+          valore: `${grado} (${aff}%)`,
+          azione: res.azione_correttiva_suggerita || 'Fermare linea etichettatura, pulire ottica e sostituire testina/nastro.'
+        };
+      }
+      if (aff < INDUSTRIAL_THRESHOLDS.RAPTOR_AFFIDABILITA_MIN_PCT || grado.includes('_C') || textBag.includes('ANOMAL')) {
         return {
           livelloAllarme: 'ATTENZIONE',
           titolo: 'Degrado Qualità Stampa / Lettura GS1 Raptor',

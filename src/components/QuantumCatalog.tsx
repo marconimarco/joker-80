@@ -6,7 +6,7 @@ import { QuantumCalculationMeta, MacroCategory, FactoryTenant } from '../types/q
 import { QuantumEngine } from '../services/quantumEngine';
 import { isCalculationSupportedByPlant, PLANT_NODE_REQUIREMENTS } from '../data/plantNodeCalculations';
 import { ALL_21_CALCULATIONS_LOGIC_DOCUMENTATION } from '../data/quantumLogicDocumentation';
-import { evaluateCalculationStatus } from '../data/industrialThresholds';
+import { evaluateCalculationStatus, extractDiagnosticSummary } from '../data/industrialThresholds';
 import { 
   Cpu, 
   Lock, 
@@ -379,7 +379,6 @@ export const QuantumCatalog: React.FC<Props> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isLogicDocModalOpen, setIsLogicDocModalOpen] = useState<boolean>(false);
   const [showTrendCharts, setShowTrendCharts] = useState<boolean>(false);
-  const [expandedInputs, setExpandedInputs] = useState<Record<number, boolean>>({});
 
   const buildTenantFormInputs = React.useCallback((tenantId?: string) => {
     const fresh: Record<number, Record<string, any>> = {};
@@ -405,10 +404,16 @@ export const QuantumCatalog: React.FC<Props> = ({
   );
   const [results, setResults] = useState<Record<number, any>>({});
   const lastComputedTenantRef = React.useRef<string | undefined>(undefined);
+  const activeTenantIdRef = React.useRef<string | undefined>(activeTenant?.id);
+  activeTenantIdRef.current = activeTenant?.id;
 
   // Re-sync form inputs & clear stale results when activeTenant changes
   useEffect(() => {
     setResults({});
+    setSimulationCalcId(null);
+    setSimComparisonResult(null);
+    setSimPrimaInputs({});
+    setSimDopoInputs({});
     setFormInputs(buildTenantFormInputs(activeTenant?.id));
   }, [activeTenant?.id, buildTenantFormInputs]);
 
@@ -445,7 +450,9 @@ export const QuantumCatalog: React.FC<Props> = ({
     const current: Record<string, any> = { ...raw };
 
     // Normalizza gli input complessi (vettori/mappe/chiavi legacy) nei campi scalari esposti dalla simulazione
-    if (calc.id === 7) {
+    if (calc.id === 4) {
+      current.forza_deformazione_n = current.forza_deformazione_n ?? 3400;
+    } else if (calc.id === 7) {
       if (current.pressione_pattini_bar === undefined) {
         current.pressione_pattini_bar = Array.isArray(current.vettore_pressione_bar) && current.vettore_pressione_bar.length > 0
           ? Math.max(...current.vettore_pressione_bar.map(Number))
@@ -644,11 +651,13 @@ export const QuantumCatalog: React.FC<Props> = ({
     const targetCalcs = plantSupportedCalcs.length > 0 ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
     setIsRecomputingAll(true);
     setRecomputeProgress({ current: 0, total: targetCalcs.length });
-    const newResults: Record<number, any> = { ...results };
-    
+    const targetTenantId = activeTenant?.id;
+    const newResults: Record<number, any> = {};
+
     try {
       let count = 0;
       for (const calc of targetCalcs) {
+        if (activeTenantIdRef.current !== targetTenantId) return;
         const raw = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
         const inputs: Record<string, any> = {};
         for (const [k, v] of Object.entries(raw)) {
@@ -661,9 +670,11 @@ export const QuantumCatalog: React.FC<Props> = ({
         count++;
         setRecomputeProgress({ current: count, total: targetCalcs.length });
       }
-      setResults(newResults);
-      setToastMessage(`Ricalcolo completato con successo: aggiornati tutti i ${targetCalcs.length} calcoli con telemetria e timestamp live!`);
-      setTimeout(() => setToastMessage(null), 4000);
+      if (activeTenantIdRef.current === targetTenantId) {
+        setResults(newResults);
+        setToastMessage(`Ricalcolo completato con successo: aggiornati tutti i ${targetCalcs.length} calcoli con telemetria e timestamp live!`);
+        setTimeout(() => setToastMessage(null), 4000);
+      }
     } catch (err) {
       console.error('Errore durante il ricalcolo globale dei nodi', err);
     } finally {
@@ -675,37 +686,50 @@ export const QuantumCatalog: React.FC<Props> = ({
   // Auto-populate / auto-compute calculation results on mount or activeTenant change so operator sees results without pressing Calcola
   useEffect(() => {
     let active = true;
-    const tenantChanged = lastComputedTenantRef.current !== activeTenant?.id;
-    lastComputedTenantRef.current = activeTenant?.id;
-    const activeFormInputs = tenantChanged ? buildTenantFormInputs(activeTenant?.id) : formInputs;
+    const currentTenantId = activeTenant?.id;
+    const tenantChanged = lastComputedTenantRef.current !== currentTenantId;
+    lastComputedTenantRef.current = currentTenantId;
+    const activeFormInputs = tenantChanged ? buildTenantFormInputs(currentTenantId) : formInputs;
 
-    // 1. Sync from scanSummary notifications if present
+    // 1. Sync from scanSummary notifications ONLY if matching activeTenant
     const notifResults: Record<number, any> = {};
-    if (scanSummary?.notifiche && scanSummary.notifiche.length > 0) {
+    const notifInputsMap: Record<number, Record<string, any>> = {};
+    if (scanSummary && scanSummary.stabilimentoId === currentTenantId && scanSummary.notifiche?.length > 0) {
       for (const notif of scanSummary.notifiche) {
-        if (notif.risultatoPayload) {
+        if (notif.risultatoPayload && notif.risultatoPayload.calcolo_id === notif.calcoloId) {
           notifResults[notif.calcoloId] = notif.risultatoPayload;
         }
+        if (notif.inputsUtilizzati && Object.keys(notif.inputsUtilizzati).length > 0) {
+          const meta = QUANTUM_CALCULATIONS.find(c => c.id === notif.calcoloId);
+          notifInputsMap[notif.calcoloId] = {
+            ...(meta?.defaultInputs || {}),
+            ...(activeFormInputs[notif.calcoloId] || {}),
+            ...notif.inputsUtilizzati
+          };
+        }
+      }
+      if (Object.keys(notifInputsMap).length > 0) {
+        setFormInputs(prev => ({ ...prev, ...notifInputsMap }));
       }
       if (Object.keys(notifResults).length > 0) {
-        setResults(prev => ({ ...prev, ...notifResults }));
+        setResults(prev => tenantChanged ? notifResults : ({ ...prev, ...notifResults }));
       }
     }
 
-    // 2. Pre-calculate any missing results in the background (always compute all on tenant switch)
+    // 2. Pre-calculate any missing results in the background (always reset when tenantChanged)
     const computeMissing = async () => {
       for (const calc of plantSupportedCalcs) {
-        if (!active) break;
+        if (!active || activeTenantIdRef.current !== currentTenantId) break;
         const alreadyHas = !tenantChanged && Boolean(results[calc.id] || notifResults[calc.id]);
         if (!alreadyHas && !notifResults[calc.id]) {
           try {
-            const raw = { ...(calc.defaultInputs || {}), ...(activeFormInputs[calc.id] || {}) };
+            const raw = { ...(calc.defaultInputs || {}), ...(notifInputsMap[calc.id] || activeFormInputs[calc.id] || {}) };
             const inputs: Record<string, any> = {};
             for (const [k, v] of Object.entries(raw)) {
               inputs[k] = parseFlexibleInput(v, k);
             }
             const res = await QuantumEngine.executeCalculation(calc.id, inputs);
-            if (active) {
+            if (active && activeTenantIdRef.current === currentTenantId) {
               setResults(prev => ({ ...prev, [calc.id]: res }));
             }
           } catch (e) {
@@ -855,18 +879,6 @@ export const QuantumCatalog: React.FC<Props> = ({
     }
     return displayedCalculations;
   }, [focusedCalcId, displayedCalculations, activeTenant, plantSupportedCalcs]);
-
-  const handleInputChange = (calcId: number, field: string, value: any) => {
-    const meta = QUANTUM_CALCULATIONS.find(c => c.id === calcId);
-    setFormInputs(prev => ({
-      ...prev,
-      [calcId]: {
-        ...(meta?.defaultInputs || {}),
-        ...(prev[calcId] || {}),
-        [field]: value
-      }
-    }));
-  };
 
   // Esecuzione in memoria isolata (Modalità Esempio/Test): non sovrascrive la telemetria reale né i grafici dell'impianto
   const executeCalculation = async (calc: QuantumCalculationMeta) => {
@@ -1033,39 +1045,52 @@ export const QuantumCatalog: React.FC<Props> = ({
         })()}
 
         {/* Diagnosi e Consiglio Operativo Ingrandito con Badge Motivo Allarme */}
-        {(res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica || res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita) && (
-          <div className="space-y-2.5 text-xs sm:text-sm font-mono">
-            {(res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica) && (
-              <div className={`px-3 py-2 rounded-md border ${
-                isCritical ? 'bg-rose-950/20 border-rose-500/30' : isWarning ? 'bg-amber-950/20 border-amber-500/30' : 'bg-slate-900/80 border-slate-800'
-              }`}>
-                <span className="text-slate-400 text-xs block font-bold mb-0.5">Diagnosi / Valutazione:</span>
-                <span className={`font-semibold text-sm leading-snug ${isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-slate-200'}`}>
-                  {res.indice_rischio_blocco || res.livello_rischio || res.rischio_stocastico || res.validazione_qualita || res.diagnosi || res.diagnostica_pallettizzatore || res.stato_ricarica}
-                </span>
-              </div>
-            )}
+        {(() => {
+          const diagnosticPhrase = extractDiagnosticSummary(res);
+          const actionPhrase =
+            res.azione_correttiva_suggerita ||
+            res.piano_azione ||
+            res.azione_immediata ||
+            res.azione_logistica_immediata ||
+            res.azione_misure_sicurezza ||
+            res.azione_suggerita;
 
-            {(res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita) && (
-              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-slate-400 text-xs block font-bold uppercase tracking-wider">
-                    Consiglio Operativo / Azione Suggerita:
+          if (!diagnosticPhrase && !actionPhrase) return null;
+
+          return (
+            <div className="space-y-2.5 text-xs sm:text-sm font-mono">
+              {diagnosticPhrase && (
+                <div className={`px-3 py-2 rounded-md border ${
+                  isCritical ? 'bg-rose-950/20 border-rose-500/30' : isWarning ? 'bg-amber-950/20 border-amber-500/30' : 'bg-slate-900/80 border-slate-800'
+                }`}>
+                  <span className="text-slate-400 text-xs block font-bold mb-0.5">Diagnosi / Valutazione:</span>
+                  <span className={`font-semibold text-sm leading-snug ${isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-slate-200'}`}>
+                    {diagnosticPhrase}
                   </span>
-                  {res.motivo_allarme && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-bold">
-                      <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                      <span>Motivo Allarme: {res.motivo_allarme}</span>
-                    </span>
-                  )}
                 </div>
-                <span className="font-bold text-base sm:text-lg text-cyan-200 block leading-snug">
-                  {res.azione_correttiva_suggerita || res.piano_azione || res.azione_immediata || res.azione_logistica_immediata || res.azione_misure_sicurezza || res.azione_suggerita}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+
+              {actionPhrase && (
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-slate-400 text-xs block font-bold uppercase tracking-wider">
+                      Consiglio Operativo / Azione Suggerita:
+                    </span>
+                    {res.motivo_allarme && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-bold">
+                        <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        <span>Motivo Allarme: {res.motivo_allarme}</span>
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-bold text-base sm:text-lg text-cyan-200 block leading-snug">
+                    {actionPhrase}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -1079,11 +1104,7 @@ export const QuantumCatalog: React.FC<Props> = ({
     const statusTitle = isCritical ? 'ROSSO: Anomalia Rilevata' : isWarning ? 'GIALLO: Attenzione Richiesta' : 'VERDE: Regolare in Marcia';
     const statusIcon = isCritical ? '🔴' : isWarning ? '🟡' : '🟢';
 
-    const diagnosticText = res?.indice_rischio_blocco || 
-      res?.livello_rischio || 
-      res?.diagnosi || 
-      res?.validazione_qualita || 
-      statusEval.dettaglio;
+    const diagnosticText = extractDiagnosticSummary(res) || statusEval.dettaglio;
 
     const operatorAction = res?.azione_correttiva_suggerita || 
       res?.piano_azione || 
@@ -1539,7 +1560,7 @@ export const QuantumCatalog: React.FC<Props> = ({
                       if (typeof pVal === 'boolean' && typeof dVal === 'boolean') {
                         if (pVal === dVal) return 'Invariato (=)';
                         if (isAlarmBoolKey) return dVal ? 'Attivato (Peggiorato ✗)' : 'Risolto (Migliorato ✓)';
-                        return dVal ? 'Abilitato ✓' : 'Disabilitato';
+                        return `${dVal ? 'Verificato' : 'Non conforme'}${isBetter === true ? ' (Migliorato ✓)' : isBetter === false ? ' (Peggiorato ✗)' : ''}`;
                       }
                       if (isQubitKey) {
                         return pVal === dVal ? 'Stato invariato (=)' : `${String(pVal)} → ${String(dVal)}`;
@@ -1865,14 +1886,10 @@ export const QuantumCatalog: React.FC<Props> = ({
             </div>
           ) : (
             (displayMode === 'table-focus' ? ((focusedCalcMeta || selectedCalc) ? [focusedCalcMeta || selectedCalc!] : []) : visibleCalculations).map((calc) => {
-              const isLocked = calc.entanglement === 'OBBLIGATORIO';
-              const inputs = formInputs[calc.id] || calc.defaultInputs;
               const result = results[calc.id];
-              const isBusy = executingId === calc.id;
               const nodeReq = PLANT_NODE_REQUIREMENTS[calc.id];
               const isSupported = isCalculationSupportedByPlant(calc.id, activeTenant);
               const isEnlarged = displayMode === 'table-focus';
-              const isActionsExpanded = isEnlarged ? (expandedInputs[calc.id] ?? true) : Boolean(expandedInputs[calc.id]);
 
               if (operatorMode) {
                 if (simulationCalcId === calc.id) {
@@ -2034,737 +2051,34 @@ export const QuantumCatalog: React.FC<Props> = ({
                 {renderDiagnosticResultBox(calc, result)}
               </div>
 
-              {/* Pulsante Mostra/Nascondi per Parametri, Ricalcola, Simula e File Python */}
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setExpandedInputs(prev => ({ ...prev, [calc.id]: !(prev[calc.id] ?? isEnlarged) }))}
-                  className="w-full py-2 px-3 rounded-lg bg-slate-950/90 hover:bg-slate-800/90 border border-slate-700/80 text-xs sm:text-sm font-mono flex items-center justify-between text-slate-200 hover:text-white transition-colors cursor-pointer"
-                >
-                  <span className="flex items-center gap-2 font-bold">
-                    <Sliders className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>
-                      {isActionsExpanded
-                        ? 'Nascondi Parametri, Ricalcola, Simula e File Python'
-                        : 'Mostra Parametri, Ricalcola, Simula e File Python'}
-                    </span>
-                  </span>
-                  <span className="text-xs text-cyan-400 font-bold flex items-center gap-1 shrink-0">
-                    {isActionsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </span>
-                </button>
+              {/* Barra Azioni: Simula (Prima / Dopo) e File Python & Risultato */}
+              {(SIMULATION_CONFIGS[calc.id] || canViewPythonCode) && (
+                <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2.5 flex-wrap">
+                  {SIMULATION_CONFIGS[calc.id] && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSimulation(calc)}
+                      className="w-full sm:w-auto px-3.5 py-2 h-[40px] rounded-lg bg-gradient-to-r from-purple-900/90 to-indigo-900/90 hover:from-purple-800 hover:to-indigo-800 border border-purple-500/60 hover:border-purple-400 text-purple-200 hover:text-white text-xs sm:text-sm font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+                      title={`Avvia simulazione di confronto Prima / Dopo per il Calcolo #${calc.id}`}
+                    >
+                      <Sliders className="w-4 h-4 text-purple-300" />
+                      <span>Simula (Prima / Dopo)</span>
+                    </button>
+                  )}
 
-                {isActionsExpanded && (
-                  <div 
-                    onFocusCapture={() => { if (!isEnlarged && focusedCalcId === null) setFocusedCalcId(calc.id); }}
-                    className="p-3 sm:p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-3 animate-in fade-in duration-150"
-                  >
-                <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-b border-slate-800 pb-2">
-                  <span className="flex items-center gap-1.5 font-semibold text-slate-300">
-                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                    Parametri di Fabbrica (Input)
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    Target: {calc.hardwareTarget.split('/')[0]}
-                  </span>
+                  {canViewPythonCode && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPythonCalc(calc)}
+                      className="w-full sm:w-auto px-3.5 py-2 h-[40px] rounded-lg bg-gradient-to-r from-emerald-950/90 to-teal-950/90 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white text-xs sm:text-sm font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+                      title={`Apri il file con codice Python e risultato per ${calc.name}`}
+                    >
+                      <FileCode className="w-4 h-4 text-emerald-400" />
+                      <span>File Python & Risultato</span>
+                    </button>
+                  )}
                 </div>
-
-                {/* Campi Input allineati su tutta la larghezza, seguiti dalla barra pulsanti sotto */}
-                <div className="flex flex-col gap-4 pt-1">
-                  <div className="w-full">
-                    {/* Calcolo 1 */}
-                    {calc.id === 1 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                        <div className="flex flex-col justify-end">
-                          <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Camion in attesa</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={inputs.camion_attesa}
-                            onChange={e => handleInputChange(1, 'camion_attesa', Number(e.target.value))}
-                            className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                          />
-                        </div>
-                        <div className="flex flex-col justify-end">
-                          <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Ritardo (min)</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={inputs.minuti_ritardo}
-                            onChange={e => handleInputChange(1, 'minuti_ritardo', Number(e.target.value))}
-                            className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                          />
-                        </div>
-                        <div className="flex flex-col justify-end">
-                          <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Saturazione WMS (%)</label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.5"
-                            value={inputs.saturazione_wms}
-                            onChange={e => handleInputChange(1, 'saturazione_wms', Number(e.target.value))}
-                            className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                {/* Calcolo 2 */}
-                {calc.id === 2 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Ritardo Stimato (minuti)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={inputs.ritardo_stimato_minuti}
-                        onChange={e => handleInputChange(2, 'ritardo_stimato_minuti', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Baie di scarico libere</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={inputs.baie_libere}
-                        onChange={e => handleInputChange(2, 'baie_libere', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 3 */}
-                {calc.id === 3 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Ore Turno Disponibili</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={inputs.ore_lavoro_disponibili}
-                        onChange={e => handleInputChange(3, 'ore_lavoro_disponibili', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Baie Totali da Coprire</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={inputs.baie_totali}
-                        onChange={e => handleInputChange(3, 'baie_totali', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 4 */}
-                {calc.id === 4 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Umidità Rilevata (%)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={inputs.umidita_rilevata}
-                        onChange={e => handleInputChange(4, 'umidita_rilevata', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Spessore Interfalda (mm)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={inputs.spessore_interfalda_mm ?? inputs.spessore_micro ?? 2.8}
-                        onChange={e => {
-                          const val = Number(e.target.value);
-                          handleInputChange(4, 'spessore_interfalda_mm', val);
-                          handleInputChange(4, 'spessore_micro', val);
-                        }}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 5 */}
-                {calc.id === 5 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">ID Lotto Materiale</label>
-                      <input
-                        type="text"
-                        value={inputs.id_lotto_materiale}
-                        onChange={e => handleInputChange(5, 'id_lotto_materiale', e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Codice Fornitore</label>
-                      <input
-                        type="text"
-                        value={inputs.codice_fornitore}
-                        onChange={e => handleInputChange(5, 'codice_fornitore', e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 6 */}
-                {calc.id === 6 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">ID Pallet</label>
-                      <input
-                        type="text"
-                        value={inputs.id_pallet}
-                        onChange={e => handleInputChange(6, 'id_pallet', e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Classe Rotazione</label>
-                      <select
-                        value={inputs.classe_rotazione}
-                        onChange={e => handleInputChange(6, 'classe_rotazione', e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      >
-                        <option value="HIGH">HIGH (Alta)</option>
-                        <option value="MEDIUM">MEDIUM (Media)</option>
-                        <option value="LOW">LOW (Bassa)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Celle 3D Libere</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={inputs.celle_libere_3d}
-                        onChange={e => handleInputChange(6, 'celle_libere_3d', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 7 */}
-                {calc.id === 7 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Micro-inclinazione (Gradi)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={inputs.micro_inclinazione}
-                        onChange={e => handleInputChange(7, 'micro_inclinazione', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Vettore Pressione (Bar)</label>
-                      <input
-                        type="text"
-                        value={JSON.stringify(inputs.vettore_pressione_bar)}
-                        onChange={e => {
-                          try {
-                            handleInputChange(7, 'vettore_pressione_bar', JSON.parse(e.target.value));
-                          } catch {
-                            // keep raw
-                          }
-                        }}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 8 */}
-                {calc.id === 8 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Coordinate Partenza</label>
-                      <input
-                        type="text"
-                        value={inputs.coordinate_partenza}
-                        onChange={e => handleInputChange(8, 'coordinate_partenza', e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Lista ID Pallet</label>
-                      <input
-                        type="text"
-                        value={JSON.stringify(inputs.lista_id_pallet)}
-                        onChange={e => {
-                          try {
-                            handleInputChange(8, 'lista_id_pallet', JSON.parse(e.target.value));
-                          } catch {}
-                        }}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 9 */}
-                {calc.id === 9 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Coefficiente Traffico (0 - 1.0)</label>
-                      <input
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        max="1"
-                        value={inputs.coefficiente_traffico}
-                        onChange={e => handleInputChange(9, 'coefficiente_traffico', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Ordini Camion</label>
-                      <input
-                        type="text"
-                        value={JSON.stringify(inputs.lista_ordini_camion)}
-                        onChange={e => {
-                          try {
-                            handleInputChange(9, 'lista_ordini_camion', JSON.parse(e.target.value));
-                          } catch {}
-                        }}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 10 */}
-                {calc.id === 10 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Colli da Caricare</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={inputs.colli_da_caricare ?? (Array.isArray(inputs.lista_pesi_pallet) ? inputs.lista_pesi_pallet.length : 33)}
-                        onChange={e => {
-                          const val = Number(e.target.value);
-                          handleInputChange(10, 'colli_da_caricare', val);
-                          handleInputChange(10, 'colli', val);
-                        }}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Volume Cassone Camion (m³)</label>
-                      <input
-                        type="number"
-                        value={inputs.volume_cassone_m3 ?? inputs.volume_disponibile_mc ?? 86.0}
-                        onChange={e => {
-                          const val = Number(e.target.value);
-                          handleInputChange(10, 'volume_cassone_m3', val);
-                          handleInputChange(10, 'volume_disponibile_mc', val);
-                        }}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Peso Totale Carico (kg)</label>
-                      <input
-                        type="number"
-                        value={inputs.peso_totale_kg ?? 24500.0}
-                        onChange={e => handleInputChange(10, 'peso_totale_kg', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 11 */}
-                {calc.id === 11 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">ID Contratto Vettore</label>
-                      <input
-                        type="text"
-                        value={inputs.id_contratto_vettore}
-                        onChange={e => handleInputChange(11, 'id_contratto_vettore', e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Dati e-CMR Spedizione</label>
-                      <input
-                        type="text"
-                        value={inputs.dati_ecmr}
-                        onChange={e => handleInputChange(11, 'dati_ecmr', e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 12 */}
-                {calc.id === 12 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Camion in Piazzale</label>
-                      <input
-                        type="number"
-                        value={inputs.camion_in_piazzale}
-                        onChange={e => handleInputChange(12, 'camion_in_piazzale', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Pallet Pronti Fine Linea</label>
-                      <input
-                        type="number"
-                        value={inputs.pallet_pronti_linea}
-                        onChange={e => handleInputChange(12, 'pallet_pronti_linea', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 13 */}
-                {calc.id === 13 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Camion in Attesa</label>
-                      <input
-                        type="number"
-                        value={inputs.camion_in_attesa}
-                        onChange={e => handleInputChange(13, 'camion_in_attesa', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Saturazione Buffer (0 - 1.0)</label>
-                      <input
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        max="1"
-                        value={inputs.codice_saturazione_buffer}
-                        onChange={e => handleInputChange(13, 'codice_saturazione_buffer', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 14 */}
-                {calc.id === 14 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Giri al minuto braccio (RPM)</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={inputs.giri_minuto}
-                        onChange={e => handleInputChange(14, 'giri_minuto', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Vettore Accelerometro</label>
-                      <input
-                        type="text"
-                        value={JSON.stringify(inputs.vettore_accelerometro)}
-                        onChange={e => {
-                          try {
-                            handleInputChange(14, 'vettore_accelerometro', JSON.parse(e.target.value));
-                          } catch {}
-                        }}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 15 */}
-                {calc.id === 15 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Tensione Film (N)</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={inputs.tensione_newton}
-                        onChange={e => handleInputChange(15, 'tensione_newton', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Velocità Svolg. (m/s)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={inputs.velocita_svolgimento}
-                        onChange={e => handleInputChange(15, 'velocita_svolgimento', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Spessore (micron)</label>
-                      <input
-                        type="number"
-                        value={inputs.spessore_film_micron}
-                        onChange={e => handleInputChange(15, 'spessore_film_micron', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 16 */}
-                {calc.id === 16 && (
-                  <div className="space-y-2">
-                    <label className="text-xs font-mono text-slate-300 block">Nodi Ingorgo e Ostacoli</label>
-                    <input
-                      type="text"
-                      value={JSON.stringify(inputs.mappa_ingorghi_nodi)}
-                      onChange={e => {
-                        try {
-                          handleInputChange(16, 'mappa_ingorghi_nodi', JSON.parse(e.target.value));
-                        } catch {}
-                      }}
-                      className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                    />
-                  </div>
-                )}
-
-                {/* Calcolo 17 */}
-                {calc.id === 17 && (
-                  <div className="space-y-2">
-                    <label className="text-xs font-mono text-slate-300 block">Missioni Urgenti</label>
-                    <input
-                      type="text"
-                      value={JSON.stringify(inputs.elenco_missioni_urgenti)}
-                      onChange={e => {
-                        try {
-                          handleInputChange(17, 'elenco_missioni_urgenti', JSON.parse(e.target.value));
-                        } catch {}
-                      }}
-                      className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                    />
-                  </div>
-                )}
-
-                {/* Calcolo 18: Robot Pallettizzatore */}
-                {calc.id === 18 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Vuoto Ventose (bar)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        max="0"
-                        value={inputs.pressione_vuoto_bar}
-                        onChange={e => handleInputChange(18, 'pressione_vuoto_bar', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Coppia Motori Joint (Nm)</label>
-                      <input
-                        type="text"
-                        value={JSON.stringify(inputs.coppia_motori_nm)}
-                        onChange={e => {
-                          try {
-                            handleInputChange(18, 'coppia_motori_nm', JSON.parse(e.target.value));
-                          } catch {}
-                        }}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Forza Pinze (N)</label>
-                      <input
-                        type="number"
-                        value={inputs.forza_pinze_n}
-                        onChange={e => handleInputChange(18, 'forza_pinze_n', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 19: Microgrid & Fast-Charge */}
-                {calc.id === 19 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Potenza Totale (kW)</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={inputs.potenza_erogata_totale_kw}
-                        onChange={e => handleInputChange(19, 'potenza_erogata_totale_kw', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Temp Piastra Terra (°C)</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={inputs.temp_piastre_c}
-                        onChange={e => handleInputChange(19, 'temp_piastre_c', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Supercap (%)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={inputs.livello_supercondensatori_pct}
-                        onChange={e => handleInputChange(19, 'livello_supercondensatori_pct', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 20: Woodpecker Integrità Pallet */}
-                {calc.id === 20 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Forza Pattini (N)</label>
-                      <input
-                        type="number"
-                        step="50"
-                        value={inputs.forza_deformazione_pattini_n}
-                        onChange={e => handleInputChange(20, 'forza_deformazione_pattini_n', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Umidità Legno (%)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={inputs.umidita_legno_pct}
-                        onChange={e => handleInputChange(20, 'umidita_legno_pct', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Throughput (pallet/h)</label>
-                      <input
-                        type="number"
-                        value={inputs.throughput_pallet_ora}
-                        onChange={e => handleInputChange(20, 'throughput_pallet_ora', Number(e.target.value))}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Calcolo 21: Raptor Tracciabilità GS1 SSCC */}
-                {calc.id === 21 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                    <div className="sm:col-span-2">
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Codice SSCC (18 cifre)</label>
-                      <input
-                        type="text"
-                        value={inputs.sscc_code}
-                        onChange={e => handleInputChange(21, 'sscc_code', e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-mono font-semibold text-slate-200 block mb-1.5">Qualità Stampa ISO</label>
-                      <select
-                        value={inputs.grado_qualita_stampa_iso}
-                        onChange={e => handleInputChange(21, 'grado_qualita_stampa_iso', e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm sm:text-base font-bold rounded-lg bg-slate-900 border border-slate-600 focus:border-cyan-400 focus:outline-none text-white font-mono"
-                      >
-                        <option value="CLASSE_A">CLASSE_A (Ottimale)</option>
-                        <option value="CLASSE_B">CLASSE_B (Accettabile)</option>
-                        <option value="CLASSE_C">CLASSE_C (Degradato)</option>
-                        <option value="CLASSE_F">CLASSE_F (Scarto)</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                  </div>
-
-                  {/* Nota informativa sopra i pulsanti: isolamento dei dati di test rispetto alla telemetria e ai grafici reali */}
-                  <div className="w-full pt-3 border-t border-slate-800/80 space-y-2.5">
-                    <div className="px-3 py-2 rounded-lg bg-slate-900/90 border border-cyan-500/30 text-xs text-slate-300 font-sans flex items-start gap-2 leading-relaxed">
-                      <AlertCircle className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-                      <span>
-                        <strong className="text-cyan-300 font-mono">Modalità Prova / Esempio:</strong> i valori modificati qui sopra servono esclusivamente come test dimostrativo sulla piattaforma e <strong className="text-slate-100">non modificano i dati reali dello stabilimento</strong> utilizzati per i calcoli operativi e i grafici di andamento.
-                      </span>
-                    </div>
-
-                    {/* Barra Pulsanti: Ricalcola, Simula e File Python allineati su una riga dedicata */}
-                    <div className="w-full flex items-center gap-2.5 flex-wrap">
-                      <button
-                        onClick={() => executeCalculation(calc)}
-                        disabled={isBusy}
-                        className={`w-full lg:w-auto px-4 py-2 h-[40px] rounded-lg text-xs sm:text-sm font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer whitespace-nowrap ${
-                          isBusy
-                            ? 'bg-slate-800 text-slate-500 cursor-wait'
-                            : isLocked
-                            ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-slate-950'
-                            : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white'
-                        }`}
-                      >
-                        {isBusy ? (
-                          <>
-                            <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                            <span>Ricalcolo in corso...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                            <span>Ricalcola con Nuovi Parametri</span>
-                          </>
-                        )}
-                      </button>
-
-                      {/* Pulsante Simula (Prima / Dopo) */}
-                      {SIMULATION_CONFIGS[calc.id] && (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSimulation(calc)}
-                          className="w-full lg:w-auto px-3.5 py-2 h-[40px] rounded-lg bg-gradient-to-r from-purple-900/90 to-indigo-900/90 hover:from-purple-800 hover:to-indigo-800 border border-purple-500/60 hover:border-purple-400 text-purple-200 hover:text-white text-xs sm:text-sm font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap"
-                          title={`Avvia simulazione di confronto Prima / Dopo per il Calcolo #${calc.id}`}
-                        >
-                          <Sliders className="w-4 h-4 text-purple-300" />
-                          <span>Simula (Prima / Dopo)</span>
-                        </button>
-                      )}
-
-                      {/* Pulsante File Python & Risultato */}
-                      {canViewPythonCode && (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedPythonCalc(calc)}
-                          className="w-full lg:w-auto px-3.5 py-2 h-[40px] rounded-lg bg-gradient-to-r from-emerald-950/90 to-teal-950/90 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white text-xs sm:text-sm font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap"
-                          title={`Apri il file con codice Python e risultato per ${calc.name}`}
-                        >
-                          <FileCode className="w-4 h-4 text-emerald-400" />
-                          <span>File Python & Risultato</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-                  </div>
+              )}
                 </div>
               );
 
@@ -3063,8 +2377,11 @@ export const QuantumCatalog: React.FC<Props> = ({
         userName={currentUser?.nomeCompleto || currentUser?.username}
         onRecompute={async (calc) => {
           const safeInputs = formInputs[calc.id] || calc.defaultInputs || {};
+          const targetTenantId = activeTenantIdRef.current;
           const res = await QuantumEngine.executeCalculation(calc.id, safeInputs);
-          setResults(prev => ({ ...prev, [calc.id]: res }));
+          if (activeTenantIdRef.current === targetTenantId) {
+            setResults(prev => ({ ...prev, [calc.id]: res }));
+          }
           return res;
         }}
       />

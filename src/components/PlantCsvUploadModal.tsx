@@ -343,9 +343,9 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
           isHighSpeed ? 'UPLOAD_CSV_TELEMETRIA' : 'UPLOAD_CSV_EVENTI',
           undefined,
           {
-            bemaVibrazione: extractedInputs.vibrazione_cuscinetti_bema_g,
-            lgvSoc: extractedInputs.stato_carica_medio_soc,
-            baieRitardo: extractedInputs.ritardo_stimato_minuti
+            bemaVibrazione: extractedInputs.vibrazione_cuscinetti_g ?? extractedInputs.vibrazione_g ?? extractedInputs.vibrazioni_rms_mms ?? extractedInputs.vibrazione_cuscinetti_bema_g,
+            lgvSoc: extractedInputs.soc_medio_flotta_pct ?? extractedInputs.stato_carica_medio_soc ?? extractedInputs.batteria_soc,
+            baieRitardo: extractedInputs.ritardo_stimato_minuti ?? extractedInputs.minuti_ritardo
           }
         );
       } catch {}

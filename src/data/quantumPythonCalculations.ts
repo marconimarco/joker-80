@@ -238,22 +238,23 @@ def qwalk_quality_kernel(theta_u: float, theta_s: float):
         cudaq.rz(theta_s, pos[s % 3])
         cudaq.x.ctrl(coin[s], pos[s % 3])
 
-def esegui_calcolo_04_qwalk(umidita_rilevata: float = 12.8, spessore_micro: float = 230.0, forza_deformazione_n: float = 420.0, spessore_interfalda_mm: float = 3.2) -> Dict[str, Any]:
-    u = float(np.clip(umidita_rilevata, 5.0, 30.0))
-    sp_um = float(np.clip(spessore_micro, 50.0, 500.0))
-    sp_mm = float(np.clip(spessore_interfalda_mm, 1.0, 10.0))
+def esegui_calcolo_04_qwalk(umidita_rilevata: float = 12.8, spessore_micro: float = 2.8, forza_deformazione_n: float = 3400.0, spessore_interfalda_mm: float = 2.8) -> Dict[str, Any]:
+    u = float(np.clip(umidita_rilevata, 0.0, 35.0))
+    sp_mm = float(np.clip(spessore_interfalda_mm, 0.5, 10.0))
+    forza_penalty = ((2800.0 - forza_deformazione_n) / 100.0) * 1.2 if forza_deformazione_n < 2800.0 else 0.0
     theta_u = float(np.clip((u / 20.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_s = float(np.clip((sp_um / 400.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_s = float(np.clip((sp_mm / 10.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(qwalk_quality_kernel, theta_u, theta_s, shots=100)
     stato_cluster = counts.most_probable()
-    conformita_pct = round(min(99.8, max(50.0, 98.5 - abs(u - 12.0) * 2.5 - abs(sp_mm - 3.0) * 5.0)), 2)
+    conformita_pct = round(min(99.8, max(40.0, 98.5 - abs(u - 12.0) * 2.5 - abs(sp_mm - 3.0) * 5.0 - forza_penalty)), 2)
+    esito = "CONFORME STANDARD BARILLA" if (conformita_pct >= 90.0 and u <= 14.5) else ("ATTENZIONE - Umidita/Spessore al Limite" if conformita_pct >= 80.0 else "LOTTO SOSPESO PER CONTROLLO")
     return {
         "calcolo": "Quantum Walk-based Clustering - Material Inventory & Quality",
         "umidita_rilevata_pct": u,
         "spessore_interfalda_mm": sp_mm,
         "stato_cluster_qubit": stato_cluster,
         "indice_conformita_lotto_pct": conformita_pct,
-        "esito_collaudo": "CONFORME STANDARD BARILLA" if conformita_pct >= 90.0 else "LOTTO SOSPESO PER CONTROLLO"
+        "esito_collaudo": esito
     }
 
 if __name__ == '__main__':
@@ -282,25 +283,30 @@ def qrng_seed_kernel():
     for i in range(4):
         cudaq.h(q[i])
 
-def esegui_calcolo_05_pqc_hash(id_lotto_materiale: str = "LOTTO-NOV-2026-0884", codice_fornitore: str = "FORN-SEM-BO-012", sscc_code: str = "080332190000458129", qualita_stampa_iso: str = "GRADO_A") -> Dict[str, Any]:
+def esegui_calcolo_05_pqc_hash(id_lotto_materiale: str = "LOTTO-NOV-2026-0884", codice_fornitore: str = "FORN-SEM-BO-012", sscc_code: str = "80332190000458130", qualita_stampa_iso: str = "CLASSE_A") -> Dict[str, Any]:
     sscc_val = str(sscc_code).strip()
+    qualita_val = str(qualita_stampa_iso).strip().upper()
     counts = cudaq.sample(qrng_seed_kernel, shots=100)
     qpu_seed = counts.most_probable()
     hardware_entropy_bytes = secrets.token_bytes(32)
     salt_pool = qpu_seed.encode('utf-8') + hardware_entropy_bytes
     salt_hex = hashlib.sha3_256(salt_pool).hexdigest()
-    payload = f"{id_lotto_materiale}|{codice_fornitore}|{sscc_val}|{qualita_stampa_iso}|{salt_hex}"
+    payload = f"{id_lotto_materiale}|{codice_fornitore}|{sscc_val}|{qualita_val}|{salt_hex}"
     certificato_sha3 = hashlib.sha3_256(payload.encode('utf-8')).hexdigest()
+    sscc_valido = sscc_val.isdigit() and 10 <= len(sscc_val) <= 20
+    qualita_valida = ("_C" not in qualita_val) and ("_F" not in qualita_val)
+    integrita_ok = bool(len(str(codice_fornitore).strip()) > 0 and sscc_valido and qualita_valida)
     return {
         "calcolo": "Post-Quantum Cryptographic Hashing - Material Inventory & Quality",
         "standard_crittografico": "NIST FIPS 202 (SHA3-256) con Salt ad Alta Entropia (Non-Lattice)",
         "compliance_direttiva": "NIS2 Art. 21 - Tracciabilita Immutabile di Filiera",
         "id_lotto": id_lotto_materiale,
         "sscc_code": sscc_val,
+        "qualita_stampa_iso": qualita_val,
         "salt_crittografico_256bit": salt_hex,
         "token_certificato_sha3": certificato_sha3,
         "entropia_effettiva_bit": 256,
-        "integrita_verificata": True
+        "integrita_verificata": integrita_ok
     }
 
 if __name__ == '__main__':
@@ -385,22 +391,27 @@ def hopfield_safety_kernel(theta_stress: float, theta_press: float):
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
 
-def esegui_calcolo_07_hopfield(corsie_attive: int = 6, pressione_pattini_bar: float = 185.0, stress_strutturale_mpa: float = 142.5) -> Dict[str, Any]:
+def esegui_calcolo_07_hopfield(corsie_attive: int = 6, pressione_pattini_bar: float = 15.0, micro_inclinazione: float = 0.4, carico_pattini_integri: bool = True) -> Dict[str, Any]:
     c_att = max(1, int(corsie_attive))
-    press = float(np.clip(pressione_pattini_bar, 50.0, 300.0))
-    stress = max(1.0, float(np.clip(stress_strutturale_mpa, 20.0, 300.0)))
+    press = float(np.clip(pressione_pattini_bar, 0.0, 300.0))
+    incl = max(0.0, float(micro_inclinazione))
+    raw_stress = 85.0 + max(0.0, incl - 0.1) * 140.0 + max(0.0, press - 12.0) * 3.5 + (60.0 if not carico_pattini_integri else 0.0)
+    stress = round(float(np.clip(raw_stress, 20.0, 350.0)), 1)
     theta_s = float(np.clip((stress / 250.0) * np.pi, 0.1, np.pi - 0.1))
-    theta_p = float(np.clip((press / 250.0) * np.pi, 0.1, np.pi - 0.1))
+    theta_p = float(np.clip((press / 30.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(hopfield_safety_kernel, theta_s, theta_p, shots=100)
     stato = counts.most_probable()
     limite_acciaio = 235.0
     fattore_sicurezza = round(float(limite_acciaio / stress), 2)
+    anomalia = (fattore_sicurezza < 1.5) or (incl > 0.40) or (press > 18.0) or (not carico_pattini_integri)
     return {
         "calcolo": "Quantum Hopfield Networks - Safety Scaffalature Intensive",
         "corsie_attive": c_att,
+        "pressione_pattini_bar": press,
+        "micro_inclinazione": incl,
         "stress_strutturale_mpa": stress,
         "fattore_sicurezza": fattore_sicurezza,
-        "conformita_asrs": "CONFORME NORMA EN 15635" if fattore_sicurezza >= 1.5 else "ALLARME SOVRACCARICO",
+        "conformita_asrs": "ALLARME SOVRACCARICO" if anomalia else "CONFORME NORMA EN 15635",
         "stato_qubit_memoria": stato
     }
 
@@ -490,18 +501,21 @@ def qgnn_batching_kernel(w0: float, w1: float, w2: float, w3: float, w4: float, 
     cudaq.x.ctrl(q[2], q[3])
     cudaq.x.ctrl(q[3], q[0])
 
-def esegui_calcolo_09_qgnn(ordini_in_coda: int = 24, densita_affiliazioni_grafo: float = 0.65) -> Dict[str, Any]:
+def esegui_calcolo_09_qgnn(ordini_in_coda: int = 24, coefficiente_traffico: float = 0.45) -> Dict[str, Any]:
     n_ord = max(1, int(ordini_in_coda))
-    dens = float(np.clip(densita_affiliazioni_grafo, 0.05, 1.0))
+    coeff = float(np.clip(coefficiente_traffico, 0.05, 1.0))
     w = [0.45, 0.62, 0.38, 0.71, 0.55, 0.40, 0.68, 0.33]
-    counts = cudaq.sample(qgnn_batching_kernel, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], dens, shots=100)
+    counts = cudaq.sample(qgnn_batching_kernel, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], coeff, shots=100)
     stato_cluster = counts.most_probable()
     n_cluster = max(2, min(8, int(stato_cluster, 2) % 6 + 2))
-    efficienza = round(min(98.5, max(70.0, 82.0 + dens * 14.5)), 1)
-    tempo_sec = round(float((n_ord / n_cluster) * 4.2), 1)
+    penalita_congestione = max(0.0, coeff - 0.55) * 32.0
+    bonus_ordini = min(6.0, n_ord * 0.2)
+    efficienza = round(min(98.5, max(58.0, 91.0 + bonus_ordini - penalita_congestione)), 1)
+    tempo_sec = round(float(((n_ord / n_cluster) * 4.2) * (1.0 + coeff * 0.65)), 1)
     return {
         "calcolo": "Quantum Graph Neural Network (QGNN) - Order Batching",
         "ordini_in_coda": n_ord,
+        "coefficiente_traffico": coeff,
         "cluster_ottimale_bitstring": stato_cluster,
         "numero_cluster_generati": n_cluster,
         "efficienza_batching_pct": efficienza,
@@ -546,13 +560,22 @@ def esegui_calcolo_10_loader(colli_da_caricare: int = 33, peso_totale_kg: float 
     c_colli = max(1, int(colli_da_caricare))
     p_tot = max(100.0, float(peso_totale_kg))
     v_cass = max(1.0, float(volume_cassone_m3))
-    saturazione_pct = round(min(99.4, (c_colli * 2.5 / v_cass) * 100.0), 1)
+    sat_calc = (c_colli * 2.5 / v_cass) * 100.0
+    saturazione_pct = round(min(99.4, sat_calc), 1)
     theta_v = float(np.clip((saturazione_pct / 100.0) * np.pi, 0.1, np.pi - 0.1))
     theta_w = float(np.clip((p_tot / 30000.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(qaoa_3d_loader_kernel, theta_v, theta_w, shots=100)
     stato = counts.most_probable()
     peso_ant = round(float(p_tot * 0.42), 1)
     peso_post = round(float(p_tot * 0.58), 1)
+    if p_tot > 44000.0:
+        esito = f"CRITICO - ECCEDENZA 44 t CODICE STRADA ({p_tot/1000.0:.1f} t)"
+    elif sat_calc > 100.0:
+        esito = f"CRITICO - ECCEDENZA VOLUME CASSONE ({sat_calc:.1f}%)"
+    elif p_tot > 28000.0:
+        esito = f"ATTENZIONE - Carico Pesante ({p_tot/1000.0:.1f} t > 28 t)"
+    else:
+        esito = "CONFORME CODICE DELLA STRADA (44 t)"
     return {
         "calcolo": "Quantum Approximate Optimization (QAOA) - 3D Volumetric Loader",
         "colli_allocati": c_colli,
@@ -561,7 +584,7 @@ def esegui_calcolo_10_loader(colli_da_caricare: int = 33, peso_totale_kg: float 
         "peso_totale_kg": p_tot,
         "ripartizione_assi_kg": {"asse_anteriore": peso_ant, "asse_posteriore": peso_post},
         "configurazione_qubit_stivaggio": stato,
-        "esito_sagoma": "CONFORME CODICE DELLA STRADA (44 t)"
+        "esito_sagoma": esito
     }
 
 if __name__ == '__main__':
@@ -698,13 +721,19 @@ def esegui_calcolo_13_yard(camion_attesa: int = 14, saturazione_buffer: float = 
     counts = cudaq.sample(qk_means_traffic_kernel, theta_c, theta_b, shots=100)
     cluster_dominante = counts.most_probable()
     tempo_medio_attesa_min = round(float(c * 3.8 * sat), 1)
+    if tempo_medio_attesa_min > 30.0 or sat >= 0.85:
+        stato_cong = "ROSSO - TRAFFICO CRITICO"
+    elif tempo_medio_attesa_min > 20.0 or sat >= 0.75:
+        stato_cong = "GIALLO - ATTENZIONE"
+    else:
+        stato_cong = "VERDE - FLUSSO REGOLARE"
     return {
         "calcolo": "Quantum K-Means Clustering - Traffico Piazzale e Buffer",
         "camion_attesa": c,
         "saturazione_buffer": sat,
         "cluster_qubit_traffico": cluster_dominante,
         "tempo_medio_attesa_min": tempo_medio_attesa_min,
-        "stato_congestione": "ATTENZIONE - Regolare Flussi Banchina" if sat > 0.70 else "FLUIDO"
+        "stato_congestione": stato_cong
     }
 
 if __name__ == '__main__':
@@ -770,7 +799,7 @@ def esegui_calcolo_14_qft_bema(rpm_tavola_bema: float = 48.5, vibrazione_cuscine
         "bin_spettrale_rilevato": bin_dominante,
         "frequenza_armonica_stimata_hz": freq_armonica_hz,
         "vibrazione_cuscinetti_g": vib_g,
-        "stato_meccanico": "ALLARME MANUTENZIONE PREVENTIVA" if vib_g > 0.45 else "REGOLARE"
+        "stato_meccanico": "ALLARME MANUTENZIONE PREDITTIVA" if (vib_g > 0.50 or rpm > 55.0) else "CUSCINETTI REGOLARI"
     }
 
 if __name__ == '__main__':
@@ -946,10 +975,11 @@ def vqe_robot_ansatz(theta_j1: float, theta_j2: float, theta_j3: float):
     cudaq.x.ctrl(q[2], q[1])
     cudaq.x.ctrl(q[3], q[2])
 
-def esegui_calcolo_18_vqe_robot(coppia_motori_nm: float = 185.0, pressione_vuoto_bar: float = -0.78, corrente_joint_ampere: float = 14.2) -> Dict[str, Any]:
+def esegui_calcolo_18_vqe_robot(coppia_motori_nm: float = 185.0, pressione_vuoto_bar: float = -0.78, corrente_joint_ampere: float = 14.2, forza_pinze_n: float = 480.0) -> Dict[str, Any]:
     c_nm = max(10.0, float(coppia_motori_nm))
     p_bar = float(np.clip(pressione_vuoto_bar, -1.0, 0.0))
     i_amp = max(1.0, float(corrente_joint_ampere))
+    pinze = max(0.0, float(forza_pinze_n))
     scale_coppia = float(c_nm / 200.0)
     H = -1.05 * spin.z(0) + (0.45 * scale_coppia) * spin.z(1) + 0.35 * spin.z(2) + 0.25 * spin.z(3)
     H += 0.20 * (spin.x(0) * spin.x(1) + spin.y(0) * spin.y(1))
@@ -958,6 +988,8 @@ def esegui_calcolo_18_vqe_robot(coppia_motori_nm: float = 185.0, pressione_vuoto
     opt_res = minimize(cost_func, [0.35, 0.55, 0.42], method='COBYLA', options={'maxiter': 20})
     energia = round(float(opt_res.fun), 4)
     vuoto_conforme = p_bar <= -0.65
+    coppia_conforme = c_nm <= 400.0
+    pinze_conformi = pinze >= 300.0
     vibrazione_giunti_mm = round(float(0.12 + abs(energia) * 0.04), 3)
     return {
         "calcolo": "Variational Quantum Eigensolver (VQE) - Robot Joint Kinematics",
@@ -965,11 +997,12 @@ def esegui_calcolo_18_vqe_robot(coppia_motori_nm: float = 185.0, pressione_vuoto
         "coppia_motori_nm": c_nm,
         "pressione_vuoto_bar": p_bar,
         "corrente_joint_ampere": i_amp,
+        "forza_pinze_n": pinze,
         "energia_ground_state_trovata": energia,
         "angoli_ottimi_rad": [round(float(opt_res.x[0]), 3), round(float(opt_res.x[1]), 3), round(float(opt_res.x[2]), 3)],
         "tenuta_vuoto_pinza": "TENUTA OTTIMALE" if vuoto_conforme else "ALLARME VUOTO INSUFFICIENTE",
         "vibrazione_giunti_mm": vibrazione_giunti_mm,
-        "stato_manutenzione": "REGOLARE" if abs(energia) < 2.5 else "ISPEZIONE GIUNTI RICHIESTA"
+        "stato_manutenzione": "REGOLARE" if (coppia_conforme and pinze_conformi and abs(energia) < 2.5) else "ALLARME ISPEZIONE GIUNTI RICHIESTA"
     }
 
 if __name__ == '__main__':
@@ -1007,8 +1040,12 @@ def esegui_calcolo_19_fast_charge(potenza_erogata_totale_kw: float = 87.5, temp_
     theta_t = float(np.clip((t_c / 80.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(knapsack_charge_kernel, theta_p, theta_t, shots=100)
     stato = counts.most_probable()
-    picco_tagliato = round(float(p_kw * 0.28), 1)
-    energia_recuperata = round(float(p_kw * (sc_pct / 100.0) * 0.45), 2)
+    derating = 0.85 if p_kw > 120.0 else 1.0
+    picco_tagliato = round(float(p_kw * 0.28 * derating), 1)
+    energia_recuperata = round(float(p_kw * (sc_pct / 100.0) * 0.45 * derating), 2)
+    is_crit = (t_c > 65.0) or (p_kw > 120.0)
+    is_warn = (not is_crit) and ((t_c > 45.0) or (p_kw > 110.0))
+    stato_termico = "ALLARME SOVRATEMPERATURA / SOVRACCARICO" if is_crit else ("ATTENZIONE - Derating Consigliato" if is_warn else "SICURO - Carica Ultra-Fast Abilitata")
     return {
         "calcolo": "Quantum Knapsack & Microgrid Peak Shaving",
         "potenza_erogata_totale_kw": p_kw,
@@ -1017,7 +1054,7 @@ def esegui_calcolo_19_fast_charge(potenza_erogata_totale_kw: float = 87.5, temp_
         "energia_recuperata_kwh": energia_recuperata,
         "modello_accumulo": "Curva lineare approssimata (validita SoC nominale 20%-80%)",
         "avviso_tecnico_supercap": "Per SoC <20% o >80% applicare curva esponenziale non lineare Maxwell/Skeleton",
-        "stato_termico": "SICURO - Carica Ultra-Fast Abilitata" if t_c <= 65.0 else "ALLARME SOVRATEMPERATURA",
+        "stato_termico": stato_termico,
         "configurazione_qubit_allocata": stato
     }
 
@@ -1056,10 +1093,11 @@ def esegui_calcolo_20_woodpecker(throughput_pallet_ora: int = 280, umidita_legno
     theta_f = float(np.clip((forza / 5000.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(woodpecker_svc_kernel, theta_u, theta_f, shots=100)
     stato = counts.most_probable()
-    delta_umidita = max(0.0, 22.0 - umid)
-    tasso_scarto_stimato_pct = round(float(max(0.5, delta_umidita * 0.18)), 2)
+    eccesso_umidita = max(0.0, umid - 12.0)
+    deficit_forza = ((2800.0 - forza) / 2800.0) * 18.0 if forza < 2800.0 else 0.0
+    tasso_scarto_stimato_pct = round(float(min(100.0, max(0.5, 0.5 + eccesso_umidita * 1.45 + deficit_forza))), 2)
     pallet_scartati_stima = int(round(th_plt * (tasso_scarto_stimato_pct / 100.0)))
-    esito_conforme = (umid <= 18.0) and (forza > 2800.0)
+    esito_conforme = (umid <= 17.5) and (forza >= 2600.0)
     return {
         "calcolo": "Quantum Support Vector Classifier - Woodpecker Pallet Integrity",
         "throughput_pallet_ora": th_plt,
@@ -1100,21 +1138,26 @@ def qem_raptor_kernel(theta_c: float):
     cudaq.x.ctrl(q[0], q[1])
     cudaq.x.ctrl(q[2], q[3])
 
-def esegui_calcolo_21_raptor(grado_qualita_stampa_iso: str = "GRADO_A", contrasto_ottico_pct: float = 84.5) -> Dict[str, Any]:
-    contrasto = float(np.clip(contrasto_ottico_pct, 10.0, 100.0))
+def esegui_calcolo_21_raptor(grado_qualita_stampa_iso: str = "CLASSE_A", contrasto_ottico_pct: float = 84.5, temp_testina_termica_c: float = 54.2) -> Dict[str, Any]:
+    grado = str(grado_qualita_stampa_iso or "CLASSE_A").strip().upper()
+    contrasto = float(np.clip(contrasto_ottico_pct, 0.0, 100.0))
+    temp_testina = max(0.0, float(temp_testina_termica_c))
     theta_c = float((contrasto / 100.0) * np.pi)
     counts = cudaq.sample(qem_raptor_kernel, theta_c, shots=100)
     stato = counts.most_probable()
-    bonus_grado = 10.0 if grado_qualita_stampa_iso == "GRADO_A" else (5.0 if grado_qualita_stampa_iso == "GRADO_B" else 0.0)
-    affidabilita = round(min(99.9, (contrasto * 1.05) + bonus_grado), 1)
+    bonus_grado = 10.0 if "_A" in grado else (5.0 if "_B" in grado else (-8.0 if "_C" in grado else (-22.0 if "_F" in grado else 0.0)))
+    temp_penalty = (temp_testina - 65.0) * 0.45 if temp_testina > 65.0 else 0.0
+    affidabilita = round(max(10.0, min(99.9, (contrasto * 1.05) + bonus_grado - temp_penalty)), 1)
+    is_degraded = (affidabilita < 80.0) or ("_C" in grado) or ("_F" in grado) or (temp_testina > 65.0)
     return {
         "calcolo": "Quantum Error Mitigation (QEM) - Scanner Raptor GS1-128",
         "standard_crittografico": "NIST FIPS 202 (Non-Lattice) - Mitigazione Rumore Ottico",
-        "grado_qualita_stampa_iso": grado_qualita_stampa_iso,
+        "grado_qualita_stampa_iso": grado,
         "contrasto_ottico_pct": contrasto,
+        "temp_testina_termica_c": temp_testina,
         "affidabilita_ricostruzione_barcode_pct": affidabilita,
         "stato_qubit_mitigato": stato,
-        "esito_lettura": "CONFORME ISO/IEC 15416" if affidabilita >= 80.0 else "SCANSIONE ANOMALA"
+        "esito_lettura": "SCANSIONE ANOMALA" if is_degraded else "CONFORME ISO/IEC 15416"
     }
 
 if __name__ == '__main__':

@@ -4,7 +4,6 @@ import {
   ShieldCheck, 
   Building2, 
   UserCheck, 
-  Terminal, 
   LayoutGrid, 
   Radio, 
   Sliders, 
@@ -21,8 +20,8 @@ interface Props {
   onSelectTenant: (tenant: FactoryTenant) => void;
   currentUser: UserAccount;
   onLogout: () => void;
-  activeView: 'chat' | 'catalog' | 'notifications' | 'admin';
-  onChangeView: (view: 'chat' | 'catalog' | 'notifications' | 'admin') => void;
+  activeView: 'catalog' | 'notifications' | 'admin';
+  onChangeView: (view: 'catalog' | 'notifications' | 'admin') => void;
   anomaliesCount?: number;
   isScanning?: boolean;
   onOpenCompanyPlantSelector: () => void;
@@ -172,24 +171,7 @@ export const Header: React.FC<Props> = ({
       <div className="border-t border-slate-800/80 bg-slate-950/80">
         <div className="max-w-[1600px] mx-auto px-2.5 sm:px-4 py-1.5 flex items-center justify-between gap-3 overflow-x-auto scrollbar-thin">
           <nav aria-label="Sezioni Principali" className="flex items-center gap-2 sm:gap-2.5 flex-nowrap shrink-0">
-            {/* 1. Chat Terminal (Solo per Amministratori; gli operatori non hanno bisogno di vedere la Chat Terminal) */}
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => onChangeView('chat')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 min-h-[38px] ${
-                  activeView === 'chat'
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-md shadow-cyan-500/10'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
-                }`}
-                title="Console Interattiva Router & Solutore Quantistico"
-              >
-                <Terminal className="w-4 h-4 text-cyan-400" />
-                <span>Chat Terminal</span>
-              </button>
-            )}
-
-            {/* 2. Catalogo (21 Calcoli) */}
+            {/* 1. Catalogo (21 Calcoli) */}
             <button
               type="button"
               onClick={() => onChangeView('catalog')}

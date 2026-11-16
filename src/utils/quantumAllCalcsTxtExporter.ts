@@ -1,5 +1,6 @@
 import { QuantumCalculationMeta, FactoryTenant, UserAccount } from '../types/quantum';
 import { QUANTUM_PYTHON_CODES } from '../data/quantumPythonCalculations';
+import { extractDiagnosticSummary } from '../data/industrialThresholds';
 
 export interface GenerateTxtOptions {
   activeTenant?: FactoryTenant;
@@ -45,7 +46,7 @@ export function generateAllCalculationsTxtContent({
           .join('\n')
       : '  [Nessun risultato disponibile per questo nodo]';
 
-    const diagnosi = res?.indice_rischio_blocco || res?.livello_rischio || res?.rischio_stocastico || res?.validazione_qualita || res?.digital_twin_status || 'ESECUZIONE CONFORME';
+    const diagnosi = extractDiagnosticSummary(res) || 'ESECUZIONE CONFORME';
     const azione = res?.azione_correttiva_suggerita || res?.azione_logistica_immediata || res?.azione_sicurezza_wms || 'Nessuna anomalia rilevata';
 
     return `
