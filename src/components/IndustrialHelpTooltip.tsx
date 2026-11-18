@@ -30,7 +30,7 @@ export const INDUSTRIAL_GLOSSARY: Record<string, { title: string; simpleExplanat
   'soc_batteria': {
     title: 'SoC (State of Charge Batteria LGV)',
     simpleExplanation: 'Percentuale di carica residua della batteria della navetta automatica.',
-    factoryContext: 'Se scende sotto il 25%, il sistema instrada l\'LGV verso le spazzole di ricarica rapida.'
+    factoryContext: 'Se scende sotto il 50% entra in attenzione, sotto il 20% in critico: il sistema instrada l\'LGV verso le piastre di ricarica rapida.'
   },
   'spool': {
     title: 'Cartella Spool (Buffer Locale)',

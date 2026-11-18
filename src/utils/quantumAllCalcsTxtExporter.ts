@@ -33,7 +33,8 @@ export function generateAllCalculationsTxtContent({
     const codeInfo = QUANTUM_PYTHON_CODES[calc.id];
     const codeText = codeInfo ? codeInfo.pythonCode.trim() : '# Codice sorgente Python non disponibile';
     const inputs = formInputs[calc.id] || calc.defaultInputs || {};
-    const res = results[calc.id] || null;
+    const candidateRes = results[calc.id];
+    const res = candidateRes && candidateRes.calcolo_id === calc.id ? candidateRes : null;
 
     const inputLines = Object.keys(inputs).length > 0
       ? Object.entries(inputs).map(([k, v]) => `  - ${k}: ${JSON.stringify(v)}`).join('\n')

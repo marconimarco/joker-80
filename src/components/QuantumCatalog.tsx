@@ -149,17 +149,6 @@ export const SIMULATION_CONFIGS: Record<number, SimulationConfig> = {
       { key: 'esito_collaudo', label: 'Esito collaudo', betterDirection: 'neutral' },
     ]
   },
-  5: {
-    inputs: [
-      { key: 'id_lotto_materiale', label: 'ID Lotto materiale', betterDirection: 'neutral', inputType: 'text' },
-      { key: 'codice_fornitore', label: 'Codice fornitore', betterDirection: 'neutral', inputType: 'text' },
-      { key: 'qualita_stampa_iso', label: 'Qualità stampa ISO', betterDirection: 'neutral', inputType: 'select', options: ['CLASSE_A', 'CLASSE_B', 'CLASSE_C', 'CLASSE_F'] },
-    ],
-    outputs: [
-      { key: 'integrita_verificata', label: 'Integrità NIST Verificata', betterDirection: 'higher' },
-      { key: 'stato_sicurezza', label: 'Esito Sigillo SHA3-256', betterDirection: 'neutral' },
-    ]
-  },
   6: {
     inputs: [
       { key: 'classe_rotazione', label: 'Classe rotazione', betterDirection: 'neutral', inputType: 'select', options: ['HIGH', 'MEDIUM', 'LOW'] },
@@ -217,17 +206,6 @@ export const SIMULATION_CONFIGS: Record<number, SimulationConfig> = {
       { key: 'saturazione_volumetrica_pct', label: 'Saturazione volumetrica', unit: '%', betterDirection: 'higher' },
       { key: 'esito_sagoma', label: 'Conformità carico 44t', betterDirection: 'neutral' },
       { key: 'stato_qubit_incastro', label: 'Configurazione Qubit', betterDirection: 'neutral' },
-    ]
-  },
-  11: {
-    inputs: [
-      { key: 'id_spedizione', label: 'ID Spedizione', betterDirection: 'neutral', inputType: 'text' },
-      { key: 'destinazione', label: 'Destinazione / Dati e-CMR', betterDirection: 'neutral', inputType: 'text' },
-      { key: 'vettore_logistico', label: 'Vettore logistico', betterDirection: 'neutral', inputType: 'text' },
-    ],
-    outputs: [
-      { key: 'stato_sicurezza', label: 'Stato sigillo e-CMR', betterDirection: 'neutral' },
-      { key: 'stato_qubit_entropy', label: 'Qubit Entropy', betterDirection: 'neutral' },
     ]
   },
   12: {
@@ -366,7 +344,7 @@ export const QuantumCatalog: React.FC<Props> = ({
   onSelectTenant
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<MacroCategory | 'ALL'>('ALL');
-  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentFilter>('ALL');
+  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentFilter>('INBOUND_CAMION');
   const [operatorMode, setOperatorMode] = useState<boolean>(() => {
     try {
       return localStorage.getItem('joker80_operator_mode') === 'true';
@@ -466,10 +444,6 @@ export const QuantumCatalog: React.FC<Props> = ({
     } else if (calc.id === 9) {
       current.ordini_in_coda = current.ordini_in_coda ?? (Array.isArray(current.lista_ordini_camion) ? current.lista_ordini_camion.length : 24);
       current.coefficiente_traffico = current.coefficiente_traffico ?? 0.45;
-    } else if (calc.id === 11) {
-      current.id_spedizione = current.id_spedizione || 'ECMR-NOV-2026-9921';
-      current.destinazione = current.destinazione || current.dati_ecmr || 'HUB-INTERPORTO-BOLOGNA';
-      current.vettore_logistico = current.vettore_logistico || current.id_contratto_vettore || 'FERCAM-LOGISTICS-IT';
     } else if (calc.id === 12) {
       current.camion_in_coda = current.camion_in_coda ?? current.camion_in_piazzale ?? 8;
       current.baie_disponibili = current.baie_disponibili ?? 2;
@@ -829,14 +803,30 @@ export const QuantumCatalog: React.FC<Props> = ({
     return pool;
   }, [activeTenant, plantSupportedCalcs, selectedDepartment, selectedCategory, searchQuery, searchTableQuery]);
 
-  // Se cambiano i calcoli supportati dallo stabilimento, sincronizza selectedCalcId
+  // Se cambiano i calcoli supportati dallo stabilimento o il gruppo selezionato, mantieni un gruppo valido e un calcolo selezionato coerente
   useEffect(() => {
-    if (plantSupportedCalcs.length > 0) {
-      if (!plantSupportedCalcs.some(c => c.id === selectedCalcId)) {
-        setSelectedCalcId(plantSupportedCalcs[0].id);
+    if (plantSupportedCalcs.length === 0) return;
+    const currentDep = DEPARTMENT_FILTERS.find(d => d.id === selectedDepartment && d.id !== 'ALL');
+    const hasCalcsInCurrentDep = currentDep
+      ? plantSupportedCalcs.some(c => currentDep.calcIds.includes(c.id))
+      : false;
+
+    if (!hasCalcsInCurrentDep) {
+      const firstValidDep = DEPARTMENT_FILTERS.find(
+        d => d.id !== 'ALL' && plantSupportedCalcs.some(c => d.calcIds.includes(c.id))
+      );
+      if (firstValidDep) {
+        setSelectedDepartment(firstValidDep.id);
+        const firstCalc = plantSupportedCalcs.find(c => firstValidDep.calcIds.includes(c.id));
+        if (firstCalc) setSelectedCalcId(firstCalc.id);
+        return;
       }
     }
-  }, [plantSupportedCalcs, selectedCalcId]);
+
+    if (displayedCalculations.length > 0 && !displayedCalculations.some(c => c.id === selectedCalcId)) {
+      setSelectedCalcId(displayedCalculations[0].id);
+    }
+  }, [plantSupportedCalcs, selectedDepartment, displayedCalculations, selectedCalcId]);
 
   // Gli utenti non amministratori visualizzano esclusivamente la modalità a tabella focalizzata con calcolo ingrandito
   useEffect(() => {
@@ -848,12 +838,14 @@ export const QuantumCatalog: React.FC<Props> = ({
   // Calcolo selezionato per la visualizzazione ingrandita
   const selectedCalc = useMemo(() => {
     return (
+      displayedCalculations.find(c => c.id === selectedCalcId) ||
+      displayedCalculations[0] ||
       plantSupportedCalcs.find(c => c.id === selectedCalcId) ||
       QUANTUM_CALCULATIONS.find(c => c.id === selectedCalcId) ||
       plantSupportedCalcs[0] ||
       QUANTUM_CALCULATIONS[0]
     );
-  }, [selectedCalcId, plantSupportedCalcs]);
+  }, [selectedCalcId, displayedCalculations, plantSupportedCalcs]);
 
   // Calcoli filtrati per la tabella dei pulsanti a sinistra
   const tableCalculations = useMemo(() => {
@@ -948,10 +940,34 @@ export const QuantumCatalog: React.FC<Props> = ({
             ? 'bg-gradient-to-br from-amber-950/35 via-slate-950 to-slate-950 border-amber-500/50 shadow-amber-950/20'
             : 'bg-gradient-to-br from-emerald-950/25 via-slate-950 to-slate-950 border-emerald-500/40 shadow-emerald-950/20'
       }`}>
-        {/* Status Header */}
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 flex-wrap gap-2">
+        {/* Riga Unica Superiore: Metrica Principale + DIAGNOSI REALE (attaccati) + Stato Allarme & Orario */}
+        <div className={`px-2.5 py-2 rounded-lg border flex items-center justify-between flex-wrap gap-2 ${
+          isCritical
+            ? 'bg-rose-950/30 border-rose-500/40'
+            : isWarning
+              ? 'bg-amber-950/30 border-amber-500/40'
+              : 'bg-cyan-950/25 border-cyan-500/35'
+        }`}>
+          {res.metrica_principale_valore ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] sm:text-xs uppercase tracking-wider text-slate-300 font-bold">
+                {res.metrica_principale_etichetta || 'Metrica Principale'}:
+              </span>
+              <span className={`text-lg sm:text-xl font-black tracking-tight font-mono leading-none ${
+                isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-cyan-300'
+              }`}>
+                {res.metrica_principale_valore}
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900 border border-slate-700 text-slate-300 shrink-0">
+                DIAGNOSI REALE
+              </span>
+            </div>
+          ) : (
+            <div />
+          )}
+
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`px-2.5 py-0.5 rounded text-xs sm:text-sm font-bold border flex items-center gap-1.5 ${
+            <span className={`px-2 py-0.5 rounded text-[11px] font-bold border flex items-center gap-1 ${
               isCritical
                 ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
                 : isWarning
@@ -960,57 +976,30 @@ export const QuantumCatalog: React.FC<Props> = ({
             }`}>
               {isCritical ? (
                 <>
-                  <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
+                  <AlertOctagon className="w-3 h-3 text-rose-400 shrink-0" />
                   <span>CRITICO - PROBLEMATICA ATTIVA</span>
                 </>
               ) : isWarning ? (
                 <>
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                  <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
                   <span>ATTENZIONE - MONITORAGGIO</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
                   <span>A REGIME - NESSUNA ANOMALIA</span>
                 </>
               )}
             </span>
             {res.timestamp_esecuzione && (
-              <span className="text-xs text-slate-400">
-                Aggiornato alle {res.timestamp_esecuzione}
+              <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                Agg. {res.timestamp_esecuzione}
               </span>
             )}
           </div>
         </div>
 
-        {/* Primary Metric Banner - Singolo Valore Primario (Deduplicato) */}
-        {res.metrica_principale_valore && (
-          <div className={`p-2.5 sm:p-3 rounded-lg border flex items-center justify-between gap-2 ${
-            isCritical
-              ? 'bg-rose-950/30 border-rose-500/40'
-              : isWarning
-                ? 'bg-amber-950/30 border-amber-500/40'
-                : 'bg-cyan-950/30 border-cyan-500/40'
-          }`}>
-            <div className="flex items-baseline gap-2.5 flex-wrap">
-              <span className="text-xs sm:text-sm uppercase tracking-wider text-slate-300 font-bold">
-                {res.metrica_principale_etichetta || 'Metrica Principale'}:
-              </span>
-              <span className={`text-xl sm:text-2xl font-black tracking-tight font-mono ${
-                isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-cyan-300'
-              }`}>
-                {res.metrica_principale_valore}
-              </span>
-            </div>
-            <div>
-              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-900 border border-slate-700 text-slate-300">
-                DIAGNOSI REALE
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Detailed KPIs Grid - Sulla stessa riga con deduplicazione contro metrica principale */}
+        {/* Detailed KPIs Row - Compatti sulla stessa riga a larghezza ridotta */}
         {res.metriche_dettagliate && Object.keys(res.metriche_dettagliate).length > 0 && (() => {
           const primaryValClean = String(res.metrica_principale_valore || '').replace(/[^\d.-]/g, '');
           const primaryLabelClean = String(res.metrica_principale_etichetta || '').toLowerCase().trim();
@@ -1033,11 +1022,14 @@ export const QuantumCatalog: React.FC<Props> = ({
           if (entries.length === 0) return null;
 
           return (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 w-full">
+            <div className="flex flex-nowrap items-stretch gap-2 w-full overflow-x-auto no-scrollbar">
               {entries.map(([key, val]) => (
-                <div key={key} className="px-2.5 py-2 rounded-md bg-slate-900/90 border border-slate-800 text-xs font-mono leading-tight flex flex-col justify-between">
-                  <span className="text-slate-400 text-xs block truncate" title={key}>{key}:</span>
-                  <span className="font-bold text-cyan-300 text-sm block mt-1 truncate">{String(val)}</span>
+                <div
+                  key={key}
+                  className="flex-1 min-w-[104px] sm:min-w-0 px-2.5 py-1.5 rounded-md bg-slate-900/90 border border-slate-800 font-mono leading-tight flex flex-col justify-center"
+                >
+                  <span className="text-slate-400 text-[11px] block truncate" title={key}>{key}:</span>
+                  <span className="font-bold text-cyan-300 text-xs sm:text-[13px] block mt-0.5 truncate" title={String(val)}>{String(val)}</span>
                 </div>
               ))}
             </div>
@@ -1058,32 +1050,34 @@ export const QuantumCatalog: React.FC<Props> = ({
           if (!diagnosticPhrase && !actionPhrase) return null;
 
           return (
-            <div className="space-y-2.5 text-xs sm:text-sm font-mono">
+            <div className={`grid ${diagnosticPhrase && actionPhrase ? 'grid-cols-2' : 'grid-cols-1'} gap-2 text-xs font-mono items-stretch`}>
               {diagnosticPhrase && (
-                <div className={`px-3 py-2 rounded-md border ${
+                <div className={`px-2.5 py-1.5 rounded-lg border min-w-0 flex flex-col justify-center ${
                   isCritical ? 'bg-rose-950/20 border-rose-500/30' : isWarning ? 'bg-amber-950/20 border-amber-500/30' : 'bg-slate-900/80 border-slate-800'
                 }`}>
-                  <span className="text-slate-400 text-xs block font-bold mb-0.5">Diagnosi / Valutazione:</span>
-                  <span className={`font-semibold text-sm leading-snug ${isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-slate-200'}`}>
+                  <span className="text-slate-400 text-[10px] uppercase tracking-wider block font-bold mb-0.5 truncate" title="Diagnosi / Valutazione">
+                    Diagnosi / Valutazione:
+                  </span>
+                  <span className={`font-semibold text-xs leading-snug break-words ${isCritical ? 'text-rose-300' : isWarning ? 'text-amber-300' : 'text-slate-200'}`}>
                     {diagnosticPhrase}
                   </span>
                 </div>
               )}
 
               {actionPhrase && (
-                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <span className="text-slate-400 text-xs block font-bold uppercase tracking-wider">
+                <div className="px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 min-w-0 flex flex-col justify-center gap-1">
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <span className="text-slate-400 text-[10px] block font-bold uppercase tracking-wider truncate" title="Consiglio Operativo / Azione Suggerita">
                       Consiglio Operativo / Azione Suggerita:
                     </span>
                     {res.motivo_allarme && (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-bold">
-                        <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                        <span>Motivo Allarme: {res.motivo_allarme}</span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/50 text-rose-300 text-[10px] font-bold">
+                        <AlertOctagon className="w-3 h-3 text-rose-400 shrink-0" />
+                        <span>Allarme: {res.motivo_allarme}</span>
                       </span>
                     )}
                   </div>
-                  <span className="font-bold text-base sm:text-lg text-cyan-200 block leading-snug">
+                  <span className="font-bold text-xs sm:text-sm text-cyan-200 block leading-snug break-words">
                     {actionPhrase}
                   </span>
                 </div>
@@ -1625,9 +1619,6 @@ export const QuantumCatalog: React.FC<Props> = ({
                 <span className="font-bold text-white text-base sm:text-lg">
                   Calcoli dello Stabilimento: {activeTenant.nome}
                 </span>
-                <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                  {plantSupportedCalcs.length} calcoli operativi su 21 abilitati
-                </span>
                 <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
                   {activeTenant.azienda || 'Azienda'} #{activeTenant.numeroStabilimento || 1}
                 </span>
@@ -1745,12 +1736,10 @@ export const QuantumCatalog: React.FC<Props> = ({
       {/* ========================================================================= */}
       {focusedCalcId === null && (
       <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar touch-pan-x flex-nowrap sm:flex-wrap font-mono">
-        {DEPARTMENT_FILTERS.map((dep) => {
+        {DEPARTMENT_FILTERS.filter(dep => dep.id !== 'ALL').map((dep) => {
           const isSelected = selectedDepartment === dep.id;
           const pool = activeTenant ? plantSupportedCalcs : QUANTUM_CALCULATIONS;
-          const countInDep = dep.id === 'ALL' 
-            ? pool.length 
-            : pool.filter(c => dep.calcIds.includes(c.id)).length;
+          const countInDep = pool.filter(c => dep.calcIds.includes(c.id)).length;
 
           return (
             <button
@@ -1792,7 +1781,8 @@ export const QuantumCatalog: React.FC<Props> = ({
               <div className="flex items-center gap-2 min-w-0">
                 <LayoutList className="w-4 h-4 text-cyan-400 shrink-0" />
                 <span className="text-sm font-bold text-white uppercase tracking-wider truncate">
-                  {selectedCategory === 'ALL' ? 'Tutti i Calcoli' : selectedCategory}
+                  {DEPARTMENT_FILTERS.find(d => d.id === selectedDepartment && d.id !== 'ALL')?.label ||
+                    (selectedCategory === 'ALL' ? 'Camion & Baie' : selectedCategory)}
                 </span>
               </div>
               <span className="px-2 py-0.5 rounded text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0">
@@ -2376,7 +2366,11 @@ export const QuantumCatalog: React.FC<Props> = ({
         userRole={currentUser?.ruolo}
         userName={currentUser?.nomeCompleto || currentUser?.username}
         onRecompute={async (calc) => {
-          const safeInputs = formInputs[calc.id] || calc.defaultInputs || {};
+          const raw = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
+          const safeInputs: Record<string, any> = {};
+          for (const [k, v] of Object.entries(raw)) {
+            safeInputs[k] = parseFlexibleInput(v, k);
+          }
           const targetTenantId = activeTenantIdRef.current;
           const res = await QuantumEngine.executeCalculation(calc.id, safeInputs);
           if (activeTenantIdRef.current === targetTenantId) {

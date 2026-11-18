@@ -59,10 +59,11 @@ export const AllQuantumPythonModal: React.FC<Props> = ({
   const [liveResults, setLiveResults] = useState<Record<number, any>>(results);
   const [generationTime, setGenerationTime] = useState<string>(new Date().toLocaleString('it-IT'));
 
-  // Sync results when props change
+  // Sync results strictly when props or activeTenant change (avoid merging stale results across plants)
   useEffect(() => {
-    setLiveResults(prev => ({ ...prev, ...results }));
-  }, [results]);
+    setLiveResults(results);
+    setGenerationTime(new Date().toLocaleString('it-IT'));
+  }, [results, activeTenant?.id]);
 
   // Determine active calculations list based on user filter
   const targetCalculations = useMemo(() => {
@@ -92,13 +93,15 @@ export const AllQuantumPythonModal: React.FC<Props> = ({
 
   // Function to re-simulate all calculations in scope
   const handleRefreshAll = async () => {
+    const startTenantId = activeTenant?.id;
     setIsRefreshing(true);
     setProgressCount(0);
-    const newResults: Record<number, any> = { ...liveResults };
+    const newResults: Record<number, any> = {};
     try {
       let count = 0;
       for (const calc of targetCalculations) {
-        const inputs = formInputs[calc.id] || calc.defaultInputs || {};
+        if (activeTenant?.id !== startTenantId) return;
+        const inputs = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
         try {
           // Simulation of progressive QPU hardware state-vector batch sampling
           await new Promise(r => setTimeout(r, 25));
@@ -110,9 +113,11 @@ export const AllQuantumPythonModal: React.FC<Props> = ({
         count++;
         setProgressCount(count);
       }
-      setLiveResults(newResults);
-      setGenerationTime(new Date().toLocaleString('it-IT'));
-      onUpdateResults?.(newResults);
+      if (activeTenant?.id === startTenantId) {
+        setLiveResults(newResults);
+        setGenerationTime(new Date().toLocaleString('it-IT'));
+        onUpdateResults?.(newResults);
+      }
     } finally {
       setIsRefreshing(false);
       setProgressCount(null);
@@ -128,15 +133,16 @@ export const AllQuantumPythonModal: React.FC<Props> = ({
     const userName = currentUser?.nomeCompleto || currentUser?.username || 'Utente Autorizzato';
     const userRole = currentUser?.ruolo || 'Responsabile / Amministratore';
 
-    const indexList = targetCalculations
+    const indexList = displayedCalculations
       .map(c => `#   - Calcolo #${String(c.id).padStart(2, '0')}: [${c.category}] ${c.name} (${c.subFunction})`)
       .join('\n');
 
-    const sections = targetCalculations.map((calc, idx) => {
+    const sections = displayedCalculations.map((calc) => {
       const codeInfo = QUANTUM_PYTHON_CODES[calc.id];
       const codeText = codeInfo ? codeInfo.pythonCode.trim() : '# Codice sorgente Python non disponibile';
       const inputs = formInputs[calc.id] || calc.defaultInputs || {};
-      const res = liveResults[calc.id] || null;
+      const candidateRes = liveResults[calc.id];
+      const res = candidateRes && candidateRes.calcolo_id === calc.id ? candidateRes : null;
 
       const inputLines = Object.keys(inputs).length > 0
         ? Object.entries(inputs).map(([k, v]) => `#   - ${k}: ${JSON.stringify(v)}`).join('\n')
@@ -184,7 +190,7 @@ Stabilimento: ${tenantName} (${tenantSite})
 Azienda: ${tenantAzienda} #${tenantNum}
 Operatore / Ruolo: ${userName} (${userRole})
 Data & Ora Generazione: ${generationTime}
-Totale Calcoli Inclusi: ${targetCalculations.length} calcoli operativi
+Totale Calcoli Inclusi: ${displayedCalculations.length} calcoli operativi
 Framework Quantistico: NVIDIA CUDA-Q 0.9+ / cuQuantum Appliance
 Conformità di Fabbrica: Direttiva NIS2 Art. 21 / Crittografia Post-Quantum
 ================================================================================
@@ -211,11 +217,11 @@ ${sections}
 # FINE REPORT CONSOLIDATO - TUTTI I CALCOLI COMPLETATI CON SUCCESSO (EXIT 0)
 # ==============================================================================
 `;
-  }, [targetCalculations, activeTenant, currentUser, formInputs, liveResults, generationTime]);
+  }, [displayedCalculations, activeTenant, currentUser, formInputs, liveResults, generationTime]);
 
   // Code-only consolidated content
   const codeOnlyContent = useMemo(() => {
-    const sections = targetCalculations.map(calc => {
+    const sections = displayedCalculations.map(calc => {
       const codeInfo = QUANTUM_PYTHON_CODES[calc.id];
       return `
 # ==============================================================================
@@ -227,7 +233,7 @@ ${codeInfo ? codeInfo.pythonCode.trim() : '# Codice non disponibile'}
 
     return `"""
 JOKER 80 QUANTUM - SCRIPT PYTHON & KERNEL CUDA-Q CONSOLIDATI
-Totale Calcoli: ${targetCalculations.length}
+Totale Calcoli: ${displayedCalculations.length}
 Stabilimento: ${activeTenant?.nome || 'Stabilimento Standard'}
 """
 
@@ -237,7 +243,7 @@ import json
 
 ${sections}
 `;
-  }, [targetCalculations, activeTenant]);
+  }, [displayedCalculations, activeTenant]);
 
   // Results-only JSON content
   const resultsOnlyContent = useMemo(() => {
@@ -245,22 +251,24 @@ ${sections}
       stabilimento: activeTenant?.nome,
       azienda: activeTenant?.azienda,
       timestamp: generationTime,
-      totale_calcoli: targetCalculations.length,
+      totale_calcoli: displayedCalculations.length,
       calcoli: {}
     };
 
-    targetCalculations.forEach(calc => {
+    displayedCalculations.forEach(calc => {
+      const candidateRes = liveResults[calc.id];
+      const safeOut = candidateRes && candidateRes.calcolo_id === calc.id ? candidateRes : null;
       dump.calcoli[`calcolo_${calc.id}_${calc.subFunction}`] = {
         id: calc.id,
         nome: calc.name,
         categoria: calc.category,
         input: formInputs[calc.id] || calc.defaultInputs || {},
-        output: liveResults[calc.id] || { stato: 'In attesa di esecuzione' }
+        output: safeOut || { stato: 'In attesa di esecuzione' }
       };
     });
 
     return JSON.stringify(dump, null, 2);
-  }, [targetCalculations, activeTenant, generationTime, formInputs, liveResults]);
+  }, [displayedCalculations, activeTenant, generationTime, formInputs, liveResults]);
 
   // Content to display based on active tab
   const activeContent = useMemo(() => {

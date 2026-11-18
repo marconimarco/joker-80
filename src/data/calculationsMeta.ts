@@ -112,7 +112,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati fisici: umidita_rilevata e spessore_micro del film/interfalda vanno analizzati congiuntamente con la deformazione.',
       parametriAccoppiati: ['umidita_rilevata', 'spessore_micro'],
-      soglieAnomale: 'IRREGOLARE se umidita_rilevata > 18.0% o spessore_micro < 30.0 µm (rischio rottura pellicola su fasciatore)'
+      soglieAnomale: 'IRREGOLARE se umidita_rilevata > 14.5% o indice_conformita_lotto < 90% (< 80% lotto sospeso)'
     }
   },
   {
@@ -124,7 +124,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'FACOLTATIVO',
     entanglementSymbol: '🔓',
     hardwareTarget: 'Moduli Hardware di Sicurezza (HSM) Post-Quantum / QPU',
-    description: 'Tracciabilità lotti blindata. Generazione di entropia crittografica quantistica pura usata come salt per hashing post-quantum conforme a standard NIST FIPS 203/204 su seriali GS1 ed SSCC.',
+    description: 'Tracciabilità lotti blindata. Genera un sigillo crittografico SHA3-256 univoco (standard NIST FIPS 202) con entropia quantistica verificando codice fornitore, seriale numerico SSCC GS1 (10-20 cifre) e qualità stampa.',
     inputDescription: 'id_lotto_materiale, codice_fornitore, sscc_code, qualita_stampa_iso',
     defaultInputs: {
       id_lotto_materiale: 'BOBINA_BEMA_2026_A',
@@ -136,12 +136,12 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     crossCategoryDetails: {
       crossedWith: 'Nessuna (Elaborazione Locale)',
       modules: 'MIP Sicurezza isolato',
-      parametersOrData: 'Solo ID lotto, codice fornitore e validatore ottico SSCC per generazione salt NIST'
+      parametersOrData: 'ID lotto, codice fornitore, seriale SSCC e classe qualità stampa per sigillo NIST FIPS 202'
     },
     parameterRules: {
       modalita: 'SOLO',
       regola: 'Parametri discreti di tracciabilità: validazione crittografica locale univoca senza vincolo di accoppiamento dinamico.',
-      soglieAnomale: 'IRREGOLARE se stringa codice_fornitore vuota o ID lotto non conforme al formato UTF-8 o qualità stampa < CLASSE_B'
+      soglieAnomale: 'ANOMALIA DATI se codice_fornitore vuoto, sscc_code non numerico (10-20 cifre) o qualità stampa CLASSE_C / CLASSE_F'
     }
   },
   {
@@ -299,8 +299,8 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'FACOLTATIVO',
     entanglementSymbol: '🔓',
     hardwareTarget: 'Moduli Hardware di Sicurezza (HSM) Post-Quantum',
-    description: 'Cifratura e-CMR. Sfrutta l\'indeterminazione e la sovrapposizione quantistica pura per generare salt ed eseguire firme crittografiche resistenti a Shor e Grover.',
-    inputDescription: 'id_contratto_vettore, dati_ecmr',
+    description: 'Firma cieca e-CMR e tutela privacy GDPR. Pseudonimizza il vettore logistico e genera firma cieca e token notarile SHA3-256 con entropia quantistica per sigillare il documento di trasporto in uscita.',
+    inputDescription: 'id_spedizione, destinazione, vettore_logistico',
     defaultInputs: {
       id_contratto_vettore: 'CONT_VETT_2026_XYZ',
       dati_ecmr: 'DESTINAZIONE: GERMANIA - 33 PALLET ACQUA MINERALE'
@@ -309,12 +309,12 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     crossCategoryDetails: {
       crossedWith: 'Nessuna (Elaborazione Locale)',
       modules: 'TMS Documentale isolato',
-      parametersOrData: 'Solo contratto e metadati e-CMR per firma digitale Ed25519'
+      parametersOrData: 'ID spedizione, destinazione e vettore logistico per pseudonimizzazione GDPR e firma cieca SHA3-256'
     },
     parameterRules: {
       modalita: 'SOLO',
-      regola: 'Parametro documentale singolo: protocollo di cifratura deterministico post-quantum stand-alone.',
-      soglieAnomale: 'IRREGOLARE se payload dati_ecmr non validato da certificato X.509'
+      regola: 'Parametro documentale singolo: protocollo di firma cieca con seed quantistico stand-alone.',
+      soglieAnomale: 'ANOMALIA E-CMR se destinazione o vettore_logistico mancanti'
     }
   },
   {
@@ -370,7 +370,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati di clustering: camion_in_attesa vincolati a codice_saturazione_buffer per formare cluster di pre-baia.',
       parametriAccoppiati: ['camion_in_attesa', 'codice_saturazione_buffer'],
-      soglieAnomale: 'IRREGOLARE se codice_saturazione_buffer > 0.90 con camion_in_attesa > 10 (rischio blocco cancello piazzale)'
+      soglieAnomale: 'ATTENZIONE se attesa > 20 min o saturazione_buffer >= 0.75; CRITICO (ROSSO) se attesa > 30 min o saturazione_buffer >= 0.85'
     }
   },
   {
@@ -403,7 +403,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati rotazionali: la serie temporale vettore_accelerometro dipende dai giri_minuto (RPM) e vibrazioni triassiali.',
       parametriAccoppiati: ['vettore_accelerometro', 'giri_minuto'],
-      soglieAnomale: 'IRREGOLARE se giri_minuto > 55 RPM con ampiezza armonica accelerometro > 1.2 g o vibrazioni Z > 0.15 g'
+      soglieAnomale: 'CRITICO se vibrazione_cuscinetti_g > 0.50 g oppure giri_minuto > 55 RPM'
     }
   },
   {
@@ -415,8 +415,8 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglement: 'FACOLTATIVO',
     entanglementSymbol: '🔓',
     hardwareTarget: 'Simulatori GPU / QPU Gate-Based',
-    description: 'Tensionamento e saldatura film Bema. Mappa tensione film, forza di serraggio carico N e temperatura barra saldante nello spazio di Hilbert (Quantum Feature Map) per predire il rischio rottura.',
-    inputDescription: 'tensione_newton, velocita_svolgimento, spessore_film_micron, forza_serraggio_carico_n, temp_barra_saldante_c',
+    description: 'Tensionamento film Bema. Mappa tensione film (N), velocità di svolgimento (m/s), pre-stiro e spessore film (µm) per stimare lo sforzo unitario in MPa e prevenire il rischio rottura pellicola.',
+    inputDescription: 'tensione_newton, velocita_svolgimento, spessore_film_micron, pre_stiro_pct',
     defaultInputs: {
       tensione_newton: 148.5,
       velocita_svolgimento: 12.4,
@@ -428,13 +428,13 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     crossCategoryDetails: {
       crossedWith: 'Nessuna (Elaborazione Locale)',
       modules: 'ECS Fasciatore isolato',
-      parametersOrData: 'Solo parametri sensore rulli (tensione Newton, velocità m/s, temperatura saldatura, micron)'
+      parametersOrData: 'Parametri sensore rulli (tensione Newton, velocità m/s, pre-stiro, spessore µm)'
     },
     parameterRules: {
       modalita: 'COPPIA',
-      regola: 'Parametri accoppiati di processo: tensione_newton e velocita_svolgimento sono inversamente legati allo spessore_film_micron.',
+      regola: 'Parametri accoppiati di processo: tensione_newton e velocita_svolgimento sono legati allo spessore_film_micron.',
       parametriAccoppiati: ['tensione_newton', 'velocita_svolgimento'],
-      soglieAnomale: 'IRREGOLARE se tensione_newton > 180 N con spessore < 20 µm o temp_barra_saldante_c > 155 °C'
+      soglieAnomale: 'ATTENZIONE se tensione > 165 N; CRITICO (rottura film) se tensione > 180 N o sforzo_unitario > 18.0 MPa'
     }
   },
   {
@@ -499,7 +499,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'MULTI_ENTANGLED',
       regola: 'Parametri multi-accoppiati: urgenza missione WMS accoppiata allo stato termico (Temp °C), salute (SoH %) e carica (SoC %) batterie LGV.',
       parametriAccoppiati: ['elenco_missioni_urgenti', 'telemetria_batterie_agv'],
-      soglieAnomale: 'IRREGOLARE se temperatura batteria LGV > 50 °C o SoC < 20% o SoH < 80% assegnato a missione intensiva'
+      soglieAnomale: 'ATTENZIONE se SoC < 50% o temperatura batteria > 45 °C; CRITICO se SoC < 20% o efficienza BMS < 55%'
     }
   },
   {
@@ -530,7 +530,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Coppia motori joint accoppiata a pressione vuoto pneumatico per garantire presa salda e minimo riscaldamento riduttori.',
       parametriAccoppiati: ['coppia_motori_nm', 'pressione_vuoto_bar'],
-      soglieAnomale: 'IRREGOLARE se max(coppia_motori_nm) > 400 Nm o pressione_vuoto_bar > -0.65 bar (rischio distacco strato pallet)'
+      soglieAnomale: 'CRITICO se max(coppia_motori_nm) > 400 Nm, pressione_vuoto_bar > -0.65 bar oppure forza_pinze_n < 300 N'
     }
   },
   {
@@ -595,31 +595,32 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
   },
   {
     id: 21,
-    name: 'Post-Quantum Lattice Zero-Knowledge Verifier (ML-DSA)',
+    name: 'Quantum Error Mitigation (QEM) - Scanner Raptor GS1-128',
     category: '3. Outbound & Spedizioni',
     technicalModule: 'TMS',
-    subFunction: 'Raptor GS1/SSCC Traceability & Anti-Counterfeiting',
+    subFunction: 'Labeling & Barcode Verification',
     entanglement: 'FACOLTATIVO',
     entanglementSymbol: '🔓',
-    hardwareTarget: 'Moduli Hardware di Sicurezza (HSM) Post-Quantum / QPU',
-    description: 'Validazione crittografica quantistica zero-knowledge serializzazione GS1. Esegue verifiche basate su reticoli euclidei (standard Crystals-Dilithium / ML-DSA NIST FIPS 204) sul codice SSCC stampato e applicato dal robot Raptor, garantendo anticontraffazione assoluta.',
-    inputDescription: 'sscc_code, etichetta_gs1, grado_qualita_stampa_iso, temp_testina_termica_c',
+    hardwareTarget: 'NVIDIA CUDA-Q / QPU Gate-Based',
+    description: 'Verifica affidabilità lettura etichette GS1/SSCC su applicatore Raptor. Applica tecniche Zero-Noise Extrapolation (QEM) su grado di stampa ISO, contrasto ottico e temperatura testina termica.',
+    inputDescription: 'grado_qualita_stampa_iso, contrasto_ottico_pct, temp_testina_termica_c, sscc_code',
     defaultInputs: {
       sscc_code: '80332190000458130',
       etichetta_gs1: '(01)08033219001234(10)LOT-2026-X8(15)261231',
       grado_qualita_stampa_iso: 'CLASSE_A',
+      contrasto_ottico_pct: 84.5,
       temp_testina_termica_c: 54.2
     },
     isCrossCategory: false,
     crossCategoryDetails: {
       crossedWith: 'Nessuna (Elaborazione Locale)',
       modules: 'TMS Raptor isolato',
-      parametersOrData: 'Verifica ZKP basata su reticoli euclidei per seriali GS1-128 e SSCC'
+      parametersOrData: 'Grado ISO, contrasto ottico, temperatura testina termica e seriale SSCC GS1-128'
     },
     parameterRules: {
       modalita: 'SOLO',
-      regola: 'Verifica crittografica post-quantum conforme standard NIST FIPS 204.',
-      soglieAnomale: 'IRREGOLARE se grado_qualita_stampa_iso diverso da CLASSE_A o temp_testina_termica_c > 65 °C'
+      regola: 'Validazione ottica ISO/IEC 15416 con mitigazione del rumore su etichette SSCC/GS1-128.',
+      soglieAnomale: 'ATTENZIONE se CLASSE_B/CLASSE_C, affidabilità < 80% o temp testina > 65 °C; CRITICO se CLASSE_F o affidabilità < 65%'
     }
   }
 ];

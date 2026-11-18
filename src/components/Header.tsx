@@ -70,11 +70,11 @@ export const Header: React.FC<Props> = ({
               </h1>
               <span className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                <span>21 CUDA-Q</span>
+                <span>CUDA-Q</span>
               </span>
             </div>
             <p className="text-[10px] text-slate-400 font-mono hidden sm:block">
-              Middleware Quantistico SM.I.LE80 • Controllo Impianti Industriali
+              Middleware Quantistico • Controllo Impianti Industriali
             </p>
           </div>
         </div>

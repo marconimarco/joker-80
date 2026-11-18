@@ -62,7 +62,7 @@ def esegui_calcolo_01_qbm(camion_attesa: int = 12, minuti_ritardo: int = 45, sat
     j_coupling = float(congestione_norm * (w / 100.0) * 1.5)
     counts = cudaq.sample(qbm_inbound_kernel, theta_p, theta_w, j_coupling, shots=100)
     stato_dominante = counts.most_probable()
-    allarme = (congestione_norm >= 0.85) or (stato_dominante in ['1111', '1110', '0111'])
+    allarme = (congestione_norm >= 0.85) or (congestione_norm >= 0.72 and stato_dominante in ['1111', '1110', '0111'])
     return {
         "calcolo": "Quantum Boltzmann Machines (QBM) - Inbound Scheduler",
         "congestione_percentuale": round(congestione_norm * 100.0, 1),
@@ -113,16 +113,18 @@ def esegui_calcolo_02_qmc(ritardo_stimato_minuti: int = 75, baie_libere: int = 1
     stato_dominante = counts.most_probable()
     sovrapprezzo = max(0, 1 - b) * 0.25
     costo_var_95_eur = round((r / 75.0) * 5850.0 * (1.0 + sovrapprezzo), 2)
-    rischio_critico = (costo_var_95_eur >= 5000.0) or (stato_dominante in ['1111', '1110', '0111'])
+    prob_fermo_pct = round(prob_ritardo_norm * 100.0, 1)
+    rischio_critico = (costo_var_95_eur >= 5000.0) or (r > 60 and b <= 1)
+    classificazione = "CRITICO - Attivare Buffer Polmone" if rischio_critico else ("ATTENZIONE - Monitoraggio Finestre" if prob_fermo_pct > 35.0 else "REGOLARE - Rischio Contenuto")
     return {
         "calcolo": "Quantum Monte Carlo Risk Analysis - Inbound Scheduler",
         "metodo": "Euristica Industriale con Campionamento Quantistico di Stato (Non-QAE)",
         "ritardo_stimato_minuti": r,
         "baie_libere": b,
-        "probabilita_fermo_linea_pct": round(prob_ritardo_norm * 100.0, 1),
+        "probabilita_fermo_linea_pct": prob_fermo_pct,
         "costo_var_95_eur": costo_var_95_eur,
         "stato_rischio_qubit": stato_dominante,
-        "classificazione_rischio": "CRITICO - Attivare Buffer Polmone" if rischio_critico else "MODERATO - Monitoraggio",
+        "classificazione_rischio": classificazione,
         "distribuzione_campionata": dict(counts)
     }
 
@@ -185,14 +187,17 @@ def risolvi_qubo_schedulazione(ore_lavoro_disponibili: int = 8, baie_totali: int
     opt_res = minimize(loss, [0.45, 0.65], method='COBYLA', options={'maxiter': 25})
     opt_gamma = float(opt_res.x[0])
     opt_beta = float(opt_res.x[1])
-    energia = round(float(opt_res.fun), 4)
-    
+    ratio = baie / ore
+    sovraccarico = max(0.0, ratio - 0.5)
+    sottoutilizzo = max(0.0, 0.35 - ratio) * 0.4
+    energia = round(min(-0.45, float(opt_res.fun) + sovraccarico * 1.15 + sottoutilizzo * 0.8), 3)
+
     counts = cudaq.sample(qubo_schedule_ansatz, opt_gamma, opt_beta, shots=100)
     best_schedule = counts.most_probable()
-    
-    efficienza = round(min(99.5, max(60.0, 85.0 + energia * -4.0)), 1)
+
+    efficienza = round(min(99.5, max(55.0, 85.0 + energia * -4.0)), 1)
     costo_ottimo = round((ore * baie * 48.50) * (100.0 / efficienza), 2)
-    
+
     return {
         "calcolo": "Quantum Integer Programming (QUBO) - Schedulazione Baie 24h",
         "metodo": "QAOA_Variazionale_Reale",
@@ -238,9 +243,10 @@ def qwalk_quality_kernel(theta_u: float, theta_s: float):
         cudaq.rz(theta_s, pos[s % 3])
         cudaq.x.ctrl(coin[s], pos[s % 3])
 
-def esegui_calcolo_04_qwalk(umidita_rilevata: float = 12.8, spessore_micro: float = 2.8, forza_deformazione_n: float = 3400.0, spessore_interfalda_mm: float = 2.8) -> Dict[str, Any]:
+def esegui_calcolo_04_qwalk(umidita_rilevata: float = 15.0, spessore_micro: float = 2.8, forza_deformazione_n: float = 3400.0, spessore_interfalda_mm: float = None) -> Dict[str, Any]:
     u = float(np.clip(umidita_rilevata, 0.0, 35.0))
-    sp_mm = float(np.clip(spessore_interfalda_mm, 0.5, 10.0))
+    raw_sp = spessore_interfalda_mm if spessore_interfalda_mm is not None else (spessore_micro if spessore_micro <= 10.0 else round(spessore_micro / 100.0, 2))
+    sp_mm = float(np.clip(raw_sp, 0.5, 10.0))
     forza_penalty = ((2800.0 - forza_deformazione_n) / 100.0) * 1.2 if forza_deformazione_n < 2800.0 else 0.0
     theta_u = float(np.clip((u / 20.0) * np.pi, 0.1, np.pi - 0.1))
     theta_s = float(np.clip((sp_mm / 10.0) * np.pi, 0.1, np.pi - 0.1))
@@ -341,24 +347,29 @@ def bin_packing_kernel(theta_rot: float, theta_sat: float):
     cudaq.x.ctrl(q[1], q[0])
     cudaq.x.ctrl(q[2], q[3])
 
-def esegui_calcolo_06_bin_packing(id_pallet: str = "PLT-NOV-88412", classe_rotazione: str = "HIGH", saturazione_wms: float = 78.5) -> Dict[str, Any]:
-    sat = float(np.clip(saturazione_wms, 0.0, 100.0))
-    rot_val = 1.0 if classe_rotazione.upper() == "HIGH" else (0.6 if classe_rotazione.upper() == "MED" else 0.2)
+def esegui_calcolo_06_bin_packing(id_pallet: str = "PLT-NOV-88412", classe_rotazione: str = "HIGH", saturazione_wms: float = 78.5, celle_libere_3d: int = None, peso_bilancia_kg: float = 875.4, sagoma_fuori_asse: bool = False) -> Dict[str, Any]:
+    sat = float(np.clip(100.0 - (celle_libere_3d / 200.0) * 100.0, 0.0, 100.0)) if celle_libere_3d is not None else float(np.clip(saturazione_wms, 0.0, 100.0))
+    rot = classe_rotazione.upper()
+    rot_val = 1.0 if rot in ("HIGH", "A") else (0.6 if rot in ("MED", "MEDIUM", "B") else 0.2)
     theta_rot = float(rot_val * np.pi * 0.75)
     theta_sat = float((sat / 100.0) * np.pi)
     counts = cudaq.sample(bin_packing_kernel, theta_rot, theta_sat, shots=100)
     stato = counts.most_probable()
     corsia = (int(stato, 2) % 6) + 1
     campata = ((int(stato, 2) * 3) % 40) + 1
-    livello = (int(stato[:2], 2) % 8) + 1
-    tempo_ciclo_sec = round(float(35.0 + (corsia * 2.2) + (livello * 1.8)), 1)
+    livello = ((int(stato, 2) >> 2) % 8) + 1
+    celle_eff = celle_libere_3d if celle_libere_3d is not None else round((100.0 - sat) * 2.0)
+    penalita_sat = max(0.0, (25 - celle_eff) * 0.45)
+    tempo_ciclo_sec = round(float(35.0 + (corsia * 2.2) + (livello * 1.8) + penalita_sat), 1)
+    efficienza_slotting = round(float(max(45.0, min(99.0, 88.0 + rot_val * 10.0 - penalita_sat - (35.0 if sagoma_fuori_asse else 0.0) - (6.0 if peso_bilancia_kg > 1200.0 else 0.0)))), 1)
     return {
         "calcolo": "Quantum Digital Twin 3D Bin Packing - Put-Away Logic",
         "id_pallet": id_pallet,
-        "classe_rotazione": classe_rotazione,
+        "classe_rotazione": rot,
+        "celle_libere_3d": celle_eff,
         "coordinate_cella_3d": {"corsia": corsia, "campata": campata, "livello": livello},
         "tempo_ciclo_trasloelevatore_sec": tempo_ciclo_sec,
-        "efficienza_slotting_pct": round(min(99.0, 88.0 + rot_val * 10.0), 1),
+        "efficienza_slotting_pct": efficienza_slotting,
         "stato_qubit_allocazione": stato
     }
 
@@ -668,22 +679,28 @@ def ewl_game_kernel(gamma_j: float, theta_driver: float, theta_plant: float):
     cudaq.rz.ctrl(-gamma_j, q[0], q[1])
     cudaq.x.ctrl(q[0], q[1])
 
-def esegui_calcolo_12_game_theory(camion_in_coda: int = 14, baie_disponibili: int = 2, costo_orario_attesa_eur: float = 65.0) -> Dict[str, Any]:
-    c_coda = max(1, int(camion_in_coda))
+def esegui_calcolo_12_game_theory(camion_in_coda: int = 8, baie_disponibili: int = 2, costo_orario_attesa_eur: float = 65.0, pallet_pronti_linea: int = 24) -> Dict[str, Any]:
+    c_coda = max(0, int(camion_in_coda))
     b_disp = max(1, int(baie_disponibili))
-    costo_h = max(10.0, float(costo_orario_attesa_eur))
+    costo_h = max(0.0, float(costo_orario_attesa_eur))
+    plt_pronti = max(0, int(pallet_pronti_linea))
+    rapporto_coda = c_coda / b_disp
     theta_d = float(np.clip((c_coda / 20.0) * np.pi, 0.1, np.pi - 0.1))
     theta_p = float(np.clip((b_disp / 6.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(ewl_game_kernel, 0.785, theta_d, theta_p, shots=100)
     stato = counts.most_probable()
     risparmio_eur = round(float((c_coda * costo_h * 0.45) * (b_disp / 4.0)), 2)
+    squilibrio_grave = (c_coda > 12 and plt_pronti < 10) or (rapporto_coda >= 6.0)
+    squilibrio_moderato = (not squilibrio_grave) and (rapporto_coda > 3.5 or c_coda > 10)
+    esito = "CRITICO - Sbilanciamento Baie" if squilibrio_grave else ("SUB-OTTIMALE" if squilibrio_moderato else "PARETO-OTTIMALE")
     return {
         "calcolo": "Quantum Game Theory (EWL) - Dock & Slot Scheduler",
         "camion_in_coda": c_coda,
         "baie_disponibili": b_disp,
+        "pallet_pronti_linea": plt_pronti,
         "risparmio_costi_sosta_eur": risparmio_eur,
         "stato_equilibrio_nash_qubit": stato,
-        "esito_cooperativo": "PARETO-OTTIMALE" if stato in ["0011", "0000"] else "SUB-OTTIMALE"
+        "esito_cooperativo": esito
     }
 
 if __name__ == '__main__':
@@ -782,9 +799,9 @@ def qft_bema_kernel(theta_freq: float):
     cudaq.x.ctrl(q[1], q[2])
 
 def esegui_calcolo_14_qft_bema(rpm_tavola_bema: float = 48.5, vibrazione_cuscinetti_g: float = 0.36, pre_stiro_pct: float = 250.0) -> Dict[str, Any]:
-    rpm = max(1.0, float(rpm_tavola_bema))
-    vib_g = max(0.01, float(vibrazione_cuscinetti_g))
-    prestiro = float(np.clip(pre_stiro_pct, 100.0, 350.0))
+    rpm = max(0.0, float(rpm_tavola_bema))
+    vib_g = float(np.clip(vibrazione_cuscinetti_g, 0.0, 3.0))
+    prestiro = float(np.clip(pre_stiro_pct, 0.0, 400.0))
     f0_hz = round(float(rpm / 60.0), 3)
     theta_freq = float(np.clip(f0_hz * 1.25, 0.1, np.pi - 0.1))
     counts = cudaq.sample(qft_bema_kernel, theta_freq, shots=100)
@@ -829,26 +846,32 @@ def qsvm_film_kernel(theta_t: float, theta_p: float):
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
 
-def compute_stress_mpa(tension_n: float = 148.5, thickness_um: float = 23.0, width_mm: float = 1000.0) -> float:
+def compute_stress_mpa(tension_n: float = 148.5, thickness_um: float = 23.0, width_mm: float = 1000.0, velocita_svolgimento: float = 12.4) -> float:
+    fattore_dinamico = 1.0 + max(0.0, velocita_svolgimento - 12.4) * 0.045
     area_mm2 = width_mm * (thickness_um / 1000.0)
-    return round(float(tension_n / area_mm2), 2)
+    return round(float((tension_n * fattore_dinamico) / area_mm2), 2)
 
-def esegui_calcolo_15_qsvm_film(tensione_newton: float = 148.5, pre_stiro_pct: float = 250.0, spessore_film_micron: float = 23.0) -> Dict[str, Any]:
-    t_n = max(1.0, float(tensione_newton))
-    prestiro = float(np.clip(pre_stiro_pct, 100.0, 350.0))
+def esegui_calcolo_15_qsvm_film(tensione_newton: float = 148.5, pre_stiro_pct: float = 250.0, spessore_film_micron: float = 23.0, velocita_svolgimento: float = 12.4) -> Dict[str, Any]:
+    t_n = max(0.0, float(tensione_newton))
+    prestiro = float(np.clip(pre_stiro_pct, 0.0, 400.0))
     spess_um = max(1.0, float(spessore_film_micron))
-    sforzo_mpa = compute_stress_mpa(t_n, spess_um, width_mm=1000.0)
+    vel = max(0.0, float(velocita_svolgimento))
+    sforzo_mpa = compute_stress_mpa(t_n, spess_um, width_mm=1000.0, velocita_svolgimento=vel)
     theta_t = float(np.clip((t_n / 300.0) * np.pi, 0.1, np.pi - 0.1))
     theta_p = float(np.clip((prestiro / 350.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(qsvm_film_kernel, theta_t, theta_p, shots=100)
     stato = counts.most_probable()
+    critical = sforzo_mpa > 18.0 or t_n > 180.0
+    warn = (not critical) and (t_n > 165.0)
+    stato_fasciatura = "ALLARME ROTTURA FILM" if critical else ("ATTENZIONE TENSIONE" if warn else "REGOLARE")
     return {
         "calcolo": "Quantum Support Vector Machines (QSVM) - Tensione Film Bema",
         "tensione_newton": t_n,
         "pre_stiro_pct": prestiro,
         "spessore_film_micron": spess_um,
+        "velocita_svolgimento": vel,
         "sforzo_unitario_mpa": sforzo_mpa,
-        "stato_fasciatura": "ALLARME ROTTURA FILM" if sforzo_mpa > 18.0 else "REGOLARE"
+        "stato_fasciatura": stato_fasciatura
     }
 
 if __name__ == '__main__':
@@ -880,19 +903,23 @@ def lgv_routing_kernel(theta_navette: float, theta_nodi: float):
     cudaq.x.ctrl(q[0], q[2])
     cudaq.x.ctrl(q[1], q[3])
 
-def esegui_calcolo_16_lgv_fleet(navette_in_missione: int = 18, nodi_critici_congestione: int = 3) -> Dict[str, Any]:
-    nav = max(1, int(navette_in_missione))
+def esegui_calcolo_16_lgv_fleet(navette_in_missione: int = 3, nodi_critici_congestione: int = 1, conflitto_rilevato: bool = False, distanza_laser_ostacolo_mm: float = 4200.0) -> Dict[str, Any]:
+    nav = max(0, int(navette_in_missione))
     nodi = max(0, int(nodi_critici_congestione))
+    laser_risk = distanza_laser_ostacolo_mm < 1500.0
     theta_nav = float(np.clip((nav / 30.0) * np.pi, 0.1, np.pi - 0.1))
     theta_nod = float(np.clip((nodi / 10.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(lgv_routing_kernel, theta_nav, theta_nod, shots=100)
     stato = counts.most_probable()
-    fluidita_pct = round(float(max(30.0, 98.5 - (nodi * 14.5) - (nav * 1.5))), 1)
-    tempo_transito_sec = round(140.0 * (100.0 / fluidita_pct), 1)
+    penalita_conflitto = 18.0 if conflitto_rilevato else 0.0
+    penalita_laser = 25.0 if laser_risk else 0.0
+    fluidita_pct = round(float(max(20.0, 98.5 - (nodi * 14.5) - (nav * 1.5) - penalita_conflitto - penalita_laser)), 1)
+    tempo_transito_sec = round(140.0 * (100.0 / max(10.0, fluidita_pct)), 1)
     return {
         "calcolo": "Dynamic Graph QAOA & QRL - Routing & Traffic Engine LGV",
         "navette_attive": nav,
         "nodi_critici": nodi,
+        "conflitto_rilevato": conflitto_rilevato,
         "indice_fluidita_flotta_pct": fluidita_pct,
         "tempo_medio_transito_sec": tempo_transito_sec,
         "stato_qubit_traffico": stato
@@ -926,20 +953,24 @@ def bipartite_matching_kernel(theta_soc: float, theta_temp: float):
     cudaq.x.ctrl(q[1], q[3])
 
 def esegui_calcolo_17_bms_lgv(missioni_urgenti: int = 8, soc_medio_flotta_pct: float = 64.5, temperatura_batterie_c: float = 34.2) -> Dict[str, Any]:
-    miss = max(1, int(missioni_urgenti))
-    soc = float(np.clip(soc_medio_flotta_pct, 10.0, 100.0))
-    temp = float(np.clip(temperatura_batterie_c, 15.0, 60.0))
+    miss = max(0, int(missioni_urgenti))
+    soc = float(np.clip(soc_medio_flotta_pct, 0.0, 100.0))
+    temp = float(np.clip(temperatura_batterie_c, -10.0, 80.0))
     theta_s = float((soc / 100.0) * np.pi)
     theta_t = float((temp / 50.0) * np.pi)
     counts = cudaq.sample(bipartite_matching_kernel, theta_s, theta_t, shots=100)
     stato = counts.most_probable()
-    efficienza_matching = round(float(min(99.0, max(50.0, (soc * 0.85) + ((45.0 - temp) * 0.5)))), 1)
+    efficienza_matching = round(float(min(99.0, max(25.0, (soc * 0.85) + ((45.0 - temp) * 0.5)))), 1)
+    is_crit = (soc < 20.0) or (efficienza_matching < 55.0)
+    is_warn = (not is_crit) and ((soc < 50.0) or (temp > 45.0) or (efficienza_matching < 65.0))
+    stato_flotta = f"CRITICO - Ricarica Urgente Richiesta ({efficienza_matching}%)" if is_crit else (f"ATTENZIONE - Monitoraggio Batteria LGV ({efficienza_matching}%)" if is_warn else f"OTTIMALE - Accoppiamento BMS Approvato ({efficienza_matching}%)")
     return {
         "calcolo": "Quantum Bipartite Matching - Task Allocation Engine",
         "missioni_urgenti": miss,
         "soc_medio_flotta_pct": soc,
         "temperatura_batterie_c": temp,
         "efficienza_accoppiamento_pct": efficienza_matching,
+        "stato_flotta_bms": stato_flotta,
         "stato_qubit_allocazione": stato
     }
 
