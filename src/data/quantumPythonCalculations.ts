@@ -253,7 +253,7 @@ def esegui_calcolo_04_qwalk(umidita_rilevata: float = 15.0, spessore_micro: floa
     counts = cudaq.sample(qwalk_quality_kernel, theta_u, theta_s, shots=100)
     stato_cluster = counts.most_probable()
     conformita_pct = round(min(99.8, max(40.0, 98.5 - abs(u - 12.0) * 2.5 - abs(sp_mm - 3.0) * 5.0 - forza_penalty)), 2)
-    esito = "CONFORME STANDARD BARILLA" if (conformita_pct >= 90.0 and u <= 14.5) else ("ATTENZIONE - Umidita/Spessore al Limite" if conformita_pct >= 80.0 else "LOTTO SOSPESO PER CONTROLLO")
+    esito = "CONFORME STANDARD QUALITA" if (conformita_pct >= 90.0 and u <= 14.5) else ("ATTENZIONE - Umidita/Spessore al Limite" if conformita_pct >= 80.0 else "LOTTO SOSPESO PER CONTROLLO")
     return {
         "calcolo": "Quantum Walk-based Clustering - Material Inventory & Quality",
         "umidita_rilevata_pct": u,
@@ -277,7 +277,7 @@ if __name__ == '__main__':
     qubits: 4,
     entanglement: "Facoltativo / Entropia Pura",
     fileName: "calcolo_05_post_quantum_hash_mip.py",
-    description: "Generazione di entropia quantistica pura tramite sovrapposizione Hadamard per salt crittografico SHA-3/256 post-quantum (NIST FIPS 203/204).",
+    description: "Generazione di entropia quantistica pura tramite sovrapposizione Hadamard per salt crittografico SHA-3/256 post-quantum (NIST FIPS 202 / SHA3-256).",
     pythonCode: `import cudaq
 import secrets
 import hashlib
@@ -305,7 +305,7 @@ def esegui_calcolo_05_pqc_hash(id_lotto_materiale: str = "LOTTO-NOV-2026-0884", 
     return {
         "calcolo": "Post-Quantum Cryptographic Hashing - Material Inventory & Quality",
         "standard_crittografico": "NIST FIPS 202 (SHA3-256) con Salt ad Alta Entropia (Non-Lattice)",
-        "compliance_direttiva": "NIS2 Art. 21 - Tracciabilita Immutabile di Filiera",
+        "compliance_direttiva": "NIS2 Art. 21 - Tracciabilità Immutabile di Filiera",
         "id_lotto": id_lotto_materiale,
         "sscc_code": sscc_val,
         "qualita_stampa_iso": qualita_val,
@@ -362,12 +362,16 @@ def esegui_calcolo_06_bin_packing(id_pallet: str = "PLT-NOV-88412", classe_rotaz
     penalita_sat = max(0.0, (25 - celle_eff) * 0.45)
     tempo_ciclo_sec = round(float(35.0 + (corsia * 2.2) + (livello * 1.8) + penalita_sat), 1)
     efficienza_slotting = round(float(max(45.0, min(99.0, 88.0 + rot_val * 10.0 - penalita_sat - (35.0 if sagoma_fuori_asse else 0.0) - (6.0 if peso_bilancia_kg > 1200.0 else 0.0)))), 1)
+    coordinata_esatta = "BAIA_SCARTO_SAGOMA" if sagoma_fuori_asse else f"X:{corsia:02d}/Y:{campata:02d}/Z:{livello:02d}"
     return {
         "calcolo": "Quantum Digital Twin 3D Bin Packing - Put-Away Logic",
         "id_pallet": id_pallet,
         "classe_rotazione": rot,
         "celle_libere_3d": celle_eff,
+        "peso_bilancia_kg": peso_bilancia_kg,
+        "sagoma_fuori_asse": sagoma_fuori_asse,
         "coordinate_cella_3d": {"corsia": corsia, "campata": campata, "livello": livello},
+        "coordinata_3d_esatta": coordinata_esatta,
         "tempo_ciclo_trasloelevatore_sec": tempo_ciclo_sec,
         "efficienza_slotting_pct": efficienza_slotting,
         "stato_qubit_allocazione": stato
@@ -456,18 +460,22 @@ def qwalk_tsp_kernel(theta_dist: float):
     cudaq.x.ctrl(q[2], q[3])
 
 def esegui_calcolo_08_tsp(nodi_prelievo_count: int = 4, distanza_totale_metri: float = 340.0) -> Dict[str, Any]:
+    nodi = max(1, int(nodi_prelievo_count))
     dist = max(10.0, float(distanza_totale_metri))
     theta_dist = float(np.clip((dist / 1000.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(qwalk_tsp_kernel, theta_dist, shots=100)
     stato_rotta = counts.most_probable()
-    nodi_base = ["PLT_A (Corsia 1)", "PLT_B (Corsia 3)", "PLT_C (Corsia 2)", "PLT_D (Baia Scarico)"]
+    nodi_base = [f"PLT_{chr(65 + (i % 26))}{i // 26 if i >= 26 else ''} (Corsia {((i * 2) % 6) + 1})" for i in range(nodi)]
     shift_idx = int(stato_rotta, 2) % len(nodi_base)
     sequenza_ottimizzata = nodi_base[shift_idx:] + nodi_base[:shift_idx]
-    risparmio_metri = round(float(dist * (0.15 + (int(stato_rotta, 2) / 64.0))), 1)
+    quota_risparmio = min(0.42, 0.14 + min(nodi, 15) * 0.008 + (int(stato_rotta, 2) / 80.0))
+    risparmio_metri = round(float(dist * quota_risparmio), 1)
+    distanza_ottimizzata = round(max(5.0, dist - risparmio_metri), 1)
     return {
         "calcolo": "Quantum Walk Route Exploration (TSP) - Picking & Batching",
+        "nodi_prelievo_count": nodi,
         "distanza_nominale_metri": dist,
-        "distanza_ottimizzata_metri": round(dist - risparmio_metri, 1),
+        "distanza_ottimizzata_metri": distanza_ottimizzata,
         "metri_lineari_risparmiati": risparmio_metri,
         "stato_qubit_percorso": stato_rotta,
         "sequenza_tappe_ottimale": sequenza_ottimizzata
@@ -627,23 +635,30 @@ def blind_signature_kernel(theta_phase: float):
         cudaq.rz(theta_phase * (i + 1), q[i])
 
 def esegui_calcolo_11_ecmr(id_spedizione: str = "ECMR-NOV-2026-9921", destinazione: str = "HUB-INTERPORTO-BOLOGNA", vettore_logistico: str = "FERCAM-LOGISTICS-IT") -> Dict[str, Any]:
-    theta_seed = float((len(id_spedizione) % 8) / 8.0 * np.pi)
+    sped = str(id_spedizione or "").strip() or "ECMR-NOV-2026-9921"
+    dest = str(destinazione or "").strip()
+    vett = str(vettore_logistico or "").strip()
+    theta_seed = float((len(sped) % 8) / 8.0 * np.pi)
     counts = cudaq.sample(blind_signature_kernel, theta_seed, shots=100)
     qpu_entropy = counts.most_probable()
     blinding_factor = secrets.token_hex(16)
-    raw_carrier = f"{vettore_logistico.strip()}::{destinazione.strip()}::BARILLA_SALT_2026"
+    raw_carrier = f"{vett or 'UNSPECIFIED'}::{dest or 'UNSPECIFIED'}::SMILE80_SALT_2026"
     carrier_token = f"OP-CARRIER-{hashlib.sha3_256(raw_carrier.encode('utf-8')).hexdigest()[:16].upper()}"
-    blinded_payload = f"{id_spedizione}|{carrier_token}|{qpu_entropy}::BLINDED_BY::{blinding_factor}"
+    blinded_payload = f"{sped}|{carrier_token}|{qpu_entropy}::BLINDED_BY::{blinding_factor}"
     blind_hash = hashlib.sha3_256(blinded_payload.encode('utf-8')).hexdigest()
     unblind_token = hashlib.sha3_256(f"{blind_hash}::{blinding_factor}".encode('utf-8')).hexdigest()
+    payload_valido = bool(len(dest) > 0 and len(vett) > 0)
+    stato_sic = f"DOCUMENTO E-CMR SIGILLATO ({sped})" if payload_valido else f"ANOMALIA E-CMR ({sped}) - Destinazione o vettore mancante"
     return {
         "calcolo": "Quantum-Enhanced Blind Signatures e-CMR",
         "metodo": "Euristica di Accecamento Crittografico con Seed Quantistico (Non-QPU Lattice)",
-        "id_spedizione": id_spedizione,
+        "id_spedizione": sped,
+        "destinazione": dest or "NON_SPECIFICATA",
         "vettore_pseudonimizzato_gdpr": carrier_token,
         "firma_cieca_hash": blind_hash,
         "token_unblind_notarile": unblind_token,
-        "stato_qubit_entropy": qpu_entropy
+        "stato_qubit_entropy": qpu_entropy,
+        "stato_sicurezza": stato_sic
     }
 
 if __name__ == '__main__':
@@ -915,6 +930,9 @@ def esegui_calcolo_16_lgv_fleet(navette_in_missione: int = 3, nodi_critici_conge
     penalita_laser = 25.0 if laser_risk else 0.0
     fluidita_pct = round(float(max(20.0, 98.5 - (nodi * 14.5) - (nav * 1.5) - penalita_conflitto - penalita_laser)), 1)
     tempo_transito_sec = round(140.0 * (100.0 / max(10.0, fluidita_pct)), 1)
+    is_crit = (fluidita_pct < 45.0) or conflitto_rilevato or laser_risk
+    is_warn = (not is_crit) and (fluidita_pct < 60.0)
+    valutazione = "CRITICO - Conflitto / Blocco LGV" if is_crit else ("INTERFERENZA NODI LGV" if is_warn else "TRAFFICO REGOLARE")
     return {
         "calcolo": "Dynamic Graph QAOA & QRL - Routing & Traffic Engine LGV",
         "navette_attive": nav,
@@ -922,6 +940,7 @@ def esegui_calcolo_16_lgv_fleet(navette_in_missione: int = 3, nodi_critici_conge
         "conflitto_rilevato": conflitto_rilevato,
         "indice_fluidita_flotta_pct": fluidita_pct,
         "tempo_medio_transito_sec": tempo_transito_sec,
+        "valutazione_traffico": valutazione,
         "stato_qubit_traffico": stato
     }
 
@@ -1007,9 +1026,9 @@ def vqe_robot_ansatz(theta_j1: float, theta_j2: float, theta_j3: float):
     cudaq.x.ctrl(q[3], q[2])
 
 def esegui_calcolo_18_vqe_robot(coppia_motori_nm: float = 185.0, pressione_vuoto_bar: float = -0.78, corrente_joint_ampere: float = 14.2, forza_pinze_n: float = 480.0) -> Dict[str, Any]:
-    c_nm = max(10.0, float(coppia_motori_nm))
+    c_nm = max(0.0, float(coppia_motori_nm))
     p_bar = float(np.clip(pressione_vuoto_bar, -1.0, 0.0))
-    i_amp = max(1.0, float(corrente_joint_ampere))
+    i_amp = max(0.0, float(corrente_joint_ampere))
     pinze = max(0.0, float(forza_pinze_n))
     scale_coppia = float(c_nm / 200.0)
     H = -1.05 * spin.z(0) + (0.45 * scale_coppia) * spin.z(1) + 0.35 * spin.z(2) + 0.25 * spin.z(3)
@@ -1083,7 +1102,7 @@ def esegui_calcolo_19_fast_charge(potenza_erogata_totale_kw: float = 87.5, temp_
         "temp_piastre_c": t_c,
         "picco_tagliato_kw": picco_tagliato,
         "energia_recuperata_kwh": energia_recuperata,
-        "modello_accumulo": "Curva lineare approssimata (validita SoC nominale 20%-80%)",
+        "modello_accumulo": "Curva lineare approssimata (validità SoC nominale 20%-80%)",
         "avviso_tecnico_supercap": "Per SoC <20% o >80% applicare curva esponenziale non lineare Maxwell/Skeleton",
         "stato_termico": stato_termico,
         "configurazione_qubit_allocata": stato
@@ -1117,9 +1136,9 @@ def woodpecker_svc_kernel(theta_u: float, theta_f: float):
     cudaq.x.ctrl(q[1], q[3])
 
 def esegui_calcolo_20_woodpecker(throughput_pallet_ora: int = 280, umidita_legno_pct: float = 13.4, forza_deformazione_pattini_n: float = 3400.0) -> Dict[str, Any]:
-    th_plt = max(1, int(throughput_pallet_ora))
-    umid = float(np.clip(umidita_legno_pct, 5.0, 40.0))
-    forza = max(100.0, float(forza_deformazione_pattini_n))
+    th_plt = max(0, int(throughput_pallet_ora))
+    umid = float(np.clip(umidita_legno_pct, 4.0, 45.0))
+    forza = max(0.0, float(forza_deformazione_pattini_n))
     theta_u = float(np.clip((umid / 30.0) * np.pi, 0.1, np.pi - 0.1))
     theta_f = float(np.clip((forza / 5000.0) * np.pi, 0.1, np.pi - 0.1))
     counts = cudaq.sample(woodpecker_svc_kernel, theta_u, theta_f, shots=100)

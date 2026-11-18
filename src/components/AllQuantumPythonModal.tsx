@@ -101,7 +101,24 @@ export const AllQuantumPythonModal: React.FC<Props> = ({
       let count = 0;
       for (const calc of targetCalculations) {
         if (activeTenant?.id !== startTenantId) return;
-        const inputs = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
+        const rawInputs = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
+        const inputs: Record<string, any> = {};
+        for (const [k, v] of Object.entries(rawInputs)) {
+          if (typeof v === 'string') {
+            const trimmed = v.trim();
+            if (k === 'sscc_code' || k === 'id_lotto_materiale' || k === 'codice_fornitore' || k === 'id_spedizione' || k === 'grado_qualita_stampa_iso' || k === 'qualita_stampa_iso' || k === 'etichetta_gs1') {
+              inputs[k] = trimmed;
+            } else if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+              try { inputs[k] = JSON.parse(trimmed); } catch { inputs[k] = v; }
+            } else if (trimmed !== '' && !isNaN(Number(trimmed)) && !(trimmed.length >= 10 && /^\d+$/.test(trimmed))) {
+              inputs[k] = Number(trimmed);
+            } else {
+              inputs[k] = v;
+            }
+          } else {
+            inputs[k] = v;
+          }
+        }
         try {
           // Simulation of progressive QPU hardware state-vector batch sampling
           await new Promise(r => setTimeout(r, 25));
@@ -337,7 +354,7 @@ ${sections}
               <p className="text-xs text-slate-300 mt-1 font-mono flex items-center gap-2 flex-wrap">
                 <span>Stabilimento: <strong className="text-white">{activeTenant?.nome || 'Generale'}</strong> ({activeTenant?.sito})</span>
                 <span>•</span>
-                <span>{targetCalculations.length} calcoli inclusi</span>
+                <span>{displayedCalculations.length} calcoli inclusi</span>
                 <span>•</span>
                 <span>Aggiornato: {generationTime}</span>
               </p>
@@ -472,7 +489,7 @@ ${sections}
                     : `joker80_all_calcs_code_and_results.py`}
                 </span>
                 <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] text-cyan-300">
-                  {targetCalculations.length} calcoli • {activeContent.split('\n').length} righe
+                  {displayedCalculations.length} calcoli • {activeContent.split('\n').length} righe
                 </span>
               </div>
 

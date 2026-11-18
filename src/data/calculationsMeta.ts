@@ -27,7 +27,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati obbligatoriamente: camion_attesa e saturazione_wms devono essere valutati congiuntamente per rilevare lo stallo cross-reparto.',
       parametriAccoppiati: ['camion_attesa', 'saturazione_wms'],
-      soglieAnomale: 'IRREGOLARE se camion_attesa > 10 e saturazione_wms > 85.0% contemporaneamente (allerta blocco baie)'
+      soglieAnomale: 'ATTENZIONE se congestione >= 65%; CRITICO se congestione >= 85% (o >= 72% con stato qubit critico; es. camion_attesa >= 10 e saturazione_wms >= 85%)'
     }
   },
   {
@@ -55,7 +55,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati in CNOT: ritardo_stimato_minuti interagisce inversamente con baie_libere.',
       parametriAccoppiati: ['ritardo_stimato_minuti', 'baie_libere'],
-      soglieAnomale: 'IRREGOLARE se ritardo_stimato_minuti > 60 min con baie_libere ≤ 1 (rischio fermo linea imminente)'
+      soglieAnomale: 'ATTENZIONE se probabilità fermo > 35%; CRITICO se VaR 95% >= €5000 oppure ritardo_stimato_minuti > 60 min con baie_libere <= 1'
     }
   },
   {
@@ -82,7 +82,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     parameterRules: {
       modalita: 'SOLO',
       regola: 'Parametro singolo o locale: ore_lavoro_disponibili e baie_totali non richiedono accoppiamento esterno.',
-      soglieAnomale: 'IRREGOLARE se ore_lavoro_disponibili < 4 o baie_totali < 1'
+      soglieAnomale: 'ATTENZIONE se ore_lavoro_disponibili < 4 h oppure efficienza_oraria_pct < 82%'
     }
   },
   {
@@ -112,7 +112,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati fisici: umidita_rilevata e spessore_micro del film/interfalda vanno analizzati congiuntamente con la deformazione.',
       parametriAccoppiati: ['umidita_rilevata', 'spessore_micro'],
-      soglieAnomale: 'IRREGOLARE se umidita_rilevata > 14.5% o indice_conformita_lotto < 90% (< 80% lotto sospeso)'
+      soglieAnomale: 'ATTENZIONE se umidita_rilevata > 14.5% o conformità < 90%; CRITICO (lotto sospeso) se conformità < 80%'
     }
   },
   {
@@ -172,7 +172,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Parametri accoppiati: classe_rotazione (frequenza prelievo) accoppiata a celle_libere_3d nelle campate basse e tolleranza sagoma.',
       parametriAccoppiati: ['classe_rotazione', 'celle_libere_3d'],
-      soglieAnomale: 'IRREGOLARE se classe_rotazione = HIGH e celle_libere_3d < 25 (< 10 critico) o sagoma_fuori_asse = true (rischio blocco shuttle)'
+      soglieAnomale: 'ATTENZIONE se celle_libere_3d < 25 o peso_bilancia_kg > 1200 kg; CRITICO se celle_libere_3d < 10 o sagoma_fuori_asse = true (rischio blocco shuttle)'
     }
   },
   {
@@ -185,7 +185,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglementSymbol: '🔓',
     hardwareTarget: 'QPU Gate-Based / Simulatori GPU',
     description: 'Integrità scaffali e shuttle. Mappa profili di carico, assorbimenti shuttle e vettori di sollecitazione dei sensori fisici esplorando attrattori energetici per riconoscere pattern di deformazione.',
-    inputDescription: 'vettore_pressione_bar, micro_inclinazione, carico_pattini_integri',
+    inputDescription: 'pressione_pattini_bar, vettore_pressione_bar, micro_inclinazione, carico_pattini_integri',
     defaultInputs: {
       vettore_pressione_bar: [12.4, 14.1, 11.9, 15.0],
       micro_inclinazione: 0.4,
@@ -214,7 +214,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglementSymbol: '🔓',
     hardwareTarget: 'QPU Gate-Based / Superconduttori / Simulatori GPU',
     description: 'Sequenza picking. Propagazione dello stato quantistico per valutare tutte le permutazioni dei nodi (incroci delle corsie) e minimizzare i metri percorsi.',
-    inputDescription: 'lista_id_pallet, coordinate_partenza',
+    inputDescription: 'nodi_prelievo_count, distanza_totale_metri, lista_id_pallet, coordinate_partenza',
     defaultInputs: {
       lista_id_pallet: ['PLT_A', 'PLT_B', 'PLT_C'],
       coordinate_partenza: 'X:00/Y:00'
@@ -228,7 +228,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     parameterRules: {
       modalita: 'SOLO',
       regola: 'Parametro combinatorio a lista chiusa: risolto come grafo TSP singolo senza dipendenza da moduli esterni.',
-      soglieAnomale: 'IRREGOLARE se numero nodi lista_id_pallet > 30 per singolo ciclo picker'
+      soglieAnomale: 'ATTENZIONE se nodi_prelievo_count > 30 per singolo ciclo picker'
     }
   },
   {
@@ -269,7 +269,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglementSymbol: '🔓',
     hardwareTarget: 'Simulatori GPU / QPU Gate-Based',
     description: 'Incastro geometrico camion. Mappa lo spazio geometrico del container/camion e la disposizione dei pallet a minima energia per saturare lo spazio e bilanciare gli assi.',
-    inputDescription: 'volume_disponibile_mc, lista_pesi_pallet',
+    inputDescription: 'colli_da_caricare, peso_totale_kg, volume_cassone_m3, lista_pesi_pallet',
     defaultInputs: {
       colli_da_caricare: 33,
       volume_cassone_m3: 86.0,
@@ -285,9 +285,9 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     },
     parameterRules: {
       modalita: 'COPPIA',
-      regola: 'Parametri accoppiati meccanici: volume_disponibile_mc e bilanciamento asse (lista_pesi_pallet).',
+      regola: 'Parametri accoppiati meccanici: volume_cassone_m3 e bilanciamento asse (peso_totale_kg).',
       parametriAccoppiati: ['volume_disponibile_mc', 'lista_pesi_pallet'],
-      soglieAnomale: 'ATTENZIONE se carico > 28000 kg; CRITICO se > 44000 kg (Codice Strada) o saturazione > 100%'
+      soglieAnomale: 'ATTENZIONE se carico > 28000 kg o saturazione < 65%; CRITICO se > 44000 kg (Codice Strada) o saturazione > 100%'
     }
   },
   {
@@ -302,8 +302,9 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     description: 'Firma cieca e-CMR e tutela privacy GDPR. Pseudonimizza il vettore logistico e genera firma cieca e token notarile SHA3-256 con entropia quantistica per sigillare il documento di trasporto in uscita.',
     inputDescription: 'id_spedizione, destinazione, vettore_logistico',
     defaultInputs: {
-      id_contratto_vettore: 'CONT_VETT_2026_XYZ',
-      dati_ecmr: 'DESTINAZIONE: GERMANIA - 33 PALLET ACQUA MINERALE'
+      id_spedizione: 'ECMR-NOV-2026-9921',
+      destinazione: 'HUB-INTERPORTO-BOLOGNA',
+      vettore_logistico: 'FERCAM-LOGISTICS-IT'
     },
     isCrossCategory: false,
     crossCategoryDetails: {
@@ -314,7 +315,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     parameterRules: {
       modalita: 'SOLO',
       regola: 'Parametro documentale singolo: protocollo di firma cieca con seed quantistico stand-alone.',
-      soglieAnomale: 'ANOMALIA E-CMR se destinazione o vettore_logistico mancanti'
+      soglieAnomale: 'ATTENZIONE (ANOMALIA E-CMR) se destinazione o vettore_logistico mancanti'
     }
   },
   {
@@ -327,7 +328,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglementSymbol: '🔒',
     hardwareTarget: 'QPU Gate-Based / Simulatori GPU',
     description: 'Conflitti priorità baie. Lega con CNOT le strategie dei vettori esterni allo stato dei flussi interni SDM per determinare l\'Equilibrio di Nash Quantistico a zero attese.',
-    inputDescription: 'camion_in_piazzale, pallet_pronti_linea',
+    inputDescription: 'camion_in_coda, baie_disponibili, pallet_pronti_linea, costo_orario_attesa_eur',
     defaultInputs: {
       camion_in_piazzale: 8,
       pallet_pronti_linea: 24
@@ -340,9 +341,9 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     },
     parameterRules: {
       modalita: 'COPPIA',
-      regola: 'Parametri accoppiati in teoria dei giochi quantistica: camion_in_piazzale deve essere sincronizzato con pallet_pronti_linea.',
+      regola: 'Parametri accoppiati in teoria dei giochi quantistica: camion_in_coda deve essere sincronizzato con baie_disponibili e pallet_pronti_linea.',
       parametriAccoppiati: ['camion_in_piazzale', 'pallet_pronti_linea'],
-      soglieAnomale: 'IRREGOLARE se camion_in_piazzale > 12 e pallet_pronti_linea < 10 (discrepanza offerta/domanda con costo sosta)'
+      soglieAnomale: 'ATTENZIONE (SUB-OTTIMALE) se rapporto camion/baie > 3.5 o camion > 10; CRITICO se (camion > 12 e pallet_pronti_linea < 10) o rapporto >= 6.0'
     }
   },
   {
@@ -421,6 +422,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       tensione_newton: 148.5,
       velocita_svolgimento: 12.4,
       spessore_film_micron: 23,
+      pre_stiro_pct: 250.0,
       forza_serraggio_carico_n: 152.0,
       temp_barra_saldante_c: 138.5
     },
@@ -447,7 +449,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     entanglementSymbol: '🔒',
     hardwareTarget: 'Quantum Annealer / D-Wave / Alta Connettività',
     description: 'Rotte flotta >100 LGV e anticollisione laser. Lega tramite CNOT le coordinate 3D dei veicoli, raggio di curvatura e distanza ostacolo laser allo stato occupazionale dei nodi stradali.',
-    inputDescription: 'coordinate_agv_attivi, mappa_ingorghi_nodi, distanza_laser_ostacolo_mm, raggio_curvatura_mm',
+    inputDescription: 'navette_attive, nodi_critici, conflitto_rilevato, distanza_laser_ostacolo_mm',
     defaultInputs: {
       coordinate_agv_attivi: {
         AGV_01: 'X:14250/Y:8600/Z:210',
@@ -468,7 +470,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'MULTI_ENTANGLED',
       regola: 'Parametri multi-entangled: coordinate di tutti gli LGV accoppiate in grafo continuo con i nodi bloccati e campi laser protetti.',
       parametriAccoppiati: ['coordinate_agv_attivi', 'mappa_ingorghi_nodi'],
-      soglieAnomale: 'IRREGOLARE se distanza_laser_ostacolo_mm < 1500 mm o oltre 3 nodi centrali bloccati contemporaneamente'
+      soglieAnomale: 'ATTENZIONE se fluidità < 60%; CRITICO se fluidità < 45%, conflitto_rilevato = true oppure distanza_laser_ostacolo_mm < 1500 mm'
     }
   },
   {
@@ -590,7 +592,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
       modalita: 'COPPIA',
       regola: 'Forza deformazione pattini N accoppiata a umidità legno % per stimare la portanza elastica.',
       parametriAccoppiati: ['forza_deformazione_pattini_n', 'umidita_legno_pct'],
-      soglieAnomale: 'IRREGOLARE se forza_deformazione_pattini_n < 2600 N o umidita_legno_pct > 17.5% o difetto ottico rilevato'
+      soglieAnomale: 'ATTENZIONE se tasso scarto > 6%; CRITICO se forza_deformazione_pattini_n < 2600 N, umidita_legno_pct > 17.5% o difetto ottico rilevato'
     }
   },
   {
@@ -620,7 +622,7 @@ export const QUANTUM_CALCULATIONS: QuantumCalculationMeta[] = [
     parameterRules: {
       modalita: 'SOLO',
       regola: 'Validazione ottica ISO/IEC 15416 con mitigazione del rumore su etichette SSCC/GS1-128.',
-      soglieAnomale: 'ATTENZIONE se CLASSE_B/CLASSE_C, affidabilità < 80% o temp testina > 65 °C; CRITICO se CLASSE_F o affidabilità < 65%'
+      soglieAnomale: 'ATTENZIONE se CLASSE_C, affidabilità < 80% o temp testina > 65 °C; CRITICO se CLASSE_F o affidabilità < 65%'
     }
   }
 ];

@@ -277,6 +277,7 @@ export const SIMULATION_CONFIGS: Record<number, SimulationConfig> = {
     ],
     outputs: [
       { key: 'efficienza_accoppiamento_pct', label: 'Efficienza accoppiamento BMS', unit: '%', betterDirection: 'higher' },
+      { key: 'stato_flotta_bms', label: 'Stato BMS Flotta', betterDirection: 'neutral' },
       { key: 'stato_qubit_allocazione', label: 'Qubit Allocazione', betterDirection: 'neutral' },
     ]
   },
@@ -1249,7 +1250,7 @@ export const QuantumCatalog: React.FC<Props> = ({
         <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="text-xs font-mono text-slate-400 flex items-center gap-2">
             <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span>Ultimo campionamento: {res?.timestamp ? new Date(res.timestamp).toLocaleTimeString() : 'In tempo reale'}</span>
+            <span>Ultimo campionamento: {res?.timestamp_esecuzione || (res?.timestamp ? new Date(res.timestamp).toLocaleTimeString() : 'In tempo reale')}</span>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -1624,7 +1625,7 @@ export const QuantumCatalog: React.FC<Props> = ({
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
-                Mostrando esclusivamente i calcoli compatibili con i macchinari e i nodi fisici autorizzati per "{activeTenant.nome}" ({activeTenant.sito}).
+                Visualizzazione esclusiva dei calcoli compatibili con i macchinari e i nodi fisici autorizzati per "{activeTenant.nome}" ({activeTenant.sito}).
               </p>
             </div>
           </div>
@@ -1999,7 +2000,7 @@ export const QuantumCatalog: React.FC<Props> = ({
                         ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
                         : 'bg-cyan-950/70 hover:bg-cyan-900/90 text-cyan-300 border-cyan-500/50 hover:border-cyan-400'
                     }`}
-                    title={focusedCalcId === calc.id ? "Mostra di nuovo tutti i calcoli" : "Lavora solo su questo calcolo e nascondi momentaneamente tutti gli altri"}
+                    title={focusedCalcId === calc.id ? "Mostra di nuovo i calcoli del gruppo" : "Lavora solo su questo calcolo e nascondi momentaneamente tutti gli altri"}
                   >
                     {focusedCalcId === calc.id ? (
                       <>

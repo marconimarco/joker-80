@@ -630,10 +630,10 @@ export function evaluateCalculationStatus(
           azione: res.azione_correttiva_suggerita || 'Pulire ottica scanner e testina termica Raptor.'
         };
       }
-      if (tempHead > INDUSTRIAL_THRESHOLDS.RAPTOR_TEMP_TESTINA_WARN_C || grado.includes('_B')) {
+      if (tempHead > INDUSTRIAL_THRESHOLDS.RAPTOR_TEMP_TESTINA_WARN_C) {
         return {
           livelloAllarme: 'ATTENZIONE',
-          titolo: 'Attenzione Testina Termica / Grado Stampa Non Ottimale',
+          titolo: 'Attenzione Surriscaldamento Testina Termica Raptor',
           dettaglio: `Grado ${grado} | Temp testina termica ${tempHead}°C.`,
           parametro: 'temp_testina_termica_c',
           valore: `${tempHead}°C`,

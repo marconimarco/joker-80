@@ -12,6 +12,17 @@ function finiteOr(value: any, fallback: number): number {
   return Number.isFinite(num) ? num : fallback;
 }
 
+// Safe boolean coercion: parses string 'false'/'0'/'no' cleanly instead of treating non-empty strings as true
+function booleanOr(value: any, fallback: boolean): boolean {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') return false;
+  if (normalized === 'true' || normalized === '1' || normalized === 'si' || normalized === 'sì' || normalized === 'on') return true;
+  return fallback;
+}
+
 // Deterministic hash + Mulberry32 PRNG for reproducible 100-shot CUDA-Q state sampling
 function hashSeed(input: string): number {
   let h = 2166136261 >>> 0;
@@ -143,7 +154,7 @@ export const QuantumEngine = {
         "Camion in Attesa": `${c} unità`,
         "Minuti Ritardo": `${r} min`,
         "Saturazione WMS": `${w}%`,
-        "Stato Allarme": allarme ? "CRITICO" : "REGOLARE",
+        "Stato Allarme": allarme ? "CRITICO" : (congestione_percentuale >= 65 ? "ATTENZIONE" : "REGOLARE"),
         "Qubit Stato": most_probable
       },
       indice_rischio_blocco: allarme ? "CRITICO - Blocco Imminente Inbound" : (congestione_percentuale >= 65 ? "ATTENZIONE - Traffico Sostenuto" : "FLUIDO - Flusso Ordinario"),
@@ -293,7 +304,7 @@ export const QuantumEngine = {
     const { most_probable, distribution } = sampleQuantumCircuit(4, false, bias, `c4:${u}:${sp_mm}:${forzaVal ?? 'na'}`);
 
     const esito = indice_conformita_lotto_pct >= 90.0 && u <= INDUSTRIAL_THRESHOLDS.UMIDITA_MATERIE_WARN
-      ? "CONFORME STANDARD BARILLA"
+      ? "CONFORME STANDARD QUALITÀ"
       : (indice_conformita_lotto_pct >= 80.0 ? "ATTENZIONE - Umidità/Spessore al Limite" : "LOTTO SOSPESO PER CONTROLLO");
 
     return {
@@ -351,7 +362,7 @@ export const QuantumEngine = {
       calcolo_id: 5,
       calcolo: "Post-Quantum Cryptographic Hashing - Material Inventory & Quality",
       standard_crittografico: "NIST FIPS 202 (SHA3-256) con Salt ad Alta Entropia (Non-Lattice)",
-      compliance_direttiva: "NIS2 Art. 21 - Tracciabilita Immutabile di Filiera",
+      compliance_direttiva: "NIS2 Art. 21 - Tracciabilità Immutabile di Filiera",
       id_lotto: lotto,
       sscc_code: sscc,
       qualita_stampa_iso: qualita,
@@ -716,7 +727,7 @@ export const QuantumEngine = {
     const { most_probable, distribution } = sampleQuantumCircuit(4, false, 0.5, `c11:${sped}:${dest}:${vett}`);
     const qpu_entropy = most_probable;
     const blinding_factor = "a7f8e3b1c9d24068e4f1a2b3c4d5e6f7";
-    const raw_carrier = `${vett || 'UNSPECIFIED'}::${dest || 'UNSPECIFIED'}::BARILLA_SALT_2026`;
+    const raw_carrier = `${vett || 'UNSPECIFIED'}::${dest || 'UNSPECIFIED'}::SMILE80_SALT_2026`;
     const carrier_hash = await pseudoSha256(raw_carrier);
     const carrier_token = `OP-CARRIER-${carrier_hash.slice(0, 16).toUpperCase()}`;
     const blinded_payload = `${sped}|${carrier_token}|${qpu_entropy}::BLINDED_BY::${blinding_factor}`;
@@ -808,7 +819,9 @@ export const QuantumEngine = {
       efficienza_piazzale: `EQUILIBRIO NASH QUANTISTICO: ${esito} (Risparmio €${risparmio_eur})`,
       azione_correttiva_suggerita: squilibrioGrave
         ? `Aprire baie outbound aggiuntive per assorbire i ${c} camion in attesa.`
-        : `Allocazione baie completata. Esito: ${esito}. Risparmio calcolato: €${risparmio_eur}.`,
+        : squilibrioModerato
+          ? `Riallocare le finestre di carico sulle ${b} baie per smaltire i ${c} camion (risparmio stimato: €${risparmio_eur}).`
+          : `Allocazione baie Pareto-ottimale confermata. Risparmio calcolato: €${risparmio_eur}.`,
       dati_elaborati: { camion_in_coda: c, baie_disponibili: b, costo_orario_attesa_eur: costo_h, pallet_pronti_linea: pltPronti }
     };
   },
@@ -1042,7 +1055,7 @@ export const QuantumEngine = {
       },
       valutazione_traffico: valutazione,
       azione_correttiva_suggerita: !isCrit && !isWarn ? "Mantenere instradamento corrente." : "Deviare navette su corridoi secondari di by-pass e assegnare precedenza.",
-      dati_elaborati: { navette_in_missione: nav, nodi_critici_congestione: nodi, ...(laserMm !== undefined ? { distanza_laser_ostacolo_mm: laserMm } : {}) }
+      dati_elaborati: { navette_in_missione: nav, nodi_critici_congestione: nodi, conflitto_rilevato, ...(laserMm !== undefined ? { distanza_laser_ostacolo_mm: laserMm } : {}) }
     };
   },
 
@@ -1125,17 +1138,19 @@ export const QuantumEngine = {
 
     const vibrazione_giunti_mm = Number((0.12 + Math.abs(energia) * 0.04).toFixed(3));
     const tenuta_vuoto_pinza = vuoto_conforme ? "TENUTA OTTIMALE" : "ALLARME VUOTO INSUFFICIENTE";
-    const stato_manutenzione = (coppia_conforme && pinze_conformi && Math.abs(energia) < 2.5)
+    const energiaCritica = Math.abs(energia) >= 2.5;
+    const stato_manutenzione = (coppia_conforme && pinze_conformi && !energiaCritica)
       ? "REGOLARE"
       : "ALLARME ISPEZIONE GIUNTI RICHIESTA";
 
-    const isAlarm = !vuoto_conforme || !coppia_conforme || !pinze_conformi;
+    const isAlarm = !vuoto_conforme || !coppia_conforme || !pinze_conformi || energiaCritica;
     let motivo_allarme: string | undefined = undefined;
     if (isAlarm) {
       const reasons: string[] = [];
       if (!vuoto_conforme) reasons.push(`Pressione vuoto insufficiente (${p_bar} bar > -0.65 bar)`);
       if (!coppia_conforme) reasons.push(`Coppia motori oltre soglia (${c_nm} Nm > 400 Nm)`);
       if (!pinze_conformi) reasons.push(`Forza pinze insufficiente (${pinze} N < 300 N)`);
+      if (energiaCritica) reasons.push(`Energia meccanica giunti elevata (${energia} eV)`);
       motivo_allarme = reasons.join(" + ");
     }
 
@@ -1214,7 +1229,7 @@ export const QuantumEngine = {
       livello_supercondensatori_pct: sc_pct,
       picco_tagliato_kw: picco_tagliato,
       energia_recuperata_kwh: energia_recuperata,
-      modello_accumulo: "Curva lineare approssimata (validita SoC nominale 20%-80%)",
+      modello_accumulo: "Curva lineare approssimata (validità SoC nominale 20%-80%)",
       avviso_tecnico_supercap: "Per SoC <20% o >80% applicare curva esponenziale non lineare Maxwell/Skeleton",
       stato_termico,
       ...(motivo_allarme ? { motivo_allarme } : {}),
@@ -1420,16 +1435,18 @@ export const QuantumEngine = {
           satDerived,
           celle3d !== undefined ? finiteOr(celle3d, 124) : undefined,
           finiteOr(payload.peso_bilancia_kg ?? payload.peso_kg, 875.4),
-          Boolean(payload.sagoma_fuori_asse)
+          booleanOr(payload.sagoma_fuori_asse, false)
         );
         break;
       }
       case 7: {
-        const vecPress = Array.isArray(payload.vettore_pressione_bar) && payload.vettore_pressione_bar.length > 0
-          ? Math.max(...payload.vettore_pressione_bar.map((v: any) => finiteOr(v, 15.0)))
-          : finiteOr(payload.pressione_pattini_bar, 15.0);
+        const vecPress = payload.pressione_pattini_bar !== undefined && payload.pressione_pattini_bar !== ''
+          ? finiteOr(payload.pressione_pattini_bar, 15.0)
+          : (Array.isArray(payload.vettore_pressione_bar) && payload.vettore_pressione_bar.length > 0
+            ? Math.max(...payload.vettore_pressione_bar.map((v: any) => finiteOr(v, 15.0)))
+            : 15.0);
         const incl = finiteOr(payload.micro_inclinazione ?? payload.inclinazione_gradi, 0.4);
-        const pattiniOk = payload.carico_pattini_integri !== undefined ? Boolean(payload.carico_pattini_integri) : true;
+        const pattiniOk = booleanOr(payload.carico_pattini_integri, true);
         const explicitStress = (payload.stress_strutturale_mpa ?? payload.stress) !== undefined
           ? finiteOr(payload.stress_strutturale_mpa ?? payload.stress, 142.5)
           : undefined;
@@ -1531,6 +1548,9 @@ export const QuantumEngine = {
           : null;
         const coordVals = coordsObj ? Object.values(coordsObj).map(String) : [];
         const hasCollision = coordVals.length > 1 && new Set(coordVals).size < coordVals.length;
+        const conflittoEffettivo = payload.conflitto_rilevato !== undefined
+          ? booleanOr(payload.conflitto_rilevato, hasCollision)
+          : hasCollision;
         const nodiFromMap = Array.isArray(payload.mappa_ingorghi_nodi) ? payload.mappa_ingorghi_nodi.length : 0;
         const navCount = finiteOr(
           payload.navette_attive ?? payload.navette_in_missione ?? payload.numero_agv_attivi,
@@ -1538,12 +1558,12 @@ export const QuantumEngine = {
         );
         const nodiCrit = finiteOr(
           payload.nodi_critici ?? payload.nodi_critici_congestione ?? payload.incroci_congestionati,
-          nodiFromMap + (hasCollision ? 1 : 0)
+          nodiFromMap + (conflittoEffettivo ? 1 : 0)
         );
         result = this.calcolo_16_qrl_routing(
           navCount,
           nodiCrit,
-          hasCollision,
+          conflittoEffettivo,
           payload.distanza_laser_ostacolo_mm !== undefined ? finiteOr(payload.distanza_laser_ostacolo_mm, 4200) : undefined
         );
         break;
@@ -1581,9 +1601,11 @@ export const QuantumEngine = {
         const coppiaVal = Array.isArray(payload.coppia_motori_nm) && payload.coppia_motori_nm.length > 0
           ? Math.max(...payload.coppia_motori_nm.map((v: any) => finiteOr(v, 185)))
           : finiteOr(payload.coppia_motori_nm, 185.0);
-        const corrVal = Array.isArray(payload.corrente_joint_a) && payload.corrente_joint_a.length > 0
-          ? Math.max(...payload.corrente_joint_a.map((v: any) => finiteOr(v, 14.2)))
-          : finiteOr(payload.corrente_joint_ampere, 14.2);
+        const corrVal = payload.corrente_joint_ampere !== undefined && payload.corrente_joint_ampere !== ''
+          ? finiteOr(payload.corrente_joint_ampere, 14.2)
+          : (Array.isArray(payload.corrente_joint_a) && payload.corrente_joint_a.length > 0
+            ? Math.max(...payload.corrente_joint_a.map((v: any) => finiteOr(v, 14.2)))
+            : 14.2);
         result = this.calcolo_18_vqe_robot(
           coppiaVal,
           finiteOr(payload.pressione_vuoto_bar, -0.78),

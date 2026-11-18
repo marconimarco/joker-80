@@ -248,7 +248,7 @@ CATEGORIA 4: IOT & CONTROLLO MACCHINE (ECS / SDM) & STAZIONI DEDICATE
 - Formula & Logica:
   * affidabilita_ricostruzione_barcode_pct = clamp(contrasto * 1.05 + bonus_grado(+10 A, +5 B, -8 C, -22 F) - penalità_temp(>65 °C), 10.0, 99.9)
 - Soglie Allarme:
-  * ATTENZIONE: grado CLASSE_B / CLASSE_C, affidabilità < 80% oppure temp testina > 65 °C
+  * ATTENZIONE: grado CLASSE_C, affidabilità < 80% oppure temp testina > 65 °C
   * CRITICO: grado CLASSE_F oppure affidabilità < 65%.
 - Risultato: Affidabilità lettura barcode GS1-128 (%) e stato qualità etichettatura.
 

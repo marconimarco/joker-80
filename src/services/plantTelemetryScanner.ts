@@ -205,11 +205,15 @@ export class PlantTelemetryScanner {
         };
       }
       case 5: {
-        const sscc = raptor?.stampaTracciabilita?.ssccCode || `SSCC-${tenant.id.toUpperCase()}-LIVE`;
+        const rawSscc = String(raptor?.stampaTracciabilita?.ssccCode || '').replace(/\D/g, '');
+        const validSscc = /^\d{10,20}$/.test(rawSscc) ? rawSscc : '80332190000458130';
         const lotto = raptor?.stampaTracciabilita?.lotto || `LOTTO_${tenant.id.toUpperCase()}_LIVE`;
+        const qualita = raptor?.controlloQualitaVisione?.gradoQualitaStampaIso || 'CLASSE_A';
         return {
           id_lotto_materiale: lotto,
-          codice_fornitore: raptor ? `E80_GS1_${sscc.slice(0, 8)}` : 'FORNITORE_E80_CERTIFICATO'
+          codice_fornitore: raptor ? `E80_GS1_${validSscc.slice(0, 8)}` : 'FORNITORE_E80_CERTIFICATO',
+          sscc_code: validSscc,
+          qualita_stampa_iso: qualita
         };
       }
       case 6: {
@@ -255,8 +259,11 @@ export class PlantTelemetryScanner {
         };
       }
       case 11: {
+        const siteDest = tenant.sito ? `HUB-${tenant.sito.split(',')[0].trim().toUpperCase().replace(/\s+/g, '-')}` : 'HUB-INTERPORTO-BOLOGNA';
         return {
-          id_contratto_vettore: `VETTORE_${tenant.id.toUpperCase()}_SM80`
+          id_spedizione: `ECMR-${tenant.id.toUpperCase()}-2026-SM80`,
+          destinazione: siteDest,
+          vettore_logistico: `VETTORE_${tenant.id.toUpperCase()}_SM80`
         };
       }
       case 12: {

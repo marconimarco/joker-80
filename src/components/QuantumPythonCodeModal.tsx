@@ -119,7 +119,7 @@ export const QuantumPythonCodeModal: React.FC<Props> = ({
 # ==============================================================================
 # Calcolo: #${calculation.id} - ${calculation.name}
 # Sottofunzione: ${calculation.subFunction} | Modulo: ${calculation.technicalModule}
-# Architettura QPU: ${codeInfo.targetQpu} (${codeInfo.qubits} Qubits, ${calculation.entanglement})
+# Architettura QPU: ${codeInfo.targetQpu} (${codeInfo.qubits} Qubit, ${calculation.entanglement})
 # Operatore / Ruolo Autorizzato: ${userName} (${userRole})
 # Timestamp Esecuzione: ${executionTimestamp}
 #
@@ -376,7 +376,7 @@ ${resultFormatted}
                 </div>
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
                   <span className="text-slate-400 text-[10px] block">QPU Target & Precisione</span>
-                  <span className="font-bold text-cyan-300">{codeInfo?.targetQpu || 'NVIDIA cuStateVec'} (1000 Shot)</span>
+                  <span className="font-bold text-cyan-300">{codeInfo?.targetQpu || 'NVIDIA cuStateVec'} (100 Shot)</span>
                 </div>
               </div>
             </div>
