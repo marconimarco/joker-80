@@ -8,7 +8,8 @@
     "build": "vite build",
     "start": "node server.ts",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:parity": "tsx scripts/verifyQuantumParity.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

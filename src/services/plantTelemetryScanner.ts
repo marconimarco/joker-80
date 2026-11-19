@@ -3,6 +3,7 @@ import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
 import { evaluateCalculationStatus } from '../data/industrialThresholds';
 import { QuantumEngine } from './quantumEngine';
 import { PlantTelemetryHistoryService } from './plantTelemetryHistory';
+import { parseFlexibleInput } from '../utils/inputParser';
 
 export interface PlantNotification {
   id: string;
@@ -73,7 +74,14 @@ export class PlantTelemetryScanner {
         const saved = localStorage.getItem(`joker_custom_telemetry_${tenant.id}`);
         if (saved) {
           const parsed = JSON.parse(saved);
-          inputs = { ...inputs, ...parsed };
+          if (parsed && typeof parsed === 'object') {
+            for (const [k, v] of Object.entries(parsed)) {
+              const norm = parseFlexibleInput(v, k);
+              if (norm !== undefined) {
+                inputs[k] = norm;
+              }
+            }
+          }
         }
       } catch {}
       const res: QuantumExecutionResult = await QuantumEngine.executeCalculation(calc.id, inputs);

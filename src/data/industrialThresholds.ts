@@ -247,6 +247,17 @@ export function evaluateCalculationStatus(
     }
 
     case 5: {
+      const qIso = String(res.qualita_stampa_iso ?? inputs.qualita_stampa_iso ?? 'CLASSE_A').toUpperCase();
+      if (qIso.includes('_F')) {
+        return {
+          livelloAllarme: 'CRITICO',
+          titolo: 'Etichetta Illeggibile / Scarto Tracciabilità SHA3 (CLASSE_F)',
+          dettaglio: res.stato_sicurezza || 'Stampa etichetta SSCC non leggibile (ISO Classe F).',
+          parametro: 'qualita_stampa_iso',
+          valore: qIso,
+          azione: res.azione_correttiva_suggerita || 'Bloccare rilascio lotto e ristampare etichetta SSCC GS1.'
+        };
+      }
       if (res.integrita_verificata === false || textBag.includes('ANOMAL') || textBag.includes('NON CONFORME')) {
         return {
           livelloAllarme: 'ATTENZIONE',
@@ -609,7 +620,8 @@ export function evaluateCalculationStatus(
     case 21: {
       const aff = Number(res.affidabilita_ricostruzione_barcode_pct ?? 95);
       const tempHead = Number(res.temp_testina_termica_c ?? 54);
-      const grado = String(res.grado_qualita_stampa_iso ?? 'CLASSE_A').toUpperCase();
+      const rawGrado = String(res.grado_qualita_stampa_iso ?? 'CLASSE_A').trim().toUpperCase().replace(/\s+/g, '_');
+      const grado = /^(A|B|C|F)$/.test(rawGrado) ? `CLASSE_${rawGrado}` : rawGrado;
       if (grado.includes('_F') || aff < 65) {
         return {
           livelloAllarme: 'CRITICO',
@@ -620,6 +632,16 @@ export function evaluateCalculationStatus(
           azione: res.azione_correttiva_suggerita || 'Fermare linea etichettatura, pulire ottica e sostituire testina/nastro.'
         };
       }
+      if (tempHead > INDUSTRIAL_THRESHOLDS.RAPTOR_TEMP_TESTINA_WARN_C && aff >= INDUSTRIAL_THRESHOLDS.RAPTOR_AFFIDABILITA_MIN_PCT && !grado.includes('_C')) {
+        return {
+          livelloAllarme: 'ATTENZIONE',
+          titolo: 'Attenzione Surriscaldamento Testina Termica Raptor',
+          dettaglio: `Grado ${grado} | Temp testina termica ${tempHead}°C (soglia ${INDUSTRIAL_THRESHOLDS.RAPTOR_TEMP_TESTINA_WARN_C}°C).`,
+          parametro: 'temp_testina_termica_c',
+          valore: `${tempHead}°C`,
+          azione: 'Verificare raffreddamento testina e calibrare contrasto nastro.'
+        };
+      }
       if (aff < INDUSTRIAL_THRESHOLDS.RAPTOR_AFFIDABILITA_MIN_PCT || grado.includes('_C') || textBag.includes('ANOMAL')) {
         return {
           livelloAllarme: 'ATTENZIONE',
@@ -628,16 +650,6 @@ export function evaluateCalculationStatus(
           parametro: 'grado_qualita_stampa_iso',
           valore: `${grado} (${aff}%)`,
           azione: res.azione_correttiva_suggerita || 'Pulire ottica scanner e testina termica Raptor.'
-        };
-      }
-      if (tempHead > INDUSTRIAL_THRESHOLDS.RAPTOR_TEMP_TESTINA_WARN_C) {
-        return {
-          livelloAllarme: 'ATTENZIONE',
-          titolo: 'Attenzione Surriscaldamento Testina Termica Raptor',
-          dettaglio: `Grado ${grado} | Temp testina termica ${tempHead}°C.`,
-          parametro: 'temp_testina_termica_c',
-          valore: `${tempHead}°C`,
-          azione: 'Verificare raffreddamento testina e calibrare contrasto nastro.'
         };
       }
       break;

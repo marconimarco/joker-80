@@ -291,7 +291,8 @@ def qrng_seed_kernel():
 
 def esegui_calcolo_05_pqc_hash(id_lotto_materiale: str = "LOTTO-NOV-2026-0884", codice_fornitore: str = "FORN-SEM-BO-012", sscc_code: str = "80332190000458130", qualita_stampa_iso: str = "CLASSE_A") -> Dict[str, Any]:
     sscc_val = str(sscc_code).strip()
-    qualita_val = str(qualita_stampa_iso).strip().upper()
+    raw_q = "_".join(str(qualita_stampa_iso or "CLASSE_A").strip().upper().split())
+    qualita_val = f"CLASSE_{raw_q}" if raw_q in ("A", "B", "C", "F") else raw_q
     counts = cudaq.sample(qrng_seed_kernel, shots=100)
     qpu_seed = counts.most_probable()
     hardware_entropy_bytes = secrets.token_bytes(32)
@@ -348,7 +349,9 @@ def bin_packing_kernel(theta_rot: float, theta_sat: float):
     cudaq.x.ctrl(q[2], q[3])
 
 def esegui_calcolo_06_bin_packing(id_pallet: str = "PLT-NOV-88412", classe_rotazione: str = "HIGH", saturazione_wms: float = 78.5, celle_libere_3d: int = None, peso_bilancia_kg: float = 875.4, sagoma_fuori_asse: bool = False) -> Dict[str, Any]:
-    sat = float(np.clip(100.0 - (celle_libere_3d / 200.0) * 100.0, 0.0, 100.0)) if celle_libere_3d is not None else float(np.clip(saturazione_wms, 0.0, 100.0))
+    celle_in = max(0, int(celle_libere_3d)) if celle_libere_3d is not None else None
+    peso_kg = max(10.0, float(peso_bilancia_kg))
+    sat = float(np.clip(100.0 - (celle_in / 200.0) * 100.0, 0.0, 100.0)) if celle_in is not None else float(np.clip(saturazione_wms, 0.0, 100.0))
     rot = classe_rotazione.upper()
     rot_val = 1.0 if rot in ("HIGH", "A") else (0.6 if rot in ("MED", "MEDIUM", "B") else 0.2)
     theta_rot = float(rot_val * np.pi * 0.75)
@@ -358,17 +361,17 @@ def esegui_calcolo_06_bin_packing(id_pallet: str = "PLT-NOV-88412", classe_rotaz
     corsia = (int(stato, 2) % 6) + 1
     campata = ((int(stato, 2) * 3) % 40) + 1
     livello = ((int(stato, 2) >> 2) % 8) + 1
-    celle_eff = celle_libere_3d if celle_libere_3d is not None else round((100.0 - sat) * 2.0)
+    celle_eff = celle_in if celle_in is not None else round((100.0 - sat) * 2.0)
     penalita_sat = max(0.0, (25 - celle_eff) * 0.45)
     tempo_ciclo_sec = round(float(35.0 + (corsia * 2.2) + (livello * 1.8) + penalita_sat), 1)
-    efficienza_slotting = round(float(max(45.0, min(99.0, 88.0 + rot_val * 10.0 - penalita_sat - (35.0 if sagoma_fuori_asse else 0.0) - (6.0 if peso_bilancia_kg > 1200.0 else 0.0)))), 1)
+    efficienza_slotting = round(float(max(45.0, min(99.0, 88.0 + rot_val * 10.0 - penalita_sat - (35.0 if sagoma_fuori_asse else 0.0) - (6.0 if peso_kg > 1200.0 else 0.0)))), 1)
     coordinata_esatta = "BAIA_SCARTO_SAGOMA" if sagoma_fuori_asse else f"X:{corsia:02d}/Y:{campata:02d}/Z:{livello:02d}"
     return {
         "calcolo": "Quantum Digital Twin 3D Bin Packing - Put-Away Logic",
         "id_pallet": id_pallet,
         "classe_rotazione": rot,
         "celle_libere_3d": celle_eff,
-        "peso_bilancia_kg": peso_bilancia_kg,
+        "peso_bilancia_kg": peso_kg,
         "sagoma_fuori_asse": sagoma_fuori_asse,
         "coordinate_cella_3d": {"corsia": corsia, "campata": campata, "livello": livello},
         "coordinata_3d_esatta": coordinata_esatta,
@@ -1189,7 +1192,8 @@ def qem_raptor_kernel(theta_c: float):
     cudaq.x.ctrl(q[2], q[3])
 
 def esegui_calcolo_21_raptor(grado_qualita_stampa_iso: str = "CLASSE_A", contrasto_ottico_pct: float = 84.5, temp_testina_termica_c: float = 54.2) -> Dict[str, Any]:
-    grado = str(grado_qualita_stampa_iso or "CLASSE_A").strip().upper()
+    raw_g = "_".join(str(grado_qualita_stampa_iso or "CLASSE_A").strip().upper().split())
+    grado = f"CLASSE_{raw_g}" if raw_g in ("A", "B", "C", "F") else raw_g
     contrasto = float(np.clip(contrasto_ottico_pct, 0.0, 100.0))
     temp_testina = max(0.0, float(temp_testina_termica_c))
     theta_c = float((contrasto / 100.0) * np.pi)

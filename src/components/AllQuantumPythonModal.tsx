@@ -23,6 +23,7 @@ import { QuantumCalculationMeta, FactoryTenant, UserAccount } from '../types/qua
 import { QUANTUM_PYTHON_CODES, QuantumPythonCodeInfo } from '../data/quantumPythonCalculations';
 import { QuantumEngine } from '../services/quantumEngine';
 import { extractDiagnosticSummary } from '../data/industrialThresholds';
+import { parseFlexibleInput } from '../utils/inputParser';
 
 interface Props {
   isOpen: boolean;
@@ -104,19 +105,9 @@ export const AllQuantumPythonModal: React.FC<Props> = ({
         const rawInputs = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
         const inputs: Record<string, any> = {};
         for (const [k, v] of Object.entries(rawInputs)) {
-          if (typeof v === 'string') {
-            const trimmed = v.trim();
-            if (k === 'sscc_code' || k === 'id_lotto_materiale' || k === 'codice_fornitore' || k === 'id_spedizione' || k === 'grado_qualita_stampa_iso' || k === 'qualita_stampa_iso' || k === 'etichetta_gs1') {
-              inputs[k] = trimmed;
-            } else if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
-              try { inputs[k] = JSON.parse(trimmed); } catch { inputs[k] = v; }
-            } else if (trimmed !== '' && !isNaN(Number(trimmed)) && !(trimmed.length >= 10 && /^\d+$/.test(trimmed))) {
-              inputs[k] = Number(trimmed);
-            } else {
-              inputs[k] = v;
-            }
-          } else {
-            inputs[k] = v;
+          const parsed = parseFlexibleInput(v, k);
+          if (parsed !== undefined) {
+            inputs[k] = parsed;
           }
         }
         try {

@@ -4,24 +4,7 @@
  * Provides dynamically calculated, deterministic mathematical & quantum metrics reflecting user inputs.
  */
 import { INDUSTRIAL_THRESHOLDS } from '../data/industrialThresholds';
-
-// Safe numeric coercion: preserves 0 while falling back cleanly on undefined/null/NaN/empty strings
-function finiteOr(value: any, fallback: number): number {
-  if (value === null || value === undefined || value === '') return fallback;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : fallback;
-}
-
-// Safe boolean coercion: parses string 'false'/'0'/'no' cleanly instead of treating non-empty strings as true
-function booleanOr(value: any, fallback: boolean): boolean {
-  if (value === null || value === undefined || value === '') return fallback;
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value !== 0;
-  const normalized = String(value).trim().toLowerCase();
-  if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') return false;
-  if (normalized === 'true' || normalized === '1' || normalized === 'si' || normalized === 'sì' || normalized === 'on') return true;
-  return fallback;
-}
+import { finiteOr, parseBooleanInput as booleanOr } from '../utils/inputParser';
 
 // Deterministic hash + Mulberry32 PRNG for reproducible 100-shot CUDA-Q state sampling
 function hashSeed(input: string): number {
@@ -346,7 +329,8 @@ export const QuantumEngine = {
     const lotto = String(id_lotto_materiale ?? "").trim() || "LOTTO-NOV-2026-0884";
     const forn = String(codice_fornitore ?? "").trim();
     const sscc = String(sscc_code ?? "80332190000458130").trim();
-    const qualita = String(qualita_stampa_iso || "CLASSE_A").trim().toUpperCase();
+    const rawQualita = String(qualita_stampa_iso || "CLASSE_A").trim().toUpperCase().replace(/\s+/g, "_");
+    const qualita = /^(A|B|C|F)$/.test(rawQualita) ? `CLASSE_${rawQualita}` : rawQualita;
 
     const { most_probable, distribution } = sampleQuantumCircuit(4, false, 0.5, `c5:${lotto}:${forn}:${sscc}:${qualita}`);
     const salt_pool = `${most_probable}:HARDWARE_ENTROPY_32B_POOL`;
@@ -849,8 +833,10 @@ export const QuantumEngine = {
         motivo_allarme = `Buffer quasi pieno (${satPct}%) + Coda camion critica (${c})`;
       } else if (bufferPieno) {
         motivo_allarme = `Buffer quasi pieno (${satPct}%)`;
-      } else {
+      } else if (codaCriticaYard) {
         motivo_allarme = `Coda camion critica (${c})`;
+      } else {
+        motivo_allarme = `Tempo medio attesa elevato (${tempo_medio_attesa_min} min > ${INDUSTRIAL_THRESHOLDS.BUFFER_TEMPO_ATTESA_CRIT_MIN} min)`;
       }
     }
 
@@ -1333,8 +1319,8 @@ export const QuantumEngine = {
     sscc_code?: string,
     temp_testina_termica_c: number = 54.2
   ) {
-    const rawGrado = String(grado_qualita_stampa_iso || "CLASSE_A").trim().toUpperCase();
-    const grado = rawGrado;
+    const rawGrado = String(grado_qualita_stampa_iso || "CLASSE_A").trim().toUpperCase().replace(/\s+/g, "_");
+    const grado = /^(A|B|C|F)$/.test(rawGrado) ? `CLASSE_${rawGrado}` : rawGrado;
     const contrasto = Math.min(100.0, Math.max(0.0, finiteOr(contrasto_ottico_pct, 84.5)));
     const sscc = String(sscc_code || "80332190000458130").trim();
     const tempTestina = Math.max(0.0, finiteOr(temp_testina_termica_c, 54.2));
@@ -1411,7 +1397,7 @@ export const QuantumEngine = {
       case 4:
         result = this.calcolo_04_clustering(
           finiteOr(payload.umidita_rilevata ?? payload.umidita, 15.0),
-          finiteOr(payload.spessore_interfalda_mm ?? payload.spessore_mm ?? (payload.spessore_micro !== undefined && Number(payload.spessore_micro) <= 10.0 ? payload.spessore_micro : 2.8), 2.8),
+          finiteOr(payload.spessore_interfalda_mm ?? payload.spessore_mm ?? payload.spessore_micro, 2.8),
           payload.spessore_interfalda_mm !== undefined ? finiteOr(payload.spessore_interfalda_mm, 2.8) : undefined,
           payload.forza_deformazione_n !== undefined ? finiteOr(payload.forza_deformazione_n, 3400) : undefined
         );
@@ -1523,12 +1509,12 @@ export const QuantumEngine = {
         );
         break;
       case 14: {
-        const vib = payload.vibrazione_cuscinetti_g ?? payload.vibrazione_g ??
+        const vib = payload.vibrazione_cuscinetti_g ?? payload.vibrazione_g ?? payload.accelerazione_g ??
           (Array.isArray(payload.vettore_accelerometro) && payload.vettore_accelerometro.length > 0
             ? Math.max(...payload.vettore_accelerometro.map((v: any) => finiteOr(v, 0.36)))
             : 0.36);
         result = this.calcolo_14_qft(
-          finiteOr(payload.rpm_tavola_bema ?? payload.giri_minuto ?? payload.rpm, 48.5),
+          finiteOr(payload.rpm_tavola_bema ?? payload.giri_minuto ?? payload.giri_minuto_rpm ?? payload.rpm, 48.5),
           finiteOr(vib, 0.36),
           finiteOr(payload.pre_stiro_pct ?? payload.rapporto_prestiro_pct, 250.0)
         );
@@ -1536,7 +1522,7 @@ export const QuantumEngine = {
       }
       case 15:
         result = this.calcolo_15_qsvm(
-          finiteOr(payload.tensione_newton, 148.5),
+          finiteOr(payload.tensione_newton ?? payload.tensione_film_n, 148.5),
           finiteOr(payload.pre_stiro_pct, 250.0),
           finiteOr(payload.spessore_film_micron ?? payload.spessore_film, 23.0),
           finiteOr(payload.velocita_svolgimento ?? payload.velocita_svolgimento_ms, 12.4)
@@ -1660,7 +1646,7 @@ export const QuantumEngine = {
     return {
       ...result,
       parametri_elaborati: processedPayload,
-      timestamp_esecuzione: new Date().toLocaleTimeString(),
+      timestamp_esecuzione: new Date().toLocaleTimeString('it-IT'),
       stato_calcolo: "SUCCESSO_COMPLETO",
       tempo_simulazione_qpu_ms: executionTimeMs
     };

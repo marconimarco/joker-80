@@ -7,6 +7,7 @@ import { QuantumEngine } from '../services/quantumEngine';
 import { isCalculationSupportedByPlant, PLANT_NODE_REQUIREMENTS } from '../data/plantNodeCalculations';
 import { ALL_21_CALCULATIONS_LOGIC_DOCUMENTATION } from '../data/quantumLogicDocumentation';
 import { evaluateCalculationStatus, extractDiagnosticSummary } from '../data/industrialThresholds';
+import { parseFlexibleInput, parseBooleanInput } from '../utils/inputParser';
 import { 
   Cpu, 
   Lock, 
@@ -369,8 +370,17 @@ export const QuantumCatalog: React.FC<Props> = ({
         const saved = localStorage.getItem(`joker_custom_telemetry_${tenantId}`);
         if (saved) {
           const parsed = JSON.parse(saved);
-          for (const c of QUANTUM_CALCULATIONS) {
-            fresh[c.id] = { ...fresh[c.id], ...parsed };
+          if (parsed && typeof parsed === 'object') {
+            const normalizedCustom: Record<string, any> = {};
+            for (const [k, v] of Object.entries(parsed)) {
+              const norm = parseFlexibleInput(v, k);
+              if (norm !== undefined) {
+                normalizedCustom[k] = norm;
+              }
+            }
+            for (const c of QUANTUM_CALCULATIONS) {
+              fresh[c.id] = { ...fresh[c.id], ...normalizedCustom };
+            }
           }
         }
       } catch {}
@@ -431,6 +441,11 @@ export const QuantumCatalog: React.FC<Props> = ({
     // Normalizza gli input complessi (vettori/mappe/chiavi legacy) nei campi scalari esposti dalla simulazione
     if (calc.id === 4) {
       current.forza_deformazione_n = current.forza_deformazione_n ?? 3400;
+      if (raw.spessore_interfalda_mm === undefined && raw.spessore_micro !== undefined && Number(raw.spessore_micro) > 10) {
+        current.spessore_interfalda_mm = Number((Number(raw.spessore_micro) / 100.0).toFixed(2));
+      }
+    } else if (calc.id === 6) {
+      current.sagoma_fuori_asse = parseBooleanInput(current.sagoma_fuori_asse, false);
     } else if (calc.id === 7) {
       if (current.pressione_pattini_bar === undefined) {
         current.pressione_pattini_bar = Array.isArray(current.vettore_pressione_bar) && current.vettore_pressione_bar.length > 0
@@ -438,7 +453,7 @@ export const QuantumCatalog: React.FC<Props> = ({
           : 15.0;
       }
       if (current.micro_inclinazione === undefined) current.micro_inclinazione = 0.4;
-      if (current.carico_pattini_integri === undefined) current.carico_pattini_integri = true;
+      current.carico_pattini_integri = parseBooleanInput(current.carico_pattini_integri, true);
     } else if (calc.id === 8) {
       current.nodi_prelievo_count = current.nodi_prelievo_count ?? current.nodi_prelievo ?? (Array.isArray(current.lista_id_pallet) ? current.lista_id_pallet.length : 4);
       current.distanza_totale_metri = current.distanza_totale_metri ?? Math.max(120, Number(current.nodi_prelievo_count) * 85);
@@ -500,11 +515,13 @@ export const QuantumCatalog: React.FC<Props> = ({
     try {
       const primaParsed: Record<string, any> = {};
       for (const [k, v] of Object.entries(simPrimaInputs)) {
-        primaParsed[k] = parseFlexibleInput(v, k);
+        const parsed = parseFlexibleInput(v, k);
+        if (parsed !== undefined) primaParsed[k] = parsed;
       }
       const dopoParsed: Record<string, any> = {};
       for (const [k, v] of Object.entries(simDopoInputs)) {
-        dopoParsed[k] = parseFlexibleInput(v, k);
+        const parsed = parseFlexibleInput(v, k);
+        if (parsed !== undefined) dopoParsed[k] = parsed;
       }
       // Esecuzione in memoria isolata: nessun salvataggio su Firestore o state dashboard
       const primaRes = await QuantumEngine.executeCalculation(calcId, primaParsed);
@@ -528,54 +545,7 @@ export const QuantumCatalog: React.FC<Props> = ({
     return JSON.stringify(val);
   };
 
-  // Helper to flexibly parse user inputs (numbers, JSON arrays, comma-separated lists)
-  const parseFlexibleInput = (val: any, key?: string): any => {
-    if (val === undefined || val === null) return val;
-    if (typeof val === "number" || typeof val === "boolean") return val;
-    if (Array.isArray(val) || (typeof val === "object" && val !== null)) return val;
-    if (typeof val !== "string") return val;
-    const trimmed = val.trim();
-    if (trimmed === "") return 0;
-    // Always preserve SSCC, serials, and alphanumeric identifiers as string
-    if (
-      key === "sscc_code" ||
-      key === "sscc" ||
-      key === "id_lotto_materiale" ||
-      key === "codice_fornitore" ||
-      key === "id_spedizione" ||
-      key === "grado_qualita_stampa_iso" ||
-      key === "qualita_stampa_iso" ||
-      key === "etichetta_gs1" ||
-      (trimmed.length >= 10 && /^\d+$/.test(trimmed)) ||
-      (trimmed.length > 1 && trimmed.startsWith("0") && /^\d+$/.test(trimmed))
-    ) {
-      return trimmed;
-    }
-    // JSON arrays and objects
-    if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
-      try {
-        return JSON.parse(trimmed);
-      } catch {
-        const cleaned = trimmed.replace(/^[|]$/g, "");
-        const parts = cleaned.split(/[,;s]+/).map(s => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
-        const nums = parts.map(Number);
-        if (nums.length > 0 && nums.every(n => !isNaN(n))) return nums;
-        if (parts.length > 0) return parts;
-      }
-    }
-    // Comma-separated list
-    if (trimmed.includes(",")) {
-      const parts = trimmed.split(",").map(s => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
-      const nums = parts.map(Number);
-      if (nums.length > 0 && nums.every(n => !isNaN(n))) return nums;
-      return parts;
-    }
-    // Pure number
-    if (!isNaN(Number(trimmed)) && !isNaN(parseFloat(trimmed))) {
-      return Number(trimmed);
-    }
-    return val;
-  };
+  // parseFlexibleInput e parseBooleanInput sono importati da ../utils/inputParser
 
   // When instructed via voice or navigation to inspect a calculation:
   React.useEffect(() => {
@@ -636,7 +606,8 @@ export const QuantumCatalog: React.FC<Props> = ({
         const raw = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
         const inputs: Record<string, any> = {};
         for (const [k, v] of Object.entries(raw)) {
-          inputs[k] = parseFlexibleInput(v, k);
+          const parsed = parseFlexibleInput(v, k);
+          if (parsed !== undefined) inputs[k] = parsed;
         }
         // Micro-intervallo realistico per simulare la sequenza di campionamento batch GPU/QPU
         await new Promise(r => setTimeout(r, 20));
@@ -701,7 +672,8 @@ export const QuantumCatalog: React.FC<Props> = ({
             const raw = { ...(calc.defaultInputs || {}), ...(notifInputsMap[calc.id] || activeFormInputs[calc.id] || {}) };
             const inputs: Record<string, any> = {};
             for (const [k, v] of Object.entries(raw)) {
-              inputs[k] = parseFlexibleInput(v, k);
+              const parsed = parseFlexibleInput(v, k);
+              if (parsed !== undefined) inputs[k] = parsed;
             }
             const res = await QuantumEngine.executeCalculation(calc.id, inputs);
             if (active && activeTenantIdRef.current === currentTenantId) {
@@ -879,7 +851,8 @@ export const QuantumCatalog: React.FC<Props> = ({
     const rawInputs = { ...(calc.defaultInputs || {}), ...(formInputs[calc.id] || {}) };
     const inputs: Record<string, any> = {};
     for (const [k, v] of Object.entries(rawInputs)) {
-      inputs[k] = parseFlexibleInput(v, k);
+      const parsed = parseFlexibleInput(v, k);
+      if (parsed !== undefined) inputs[k] = parsed;
     }
     
     try {
@@ -1345,8 +1318,8 @@ export const QuantumCatalog: React.FC<Props> = ({
                 <div key={input.key} className="flex items-center justify-between p-2 rounded-lg bg-slate-900/90 border border-slate-800">
                   <span className="text-slate-400 text-xs">{input.label}:</span>
                   <span className="font-bold text-slate-200 text-sm">
-                    {typeof simPrimaInputs[input.key] === 'boolean'
-                      ? (simPrimaInputs[input.key] ? 'SÌ (Attivo)' : 'NO (Disattivo)')
+                    {input.inputType === 'boolean' || typeof simPrimaInputs[input.key] === 'boolean'
+                      ? (parseBooleanInput(simPrimaInputs[input.key], false) ? 'SÌ (Attivo)' : 'NO (Disattivo)')
                       : formatInputValue(simPrimaInputs[input.key])} {input.unit || ''}
                   </span>
                 </div>
@@ -1374,7 +1347,7 @@ export const QuantumCatalog: React.FC<Props> = ({
                   </label>
                   {input.inputType === 'boolean' ? (
                     <select
-                      value={simDopoInputs[input.key] ? 'true' : 'false'}
+                      value={parseBooleanInput(simDopoInputs[input.key], false) ? 'true' : 'false'}
                       onChange={e => setSimDopoInputs(prev => ({ ...prev, [input.key]: e.target.value === 'true' }))}
                       className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-indigo-500/50 text-indigo-100 font-mono text-sm focus:ring-1 focus:ring-indigo-400 focus:outline-none cursor-pointer"
                     >

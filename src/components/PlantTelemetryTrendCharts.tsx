@@ -23,6 +23,7 @@ import {
 import { FactoryTenant, UserAccount } from '../types/quantum';
 import { PlantTelemetryHistoryService, PlantTelemetryRecord } from '../services/plantTelemetryHistory';
 import { PLANT_MACHINERY_NODES } from '../data/plantNodeCalculations';
+import { finiteOr } from '../utils/inputParser';
 
 interface Props {
   activeTenant: FactoryTenant;
@@ -172,11 +173,11 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
       const x = paddingX + (i / Math.max(1, records.length - 1)) * graphW;
       
       // Metric 1: Indice di salute / stabilità (0-100)
-      const health = r.indiceSaluteGlobale || 85;
+      const health = finiteOr(r.indiceSaluteGlobale, 85);
       const yHealth = chartHeight - paddingY - ((health - minVal) / (maxVal - minVal)) * graphH;
 
       // Metric 2: OEE %
-      const oee = r.oee || 80;
+      const oee = finiteOr(r.oee, 80);
       const yOee = chartHeight - paddingY - ((oee - minVal) / (maxVal - minVal)) * graphH;
 
       // Metric 3: Parametro fisico macchina
@@ -184,16 +185,16 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
       let machineVal = 0;
       let machineUnit = '';
       if (selectedMachineKey === 'BEMA_FASCIATORE') {
-        machineVal = machData?.vibrazioneG ?? 0.4;
-        machineUnit = 'mm/s';
+        machineVal = finiteOr(machData?.vibrazioneG, 0.36);
+        machineUnit = 'g';
       } else if (selectedMachineKey === 'FLOTTA_LGV') {
-        machineVal = machData?.batteriaSoC ?? 85;
+        machineVal = finiteOr(machData?.batteriaSoC, 85);
         machineUnit = '% SoC';
       } else if (selectedMachineKey === 'BAIE_INBOUND_OUTBOUND') {
-        machineVal = machData?.ritardoMinuti ?? 12;
+        machineVal = finiteOr(machData?.ritardoMinuti, 12);
         machineUnit = 'min ritardo';
       } else {
-        machineVal = machData?.cicliOra ?? 85;
+        machineVal = finiteOr(machData?.cicliOra, 85);
         machineUnit = 'cicli/h';
       }
 
@@ -613,7 +614,17 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
             {scopeLevel === 'macchinario' && (
               <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
                 <span className="w-3 h-1 bg-emerald-400 rounded-full" />
-                <span>Parametro Fisico ({selectedMachineKey === 'BEMA_FASCIATORE' ? 'Vibrazioni mm/s' : selectedMachineKey === 'FLOTTA_LGV' ? 'Batteria SoC %' : 'Ritardo min'})</span>
+                <span>
+                  Parametro Fisico ({
+                    selectedMachineKey === 'BEMA_FASCIATORE'
+                      ? 'Vibrazioni (g)'
+                      : selectedMachineKey === 'FLOTTA_LGV'
+                        ? 'Batteria SoC (%)'
+                        : selectedMachineKey === 'BAIE_INBOUND_OUTBOUND'
+                          ? 'Ritardo (min)'
+                          : 'Cicli/ora'
+                  })
+                </span>
               </div>
             )}
           </div>
@@ -742,6 +753,13 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
               <div>Salute Quantistica: <strong className="text-cyan-400">{hoveredPoint.indiceSaluteGlobale}%</strong></div>
               <div>OEE Linea: <strong className="text-purple-400">{hoveredPoint.oee}%</strong></div>
               <div>Throughput: <strong className="text-slate-300">{hoveredPoint.throughputPalletOra} pallet/ora</strong></div>
+              {scopeLevel === 'macchinario' && (() => {
+                const hoveredPt = pointsData.find(p => p.record.id === hoveredPoint.id);
+                if (!hoveredPt) return null;
+                return (
+                  <div>Parametro Nodo: <strong className="text-emerald-400">{hoveredPt.machineVal} {hoveredPt.machineUnit}</strong></div>
+                );
+              })()}
               {hoveredPoint.criticiCount > 0 ? (
                 <div className="text-rose-400 font-bold">⚠️ {hoveredPoint.criticiCount} Problematica Critica Rilevata</div>
               ) : hoveredPoint.attenzioneCount > 0 ? (

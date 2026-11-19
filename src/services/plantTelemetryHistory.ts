@@ -1,5 +1,7 @@
 import { FactoryTenant, QuantumExecutionResult } from '../types/quantum';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
+import { INDUSTRIAL_THRESHOLDS } from '../data/industrialThresholds';
+import { finiteOr } from '../utils/inputParser';
 
 export type TelemetryDataSource = 
   | 'DAEMON_PYTHON_MTLS' 
@@ -52,6 +54,40 @@ export interface PlantTelemetryRecord {
 
 const STORAGE_KEY_HISTORY = 'joker80_telemetry_history_records_v2';
 
+const LEGACY_CALC_TITLES: Record<number, string> = {
+  1: QUANTUM_CALCULATIONS.find(c => c.id === 1)?.name || 'Quantum Boltzmann Machines (QBM)',
+  14: QUANTUM_CALCULATIONS.find(c => c.id === 14)?.name || 'Quantum Fourier Transform (QFT)',
+  16: QUANTUM_CALCULATIONS.find(c => c.id === 16)?.name || 'Dynamic Graph QAOA & QRL',
+  17: QUANTUM_CALCULATIONS.find(c => c.id === 17)?.name || 'Quantum Bipartite Matching',
+};
+
+function sanitizeHistoryRecord(record: PlantTelemetryRecord): PlantTelemetryRecord {
+  const updatedCalcoli = Array.isArray(record.calcoli)
+    ? record.calcoli.map(c => {
+        const canonicalName = LEGACY_CALC_TITLES[c.calcId] || c.calcNome;
+        let metricaValore = c.metricaValore;
+        let metricaEtichetta = c.metricaEtichetta;
+        if (c.calcId === 14 && typeof metricaValore === 'string' && metricaValore.includes('mm/s')) {
+          metricaValore = metricaValore.replace('mm/s', 'g');
+        }
+        if (c.calcId === 16 && metricaEtichetta === 'QPU Routing Fidelity') {
+          metricaEtichetta = 'Fluidità Rotta LGV';
+        }
+        return {
+          ...c,
+          calcNome: canonicalName,
+          metricaValore,
+          metricaEtichetta,
+        };
+      })
+    : [];
+
+  return {
+    ...record,
+    calcoli: updatedCalcoli,
+  };
+}
+
 export class PlantTelemetryHistoryService {
   /**
    * Initializes or gets the full historical time-series logs
@@ -62,7 +98,9 @@ export class PlantTelemetryHistoryService {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.sort((a, b) => a.timestampEpoch - b.timestampEpoch);
+          return parsed
+            .map(sanitizeHistoryRecord)
+            .sort((a, b) => a.timestampEpoch - b.timestampEpoch);
         }
       }
     } catch (e) {
@@ -122,16 +160,21 @@ export class PlantTelemetryHistoryService {
         else if (item.livelloAllarme === 'ATTENZIONE') attenzione++;
         else normali++;
 
-        const risk = item.res.probabilita_fermo_pct 
-          ? Number(String(item.res.probabilita_fermo_pct).replace('%', '')) 
-          : (item.livelloAllarme === 'CRITICO' ? 84 : item.livelloAllarme === 'ATTENZIONE' ? 45 : 12);
+        const rawRisk =
+          item.res.probabilita_fermo_linea_pct ??
+          item.res.probabilita_fermo_pct ??
+          item.res.congestione_percentuale ??
+          item.res.tasso_scarto_stimato_pct;
+        const fallbackRisk = item.livelloAllarme === 'CRITICO' ? 84 : item.livelloAllarme === 'ATTENZIONE' ? 45 : 12;
+        const cleanedRisk = rawRisk !== undefined && rawRisk !== null ? String(rawRisk).replace('%', '').trim() : undefined;
+        const risk = finiteOr(cleanedRisk, fallbackRisk);
 
         calcoli.push({
           calcId: item.calcId,
           calcNome: item.calcNome,
           sottoFunzione: item.res.sotto_funzione || `Algoritmo ${item.calcId}`,
           livelloAllarme: item.livelloAllarme,
-          metricaValore: item.res.metrica_principale_valore || `${risk}%`,
+          metricaValore: item.res.metrica_principale_valore ?? `${risk}%`,
           metricaEtichetta: item.res.metrica_principale_etichetta || 'Indice Rischio QPU',
           rischioPercent: risk
         });
@@ -146,12 +189,16 @@ export class PlantTelemetryHistoryService {
     const health = customMetrics?.indiceSalute ?? Math.max(30, Math.min(99, 100 - (critici * 20 + attenzione * 6)));
     const oeeVal = customMetrics?.oee ?? Math.round(health * 0.94);
 
+    const bemaVibVal = finiteOr(customMetrics?.bemaVibrazione, Number((0.30 + Math.random() * 0.14).toFixed(2)));
+    const lgvSocVal = finiteOr(customMetrics?.lgvSoc, Math.round(75 + Math.random() * 20));
+    const baieRitardoVal = finiteOr(customMetrics?.baieRitardo, Math.round(8 + Math.random() * 14));
+
     const macchinari: Record<string, MachineTelemetrySnapshot> = {
       BEMA_FASCIATORE: {
         machineKey: 'BEMA_FASCIATORE',
         nome: 'Fasciatore Robotico Bema Silkworm 01',
-        stato: (customMetrics?.bemaVibrazione || 0.4) > 1.2 ? 'ALLARME' : 'IN_MARCIA',
-        vibrazioneG: customMetrics?.bemaVibrazione ?? Number((0.35 + Math.random() * 0.2).toFixed(2)),
+        stato: bemaVibVal > INDUSTRIAL_THRESHOLDS.BEMA_VIBRAZIONE_CRIT_G ? 'ALLARME' : 'IN_MARCIA',
+        vibrazioneG: bemaVibVal,
         temperaturaC: Math.round(48 + Math.random() * 6),
         velocitaRpm: Math.round(33 + Math.random() * 4),
         batteriaSoC: 100,
@@ -162,11 +209,11 @@ export class PlantTelemetryHistoryService {
       FLOTTA_LGV: {
         machineKey: 'FLOTTA_LGV',
         nome: 'Flotta Navette Laser LGV E80 (4 Unità)',
-        stato: (customMetrics?.lgvSoc || 85) < 30 ? 'ALLARME' : 'IN_MARCIA',
+        stato: lgvSocVal < INDUSTRIAL_THRESHOLDS.LGV_SOC_CRIT_PCT ? 'ALLARME' : 'IN_MARCIA',
         vibrazioneG: 0.18,
         temperaturaC: 38,
         velocitaRpm: 1200,
-        batteriaSoC: customMetrics?.lgvSoc ?? Math.round(75 + Math.random() * 20),
+        batteriaSoC: lgvSocVal,
         pressioneVuotoBar: -0.85,
         cicliOra: Math.round(110 + Math.random() * 15),
         ritardoMinuti: 0
@@ -186,14 +233,14 @@ export class PlantTelemetryHistoryService {
       BAIE_INBOUND_OUTBOUND: {
         machineKey: 'BAIE_INBOUND_OUTBOUND',
         nome: 'Baie di Carico & Scarico WMS',
-        stato: (customMetrics?.baieRitardo || 0) > 35 ? 'ALLARME' : 'IN_MARCIA',
+        stato: baieRitardoVal > INDUSTRIAL_THRESHOLDS.BUFFER_TEMPO_ATTESA_CRIT_MIN ? 'ALLARME' : 'IN_MARCIA',
         vibrazioneG: 0.08,
         temperaturaC: 22,
         velocitaRpm: 0,
         batteriaSoC: 100,
         pressioneVuotoBar: -0.80,
         cicliOra: 22,
-        ritardoMinuti: customMetrics?.baieRitardo ?? Math.round(8 + Math.random() * 14)
+        ritardoMinuti: baieRitardoVal
       },
       ISOLA_ROBOT: {
         machineKey: 'ISOLA_ROBOT',
@@ -343,9 +390,15 @@ export class PlantTelemetryHistoryService {
         const health = Math.round(Math.max(68, Math.min(99, baseHealth - critici * 15 - attenzione * 5)));
         const oee = Math.round(health * 0.93);
 
-        const bemaVib = Number((0.32 + (idx === 4 ? 0.95 : 0) + (Math.sin(idx) * 0.1)).toFixed(2));
-        const lgvBat = Math.max(38, Math.round(86 - ((idx % 5) * 11)));
-        const baieRit = Math.max(4, Math.round(14 + (idx === 10 ? 38 : Math.sin(idx * 1.5) * 8)));
+        const bemaVib = idx === 4
+          ? 0.78
+          : Number((0.30 + Math.sin(idx) * 0.08).toFixed(2));
+        const lgvBat = idx === 11
+          ? 42
+          : Math.max(54, Math.round(88 - ((idx % 5) * 7)));
+        const baieRit = idx === 10
+          ? 42
+          : Math.max(4, Math.round(14 + Math.sin(idx * 1.5) * 6));
 
         records.push({
           id: `seed-${plant.id}-${idx}`,
@@ -367,7 +420,7 @@ export class PlantTelemetryHistoryService {
             BEMA_FASCIATORE: {
               machineKey: 'BEMA_FASCIATORE',
               nome: 'Fasciatore Robotico Bema Silkworm 01',
-              stato: bemaVib > 1.0 ? 'ALLARME' : 'IN_MARCIA',
+              stato: bemaVib > INDUSTRIAL_THRESHOLDS.BEMA_VIBRAZIONE_CRIT_G ? 'ALLARME' : 'IN_MARCIA',
               vibrazioneG: bemaVib,
               temperaturaC: Math.round(47 + idx * 0.5),
               velocitaRpm: Math.round(34 + Math.sin(idx) * 2),
@@ -379,7 +432,7 @@ export class PlantTelemetryHistoryService {
             FLOTTA_LGV: {
               machineKey: 'FLOTTA_LGV',
               nome: 'Flotta Navette Laser LGV E80',
-              stato: lgvBat < 45 ? 'ALLARME' : 'IN_MARCIA',
+              stato: lgvBat < INDUSTRIAL_THRESHOLDS.LGV_SOC_CRIT_PCT ? 'ALLARME' : 'IN_MARCIA',
               vibrazioneG: 0.18,
               temperaturaC: 37,
               velocitaRpm: 1200,
@@ -403,7 +456,7 @@ export class PlantTelemetryHistoryService {
             BAIE_INBOUND_OUTBOUND: {
               machineKey: 'BAIE_INBOUND_OUTBOUND',
               nome: 'Baie di Carico WMS',
-              stato: baieRit > 30 ? 'ALLARME' : 'IN_MARCIA',
+              stato: baieRit > INDUSTRIAL_THRESHOLDS.BUFFER_TEMPO_ATTESA_CRIT_MIN ? 'ALLARME' : 'IN_MARCIA',
               vibrazioneG: 0.08,
               temperaturaC: 21,
               velocitaRpm: 0,
@@ -452,39 +505,43 @@ export class PlantTelemetryHistoryService {
           calcoli: [
             {
               calcId: 1,
-              calcNome: 'Ottimizzazione Dinamica Piazzale e Assegnazione Baie',
-              sottoFunzione: 'Dock Scheduler',
-              livelloAllarme: baieRit > 30 ? 'ATTENZIONE' : 'NORMALE',
+              calcNome: LEGACY_CALC_TITLES[1],
+              sottoFunzione: 'Inbound Scheduler',
+              livelloAllarme: baieRit > INDUSTRIAL_THRESHOLDS.BUFFER_TEMPO_ATTESA_CRIT_MIN ? 'ATTENZIONE' : 'NORMALE',
               metricaValore: `${Math.round(82 + Math.sin(idx) * 10)}%`,
               metricaEtichetta: 'Efficienza Baie',
               rischioPercent: Math.round(18 - Math.sin(idx) * 10)
             },
             {
               calcId: 14,
-              calcNome: 'Risonanza Dinamica Braccio Rotante BEMA Silkworm',
-              sottoFunzione: 'Vibration & Bearing FFT',
-              livelloAllarme: bemaVib > 0.8 ? 'CRITICO' : 'NORMALE',
-              metricaValore: `${bemaVib} mm/s`,
-              metricaEtichetta: 'RMS Vibrazione Cuscinetti',
-              rischioPercent: bemaVib > 0.8 ? 88 : 12
+              calcNome: LEGACY_CALC_TITLES[14],
+              sottoFunzione: 'Bema Wrapping Controller',
+              livelloAllarme: bemaVib > INDUSTRIAL_THRESHOLDS.BEMA_VIBRAZIONE_CRIT_G ? 'CRITICO' : 'NORMALE',
+              metricaValore: `${bemaVib} g`,
+              metricaEtichetta: 'Vibrazione Cuscinetti (g)',
+              rischioPercent: bemaVib > INDUSTRIAL_THRESHOLDS.BEMA_VIBRAZIONE_CRIT_G ? 88 : 12
             },
             {
               calcId: 16,
-              calcNome: 'Routing Dinamico Flotta Navette LGV Anti-Deadlock',
-              sottoFunzione: 'LGV Conflict-Free Routing',
+              calcNome: LEGACY_CALC_TITLES[16],
+              sottoFunzione: 'Routing & Traffic Engine',
               livelloAllarme: 'NORMALE',
               metricaValore: '99.4%',
-              metricaEtichetta: 'QPU Routing Fidelity',
+              metricaEtichetta: 'Fluidità Rotta LGV',
               rischioPercent: 8
             },
             {
               calcId: 17,
-              calcNome: 'Gestione Stocastica Stato di Carica BMS Batterie Flotta AGV',
-              sottoFunzione: 'Li-Ion BMS Stochastic Optimization',
-              livelloAllarme: lgvBat < 45 ? 'ATTENZIONE' : 'NORMALE',
+              calcNome: LEGACY_CALC_TITLES[17],
+              sottoFunzione: 'Task Allocation Engine',
+              livelloAllarme: lgvBat < INDUSTRIAL_THRESHOLDS.LGV_SOC_CRIT_PCT
+                ? 'CRITICO'
+                : lgvBat < INDUSTRIAL_THRESHOLDS.LGV_SOC_WARN_PCT
+                  ? 'ATTENZIONE'
+                  : 'NORMALE',
               metricaValore: `${lgvBat}%`,
               metricaEtichetta: 'Media SoC Flotta',
-              rischioPercent: lgvBat < 45 ? 58 : 15
+              rischioPercent: lgvBat < INDUSTRIAL_THRESHOLDS.LGV_SOC_CRIT_PCT ? 82 : lgvBat < INDUSTRIAL_THRESHOLDS.LGV_SOC_WARN_PCT ? 58 : 15
             }
           ]
         });
