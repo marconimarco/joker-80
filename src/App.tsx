@@ -92,6 +92,7 @@ export default function App() {
   const handleSelectTenant = useCallback((tenant: FactoryTenant) => {
     activeTenantIdRef.current = tenant.id;
     setActiveTenant(tenant);
+    setImportedCsvInputs({});
     setIsCompanyPlantSelectorOpen(false);
     const cached = PlantTelemetryScanner.getStoredSummary(tenant.id);
     if (cached && cached.stabilimentoId === tenant.id) {
@@ -287,6 +288,15 @@ export default function App() {
               activeTenant={activeTenant}
               onOpenCsvUpload={() => setIsCsvModalOpen(true)}
               importedInputs={importedCsvInputs}
+              onResetCsvTelemetry={() => {
+                try {
+                  localStorage.removeItem(`joker_custom_telemetry_${activeTenant.id}`);
+                  localStorage.removeItem(`joker_custom_telemetry_meta_${activeTenant.id}`);
+                  window.dispatchEvent(new CustomEvent('csv-telemetry-updated', { detail: { tenantId: activeTenant.id } }));
+                } catch {}
+                setImportedCsvInputs({});
+                runAutoTelemetryScan(activeTenant);
+              }}
               currentUser={currentUser}
               tenants={tenants}
               onSelectTenant={handleSelectTenant}

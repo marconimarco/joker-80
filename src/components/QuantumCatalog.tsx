@@ -8,6 +8,7 @@ import { isCalculationSupportedByPlant, PLANT_NODE_REQUIREMENTS } from '../data/
 import { ALL_21_CALCULATIONS_LOGIC_DOCUMENTATION } from '../data/quantumLogicDocumentation';
 import { evaluateCalculationStatus, extractDiagnosticSummary } from '../data/industrialThresholds';
 import { parseFlexibleInput, parseBooleanInput } from '../utils/inputParser';
+import { CANONICAL_CSV_TARGETS } from '../utils/csvTelemetryParser';
 import { 
   Cpu, 
   Lock, 
@@ -64,6 +65,7 @@ interface Props {
   activeTenant?: FactoryTenant;
   onOpenCsvUpload?: () => void;
   importedInputs?: Record<string, any>;
+  onResetCsvTelemetry?: () => void;
   currentUser?: UserAccount;
   tenants?: FactoryTenant[];
   scanSummary?: AutoScanSummary | null;
@@ -340,6 +342,7 @@ export const QuantumCatalog: React.FC<Props> = ({
   activeTenant,
   onOpenCsvUpload,
   importedInputs,
+  onResetCsvTelemetry,
   currentUser,
   tenants = [],
   scanSummary,
@@ -359,6 +362,50 @@ export const QuantumCatalog: React.FC<Props> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isLogicDocModalOpen, setIsLogicDocModalOpen] = useState<boolean>(false);
   const [showTrendCharts, setShowTrendCharts] = useState<boolean>(false);
+  const [showCsvVerification, setShowCsvVerification] = useState<boolean>(false);
+  const [csvTelemetryRefreshTick, setCsvTelemetryRefreshTick] = useState<number>(0);
+
+  useEffect(() => {
+    const onCsvUpdated = () => {
+      setCsvTelemetryRefreshTick(t => t + 1);
+    };
+    window.addEventListener('csv-telemetry-updated', onCsvUpdated);
+    return () => window.removeEventListener('csv-telemetry-updated', onCsvUpdated);
+  }, []);
+
+  const activeCsvSnapshot = useMemo(() => {
+    const empty = {
+      params: {} as Record<string, any>,
+      uploads: [] as Array<{
+        fileName: string;
+        formatType: 'multi_node' | 'single_machine' | 'vertical_kv';
+        rowCount: number;
+        paramCount: number;
+        paramKeys: string[];
+        uploadedAt: string;
+      }>
+    };
+    if (!activeTenant?.id) return empty;
+    try {
+      const rawParams = localStorage.getItem(`joker_custom_telemetry_${activeTenant.id}`);
+      const parsedParams = rawParams ? JSON.parse(rawParams) : {};
+      const params =
+        parsedParams && typeof parsedParams === 'object' && !Array.isArray(parsedParams)
+          ? parsedParams
+          : {};
+
+      const rawMeta = localStorage.getItem(`joker_custom_telemetry_meta_${activeTenant.id}`);
+      const parsedMeta = rawMeta ? JSON.parse(rawMeta) : [];
+      const uploads = Array.isArray(parsedMeta) ? parsedMeta : [];
+
+      return { params, uploads };
+    } catch {
+      return empty;
+    }
+  }, [activeTenant?.id, importedInputs, csvTelemetryRefreshTick]);
+
+  const hasActiveCsvData =
+    Object.keys(activeCsvSnapshot.params).length > 0 || activeCsvSnapshot.uploads.length > 0;
 
   const buildTenantFormInputs = React.useCallback((tenantId?: string) => {
     const fresh: Record<number, Record<string, any>> = {};
@@ -1584,22 +1631,58 @@ export const QuantumCatalog: React.FC<Props> = ({
       {/* Active Plant Nodes & Calculations Banner with Carica CSV */}
       {activeTenant && (
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-cyan-950/30 to-slate-900 border border-cyan-500/40 shadow-xl flex flex-col gap-4 font-mono text-xs">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="p-3 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/40 shrink-0 shadow-sm shadow-cyan-500/20">
-              <Cpu className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-white text-base sm:text-lg">
-                  Calcoli dello Stabilimento: {activeTenant.nome}
-                </span>
-                <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  {activeTenant.azienda || 'Azienda'} #{activeTenant.numeroStabilimento || 1}
-                </span>
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="p-3 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/40 shrink-0 shadow-sm shadow-cyan-500/20">
+                <Cpu className="w-5 h-5 animate-pulse" />
               </div>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
-                Visualizzazione esclusiva dei calcoli compatibili con i macchinari e i nodi fisici autorizzati per "{activeTenant.nome}" ({activeTenant.sito}).
-              </p>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-white text-base sm:text-lg">
+                    Calcoli dello Stabilimento: {activeTenant.nome}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    {activeTenant.azienda || 'Azienda'} #{activeTenant.numeroStabilimento || 1}
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
+                  Visualizzazione esclusiva dei calcoli compatibili con i macchinari e i nodi fisici autorizzati per "{activeTenant.nome}" ({activeTenant.sito}).
+                </p>
+              </div>
+            </div>
+
+            {/* Indicatore persistente stato CSV caricati per lo stabilimento attivo */}
+            <div className="shrink-0">
+              {hasActiveCsvData ? (
+                <div className="px-3 py-2 rounded-xl bg-emerald-950/60 border border-emerald-500/50 flex flex-wrap items-center gap-2.5 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div className="leading-tight">
+                      <span className="block text-[11px] font-bold text-emerald-300">
+                        CSV Attivi ({activeCsvSnapshot.uploads.length || 1} {activeCsvSnapshot.uploads.length === 1 ? 'file' : 'file'} • {Object.keys(activeCsvSnapshot.params).length} parametri)
+                      </span>
+                      {activeCsvSnapshot.uploads[0] && (
+                        <span className="block text-[10px] text-emerald-200/80 truncate max-w-[230px]">
+                          Ultimo: {activeCsvSnapshot.uploads[0].fileName} ({activeCsvSnapshot.uploads[0].uploadedAt})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCsvVerification(v => !v)}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/50 text-emerald-100 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>{showCsvVerification ? 'Nascondi Verifica' : 'Verifica Dati Caricati'}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-700/80 text-slate-400 text-[11px] flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>Fonte dati attuale: Telemetria Gateway Impianto (nessun CSV caricato)</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1691,6 +1774,91 @@ export const QuantumCatalog: React.FC<Props> = ({
               </button>
             )}
           </div>
+
+          {/* PANNELLO DI VERIFICA DATI CSV CARICATI */}
+          {hasActiveCsvData && showCsvVerification && (
+            <div className="p-4 rounded-xl bg-slate-950/90 border border-emerald-500/40 space-y-3 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="font-bold text-emerald-300 text-xs sm:text-sm">
+                    Riepilogo File CSV Caricati e Parametri Attivi per "{activeTenant.nome}"
+                  </span>
+                </div>
+                {onResetCsvTelemetry && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onResetCsvTelemetry();
+                      setShowCsvVerification(false);
+                      setToastMessage('Dati CSV rimossi: ripristinata la telemetria live del gateway.');
+                      setTimeout(() => setToastMessage(null), 4000);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 text-rose-200 text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Ripristina Dati Gateway Live</span>
+                  </button>
+                )}
+              </div>
+
+              {activeCsvSnapshot.uploads.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                    File Caricati ({activeCsvSnapshot.uploads.length}):
+                  </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {activeCsvSnapshot.uploads.map((u, idx) => (
+                      <div key={`${u.fileName}_${idx}`} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-bold text-white text-xs truncate">{u.fileName}</div>
+                          <div className="text-[10px] text-slate-400 font-sans">
+                            {u.formatType === 'single_machine'
+                              ? 'Tipologia 2: Log Telematico Alta Velocità'
+                              : u.formatType === 'vertical_kv'
+                                ? 'Lista Parametri Verticale'
+                                : 'Tipologia 1: Log Eventi e Stati'}{' '}
+                            • {u.rowCount} righe • {u.paramCount} parametri
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] shrink-0">
+                          Caricato alle {u.uploadedAt}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                  Parametri CSV Attualmente Usati dai 21 Calcoli ({Object.keys(activeCsvSnapshot.params).length}):
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {Object.entries(activeCsvSnapshot.params).map(([key, val]) => {
+                    const meta = CANONICAL_CSV_TARGETS.find(t => t.key === key);
+                    return (
+                      <div key={key} className="px-2.5 py-2 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-bold text-slate-200 truncate">
+                            {meta ? meta.label : key}
+                          </span>
+                          {meta && (
+                            <span className="block text-[10px] text-slate-400 font-sans truncate">
+                              Usato in: {meta.calcs}
+                            </span>
+                          )}
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-bold text-xs shrink-0">
+                          {String(val)}{meta?.unit ? ` ${meta.unit}` : ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

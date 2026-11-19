@@ -74,14 +74,31 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
   const [rawCsvText, setRawCsvText] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset wizard state cleanly when modal opens
+  const resetUploadedFileState = () => {
+    setFile(null);
+    setRawCsvText(null);
+    setParsedRows([]);
+    setParsedInputs({});
+    setColumns([]);
+    setColumnAnalysis([]);
+    setColumnOverrides({});
+    setDetectedFormat(null);
+    setDetectedNodes({ existing: [], unknown: [] });
+    setSelectedMachineId('AUTO_DETECT');
+    setUploadSuccess(null);
+    setErrorMessage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Reset wizard state cleanly whenever modal opens or active tenant changes
   useEffect(() => {
     if (isOpen) {
       setWizardStep(1);
-      setUploadSuccess(null);
-      setErrorMessage(null);
+      resetUploadedFileState();
     }
-  }, [isOpen]);
+  }, [isOpen, activeTenant.id]);
 
   const plantMachines = useMemo(() => {
     const list: Array<{ id: string; nome: string; categoria: string }> = [];
@@ -217,6 +234,9 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
       };
       reader.readAsText(selected);
     }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -268,20 +288,26 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
         });
       }
 
+      const currentMachines = activeTenant.plantTopology?.macchinari || [];
+
       if (detectedNodes.unknown.length > 0) {
         detectedNodes.unknown.forEach((unknownName, idx) => {
-          newCustomMachines.push({
-            id: `CUSTOM_${Date.now()}_${idx}`,
-            nome: `${unknownName} (Nuovo Nodo Rilevato da CSV)`,
-            tipo: 'ALTRO',
-            reparto: 'Linee Ausiliarie Telemetria',
-            plcTag: `DB_CSV_${unknownName.toUpperCase().replace(/\s+/g, '_')}`,
-            stato: 'IN_MARCIA'
-          });
+          const alreadyExists = currentMachines.some(
+            m => m.nome.toLowerCase().includes(unknownName.toLowerCase())
+          );
+          if (!alreadyExists) {
+            newCustomMachines.push({
+              id: `CUSTOM_${Date.now()}_${idx}`,
+              nome: `${unknownName} (Nuovo Nodo Rilevato da CSV)`,
+              tipo: 'ALTRO',
+              reparto: 'Linee Ausiliarie Telemetria',
+              plcTag: `DB_CSV_${unknownName.toUpperCase().replace(/\s+/g, '_')}`,
+              stato: 'IN_MARCIA'
+            });
+          }
         });
       }
 
-      const currentMachines = activeTenant.plantTopology?.macchinari || [];
       const updatedTenant: FactoryTenant = {
         ...activeTenant,
         plantTopology: {
@@ -291,11 +317,58 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
         } as any
       };
 
-      localStorage.setItem(`joker_custom_telemetry_${activeTenant.id}`, JSON.stringify(extractedInputs));
+      let previousCustomInputs: Record<string, any> = {};
+      try {
+        const rawPrev = localStorage.getItem(`joker_custom_telemetry_${activeTenant.id}`);
+        if (rawPrev) {
+          const parsedPrev = JSON.parse(rawPrev);
+          if (parsedPrev && typeof parsedPrev === 'object' && !Array.isArray(parsedPrev)) {
+            previousCustomInputs = parsedPrev;
+          }
+        }
+      } catch {
+        previousCustomInputs = {};
+      }
+      const mergedInputs: Record<string, any> = {
+        ...previousCustomInputs,
+        ...extractedInputs
+      };
+
+      localStorage.setItem(`joker_custom_telemetry_${activeTenant.id}`, JSON.stringify(mergedInputs));
+      try {
+        const metaKey = `joker_custom_telemetry_meta_${activeTenant.id}`;
+        const rawMeta = localStorage.getItem(metaKey);
+        const existingMeta: Array<{
+          fileName: string;
+          formatType: 'multi_node' | 'single_machine' | 'vertical_kv';
+          rowCount: number;
+          paramCount: number;
+          paramKeys: string[];
+          uploadedAt: string;
+        }> = rawMeta ? JSON.parse(rawMeta) : [];
+        const safeList = Array.isArray(existingMeta) ? existingMeta : [];
+        const newEntry = {
+          fileName: file.name,
+          formatType: detectedFormat || formatType,
+          rowCount: parsedRows.length,
+          paramCount: Object.keys(extractedInputs).length,
+          paramKeys: Object.keys(extractedInputs),
+          uploadedAt: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        };
+        const updatedMeta = [
+          newEntry,
+          ...safeList.filter(item => item.fileName !== file.name)
+        ].slice(0, 8);
+        localStorage.setItem(metaKey, JSON.stringify(updatedMeta));
+      } catch {}
+
       AuthStorage.updateTenant(updatedTenant);
 
       onTenantUpdated?.(updatedTenant);
-      onApplyInputsToCatalog?.(extractedInputs);
+      onApplyInputsToCatalog?.(mergedInputs);
+      try {
+        window.dispatchEvent(new CustomEvent('csv-telemetry-updated', { detail: { tenantId: activeTenant.id } }));
+      } catch {}
 
       const isHighSpeed = columns.some(c => {
         const lc = c.toLowerCase();
@@ -308,26 +381,26 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
           undefined,
           {
             bemaVibrazione:
-              extractedInputs.vibrazione_cuscinetti_g ??
-              extractedInputs.vibrazione_g ??
-              extractedInputs.accelerazione_g ??
-              extractedInputs.vibrazione_cuscinetti_bema_g,
+              mergedInputs.vibrazione_cuscinetti_g ??
+              mergedInputs.vibrazione_g ??
+              mergedInputs.accelerazione_g ??
+              mergedInputs.vibrazione_cuscinetti_bema_g,
             lgvSoc:
-              extractedInputs.soc_medio_flotta_pct ??
-              extractedInputs.stato_carica_medio_soc ??
-              extractedInputs.batteria_soc,
-            baieRitardo: extractedInputs.ritardo_stimato_minuti ?? extractedInputs.minuti_ritardo
+              mergedInputs.soc_medio_flotta_pct ??
+              mergedInputs.stato_carica_medio_soc ??
+              mergedInputs.batteria_soc,
+            baieRitardo: mergedInputs.ritardo_stimato_minuti ?? mergedInputs.minuti_ritardo
           }
         );
       } catch {}
 
       const unknownMsg =
-        detectedNodes.unknown.length > 0
-          ? ` (${detectedNodes.unknown.length} nuovi nodi ausiliari censiti con successo)`
+        newCustomMachines.length > 0
+          ? ` (${newCustomMachines.length} nuovi nodi ausiliari censiti con successo)`
           : '';
 
       setUploadSuccess(
-        `Telemetria CSV caricata con successo! ${Object.keys(extractedInputs).length} parametri importati per lo stabilimento "${activeTenant.nome}"${unknownMsg}.`
+        `Telemetria CSV caricata con successo! ${Object.keys(extractedInputs).length} parametri importati da questo file (${Object.keys(mergedInputs).length} totali attivi) per "${activeTenant.nome}"${unknownMsg}.`
       );
 
       setTimeout(() => {
@@ -637,9 +710,22 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
                   </p>
                 </div>
                 {file && (
-                  <span className="inline-block px-2.5 py-1 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px]">
-                    Caricato: {(file.size / 1024).toFixed(1)} KB • {parsedRows.length} righe • {columns.length} colonne
-                  </span>
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                    <span className="inline-block px-2.5 py-1 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px]">
+                      Caricato: {(file.size / 1024).toFixed(1)} KB • {parsedRows.length} righe • {columns.length} colonne
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resetUploadedFileState();
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      <X className="w-3 h-3 text-rose-400" />
+                      <span>Rimuovi / Carica un altro file</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -680,12 +766,12 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
               </div>
 
               {/* Avviso cambio automatico se il file caricato appartiene all'altra tipologia */}
-              {formatMismatch && (
+              {file && formatMismatch && (
                 <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/50 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-sans">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <span>
-                      Il file caricato ha la struttura di{' '}
+                      Il file attualmente caricato (<strong className="font-mono text-amber-100">{file.name}</strong>) ha la struttura di{' '}
                       <strong>
                         {detectedFormat === 'single_machine'
                           ? 'Tipologia 2 (Log Telematico Alta Velocità)'
