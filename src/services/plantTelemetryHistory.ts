@@ -113,18 +113,78 @@ export class PlantTelemetryHistoryService {
   }
 
   /**
-   * Save records to localStorage
+   * Save records to localStorage (retaining up to 366 days & 2000 compact points)
    */
   private static saveRecords(records: PlantTelemetryRecord[]) {
     try {
-      // Keep up to 300 points for memory safety
-      const trimmed = records.slice(-300);
-      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(trimmed));
+      const oneYearAgo = Date.now() - 366 * 24 * 3600 * 1000;
+      const annual = records
+        .filter(r => typeof r.timestampEpoch === 'number' && r.timestampEpoch >= oneYearAgo)
+        .sort((a, b) => a.timestampEpoch - b.timestampEpoch)
+        .slice(-2000);
+
+      // Keep lightweight calcoli summary when history grows to stay well within localStorage quota
+      const compacted = annual.map(r => ({
+        ...r,
+        calcoli: Array.isArray(r.calcoli)
+          ? r.calcoli.filter(c => [1, 2, 14, 15, 16, 17, 19, 20].includes(c.calcId))
+          : []
+      }));
+
+      try {
+        localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(compacted));
+      } catch {
+        // Fallback if browser localStorage quota is tight
+        localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(compacted.slice(-800)));
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('telemetry-history-updated'));
       }
     } catch (e) {
       console.error('Failed to save telemetry records', e);
+    }
+  }
+
+  /**
+   * Synchronize annual chronological history with backend disk storage (/api/telemetry/history)
+   */
+  static async syncFromServer(): Promise<PlantTelemetryRecord[]> {
+    const localRecords = this.getHistoryRecords();
+    if (typeof window === 'undefined' || typeof fetch !== 'function') {
+      return localRecords;
+    }
+    try {
+      const res = await fetch('/api/telemetry/history');
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('application/json')) {
+        return localRecords;
+      }
+      const data = await res.json();
+      const serverRecords: PlantTelemetryRecord[] = Array.isArray(data?.records) ? data.records : [];
+      if (serverRecords.length === 0) {
+        // Push local history baseline to server once if server file is still empty
+        if (localRecords.length > 0) {
+          fetch('/api/telemetry/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records: localRecords })
+          }).catch(() => {});
+        }
+        return localRecords;
+      }
+
+      const byId = new Map<string, PlantTelemetryRecord>();
+      for (const rec of localRecords) {
+        if (rec?.id) byId.set(rec.id, sanitizeHistoryRecord(rec));
+      }
+      for (const rec of serverRecords) {
+        if (rec?.id) byId.set(rec.id, sanitizeHistoryRecord(rec));
+      }
+      const merged = Array.from(byId.values()).sort((a, b) => a.timestampEpoch - b.timestampEpoch);
+      this.saveRecords(merged);
+      return merged;
+    } catch {
+      return localRecords;
     }
   }
 
@@ -139,15 +199,30 @@ export class PlantTelemetryHistoryService {
       indiceSalute?: number;
       oee?: number;
       bemaVibrazione?: number;
+      bemaRpm?: number;
       lgvSoc?: number;
       baieRitardo?: number;
+      potenzaKw?: number;
+      throughputPalletOra?: number;
     }
   ): PlantTelemetryRecord {
     const all = this.getHistoryRecords();
     const now = new Date();
     const epoch = now.getTime();
-    const formatted = now.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) + ' ' +
+    const formatted = now.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' }) + ' ' +
                       now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Prevent automatic background scans from flooding the annual timeline on rapid page refreshes,
+    // while ALWAYS preserving every CSV upload (UPLOAD_CSV_EVENTI / UPLOAD_CSV_TELEMETRIA).
+    const isCsvUpload = fonte === 'UPLOAD_CSV_EVENTI' || fonte === 'UPLOAD_CSV_TELEMETRIA';
+    if (!isCsvUpload) {
+      const recentSamePlant = [...all]
+        .reverse()
+        .find(r => r.stabilimentoId === tenant.id && r.fonte === fonte);
+      if (recentSamePlant && epoch - recentSamePlant.timestampEpoch < 5 * 60 * 1000) {
+        return recentSamePlant;
+      }
+    }
 
     let critici = 0;
     let attenzione = 0;
@@ -189,9 +264,12 @@ export class PlantTelemetryHistoryService {
     const health = customMetrics?.indiceSalute ?? Math.max(30, Math.min(99, 100 - (critici * 20 + attenzione * 6)));
     const oeeVal = customMetrics?.oee ?? Math.round(health * 0.94);
 
-    const bemaVibVal = finiteOr(customMetrics?.bemaVibrazione, Number((0.30 + Math.random() * 0.14).toFixed(2)));
-    const lgvSocVal = finiteOr(customMetrics?.lgvSoc, Math.round(75 + Math.random() * 20));
-    const baieRitardoVal = finiteOr(customMetrics?.baieRitardo, Math.round(8 + Math.random() * 14));
+    const bemaVibVal = finiteOr(customMetrics?.bemaVibrazione, 0.34);
+    const bemaRpmVal = finiteOr(customMetrics?.bemaRpm, 48.5);
+    const lgvSocVal = finiteOr(customMetrics?.lgvSoc, 78);
+    const baieRitardoVal = finiteOr(customMetrics?.baieRitardo, 12);
+    const throughputVal = Math.round(finiteOr(customMetrics?.throughputPalletOra, 75 + (health * 0.4)));
+    const potenzaVal = Math.round(finiteOr(customMetrics?.potenzaKw, 88));
 
     const macchinari: Record<string, MachineTelemetrySnapshot> = {
       BEMA_FASCIATORE: {
@@ -199,11 +277,11 @@ export class PlantTelemetryHistoryService {
         nome: 'Fasciatore Robotico Bema Silkworm 01',
         stato: bemaVibVal > INDUSTRIAL_THRESHOLDS.BEMA_VIBRAZIONE_CRIT_G ? 'ALLARME' : 'IN_MARCIA',
         vibrazioneG: bemaVibVal,
-        temperaturaC: Math.round(48 + Math.random() * 6),
-        velocitaRpm: Math.round(33 + Math.random() * 4),
+        temperaturaC: 48,
+        velocitaRpm: bemaRpmVal,
         batteriaSoC: 100,
         pressioneVuotoBar: -0.85,
-        cicliOra: Math.round(78 + Math.random() * 8),
+        cicliOra: 82,
         ritardoMinuti: 0
       },
       FLOTTA_LGV: {
@@ -215,7 +293,7 @@ export class PlantTelemetryHistoryService {
         velocitaRpm: 1200,
         batteriaSoC: lgvSocVal,
         pressioneVuotoBar: -0.85,
-        cicliOra: Math.round(110 + Math.random() * 15),
+        cicliOra: 115,
         ritardoMinuti: 0
       },
       SMARTSTORE: {
@@ -227,7 +305,7 @@ export class PlantTelemetryHistoryService {
         velocitaRpm: 1800,
         batteriaSoC: 100,
         pressioneVuotoBar: -0.88,
-        cicliOra: Math.round(140 + Math.random() * 20),
+        cicliOra: 145,
         ritardoMinuti: 1
       },
       BAIE_INBOUND_OUTBOUND: {
@@ -251,7 +329,7 @@ export class PlantTelemetryHistoryService {
         velocitaRpm: 900,
         batteriaSoC: 100,
         pressioneVuotoBar: -0.82,
-        cicliOra: Math.round(85 + Math.random() * 10),
+        cicliOra: 88,
         ritardoMinuti: 0
       },
       WOODPECKER: {
@@ -263,7 +341,7 @@ export class PlantTelemetryHistoryService {
         velocitaRpm: 0,
         batteriaSoC: 100,
         pressioneVuotoBar: -0.85,
-        cicliOra: 95,
+        cicliOra: throughputVal,
         ritardoMinuti: 0
       },
       RAPTOR: {
@@ -294,14 +372,23 @@ export class PlantTelemetryHistoryService {
       criticiCount: critici,
       attenzioneCount: attenzione,
       normaliCount: normali,
-      throughputPalletOra: Math.round(75 + (health * 0.4)),
-      potenzaAssorbitaKw: Math.round(85 + Math.random() * 25),
+      throughputPalletOra: throughputVal,
+      potenzaAssorbitaKw: potenzaVal,
       macchinari,
       calcoli
     };
 
     all.push(newRecord);
     this.saveRecords(all);
+
+    if (typeof window !== 'undefined' && typeof fetch === 'function') {
+      fetch('/api/telemetry/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record: newRecord })
+      }).catch(() => {});
+    }
+
     return newRecord;
   }
 
@@ -312,7 +399,7 @@ export class PlantTelemetryHistoryService {
     azienda?: string;
     stabilimentoId?: string;
     machineKey?: string;
-    timeRange?: 'ALL' | '24H' | '7D' | 'SHIFT';
+    timeRange?: 'ALL' | '365D' | '30D' | '24H' | '7D' | 'SHIFT';
   }): PlantTelemetryRecord[] {
     const all = this.getHistoryRecords();
     const now = Date.now();
@@ -342,6 +429,12 @@ export class PlantTelemetryHistoryService {
     } else if (options.timeRange === '7D') {
       const weekAgo = now - 7 * 24 * 3600 * 1000;
       filtered = filtered.filter(r => r.timestampEpoch >= weekAgo);
+    } else if (options.timeRange === '30D') {
+      const monthAgo = now - 30 * 24 * 3600 * 1000;
+      filtered = filtered.filter(r => r.timestampEpoch >= monthAgo);
+    } else if (options.timeRange === '365D') {
+      const yearAgo = now - 366 * 24 * 3600 * 1000;
+      filtered = filtered.filter(r => r.timestampEpoch >= yearAgo);
     }
 
     return filtered;

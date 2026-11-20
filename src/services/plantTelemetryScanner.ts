@@ -2,8 +2,8 @@ import { FactoryTenant, QuantumExecutionResult } from '../types/quantum';
 import { QUANTUM_CALCULATIONS } from '../data/calculationsMeta';
 import { evaluateCalculationStatus } from '../data/industrialThresholds';
 import { QuantumEngine } from './quantumEngine';
-import { PlantTelemetryHistoryService } from './plantTelemetryHistory';
-import { parseFlexibleInput } from '../utils/inputParser';
+import { PlantTelemetryHistoryService, TelemetryDataSource } from './plantTelemetryHistory';
+import { finiteOr, parseFlexibleInput } from '../utils/inputParser';
 
 export interface PlantNotification {
   id: string;
@@ -47,7 +47,10 @@ export class PlantTelemetryScanner {
    * runs the CUDA-Q quantum simulation engine on all 21 routines,
    * and generates notifications for calculations with anomalies (ATTENZIONE / CRITICO).
    */
-  static async scanPlantAndRun21Calculations(tenant: FactoryTenant): Promise<AutoScanSummary> {
+  static async scanPlantAndRun21Calculations(
+    tenant: FactoryTenant,
+    source: TelemetryDataSource = 'DAEMON_PYTHON_MTLS'
+  ): Promise<AutoScanSummary> {
     const startTime = performance.now();
     const topology = tenant.plantTopology;
     const notifications: PlantNotification[] = [];
@@ -67,23 +70,72 @@ export class PlantTelemetryScanner {
       // In browser preview or standalone mode, continue with high-precision telemetry
     }
 
-    // Run all 21 calculations sequentially or in parallel with actual plant topology inputs
-    for (const calc of QUANTUM_CALCULATIONS) {
-      let inputs = this.extractInputsForCalc(calc.id, tenant);
+    // Fetch live telemetry pushed by the local plant PC daemon (JSON or CSV spool files)
+    let daemonInputs: Record<string, any> = {};
+    let daemonReceivedAtEpoch = 0;
+    if (typeof window !== 'undefined' && typeof fetch === 'function') {
       try {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => controller.abort(), 1200) : null;
+        const latestRes = await fetch(`/api/telemetry/latest?stabilimentoId=${encodeURIComponent(tenant.id)}`, {
+          signal: controller?.signal
+        });
+        if (timer) clearTimeout(timer);
+        const ct = latestRes.headers.get('content-type') || '';
+        if (latestRes.ok && ct.includes('application/json')) {
+          const latestData = await latestRes.json();
+          if (latestData?.plantLatestDaemonInputs && typeof latestData.plantLatestDaemonInputs === 'object') {
+            daemonInputs = latestData.plantLatestDaemonInputs;
+            daemonReceivedAtEpoch = Number(latestData.plantLatestPacketEpoch || 0);
+          }
+        }
+      } catch {
+        // Offline or Node CLI context: proceed cleanly
+      }
+    }
+
+    // Read explicit browser CSV overrides and their timestamp (if present)
+    let csvOverrides: Record<string, any> = {};
+    let csvUploadedAtEpoch = 0;
+    try {
+      if (typeof localStorage !== 'undefined') {
         const saved = localStorage.getItem(`joker_custom_telemetry_${tenant.id}`);
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed && typeof parsed === 'object') {
-            for (const [k, v] of Object.entries(parsed)) {
-              const norm = parseFlexibleInput(v, k);
-              if (norm !== undefined) {
-                inputs[k] = norm;
-              }
-            }
+            csvOverrides = parsed;
           }
         }
-      } catch {}
+        const savedMeta = localStorage.getItem(`joker_custom_telemetry_meta_${tenant.id}`);
+        if (savedMeta) {
+          const metaParsed = JSON.parse(savedMeta);
+          if (metaParsed?.uploadedAt) {
+            const parsedTime = Date.parse(metaParsed.uploadedAt);
+            if (Number.isFinite(parsedTime)) csvUploadedAtEpoch = parsedTime;
+          }
+        }
+      }
+    } catch {}
+
+    const applyOverrides = (target: Record<string, any>, sourceMap: Record<string, any>) => {
+      for (const [k, v] of Object.entries(sourceMap)) {
+        const norm = parseFlexibleInput(v, k);
+        if (norm !== undefined) {
+          target[k] = norm;
+        }
+      }
+    };
+
+    // Run all 21 calculations sequentially with topology baseline + live daemon & CSV data (latest real source wins on collisions)
+    for (const calc of QUANTUM_CALCULATIONS) {
+      const inputs = this.extractInputsForCalc(calc.id, tenant);
+      if (daemonReceivedAtEpoch > csvUploadedAtEpoch && Object.keys(daemonInputs).length > 0) {
+        applyOverrides(inputs, csvOverrides);
+        applyOverrides(inputs, daemonInputs);
+      } else {
+        applyOverrides(inputs, daemonInputs);
+        applyOverrides(inputs, csvOverrides);
+      }
       const res: QuantumExecutionResult = await QuantumEngine.executeCalculation(calc.id, inputs);
 
       const alertInfo = this.evaluateCalculationHealth(calc.id, res, inputs, tenant, calc.subFunction);
@@ -137,17 +189,58 @@ export class PlantTelemetryScanner {
     // Persist to local storage
     this.saveSummary(summary);
 
-    // Record time-series entry in historical telemetry trend service
+    // Record chronological time-series entry using real calculated telemetry
     try {
+      const calc14In = notifications.find(n => n.calcoloId === 14)?.inputsUtilizzati || {};
+      const calc17In = notifications.find(n => n.calcoloId === 17)?.inputsUtilizzati || {};
+      const calc2In = notifications.find(n => n.calcoloId === 2)?.inputsUtilizzati || {};
+      const calc1In = notifications.find(n => n.calcoloId === 1)?.inputsUtilizzati || {};
+      const calc19In = notifications.find(n => n.calcoloId === 19)?.inputsUtilizzati || {};
+      const calc20In = notifications.find(n => n.calcoloId === 20)?.inputsUtilizzati || {};
+
+      let lgvSocReal = finiteOr(
+        calc17In.soc_medio_flotta_pct ?? calc17In.stato_carica_medio_soc ?? calc17In.batteria_soc,
+        NaN
+      );
+      if (!Number.isFinite(lgvSocReal) && calc17In.telemetria_batterie_agv && typeof calc17In.telemetria_batterie_agv === 'object') {
+        const bats = Object.values(calc17In.telemetria_batterie_agv) as any[];
+        if (bats.length > 0) {
+          lgvSocReal = Number((bats.reduce((acc, b) => acc + finiteOr(b?.SoC, 78), 0) / bats.length).toFixed(1));
+        }
+      }
+
+      const bemaVibReal = finiteOr(
+        calc14In.vibrazione_cuscinetti_g ??
+          calc14In.vibrazione_g ??
+          calc14In.accelerazione_g ??
+          calc14In.vibrazione_cuscinetti_bema_g,
+        NaN
+      );
+      const bemaRpmReal = finiteOr(calc14In.rpm_tavola_bema ?? calc14In.giri_minuto, NaN);
+      const baieRitardoReal = finiteOr(
+        calc2In.ritardo_stimato_minuti ?? calc1In.minuti_ritardo,
+        NaN
+      );
+      const potenzaReal = finiteOr(calc19In.potenza_erogata_totale_kw, NaN);
+      const throughputReal = finiteOr(calc20In.throughput_pallet_ora, NaN);
+
       PlantTelemetryHistoryService.recordNewSnapshot(
         tenant,
-        'DAEMON_PYTHON_MTLS',
+        source,
         notifications.map(n => ({
           calcId: n.calcoloId,
           calcNome: n.calcoloNome,
           livelloAllarme: n.livelloAllarme,
           res: n.risultatoPayload
-        }))
+        })),
+        {
+          bemaVibrazione: Number.isFinite(bemaVibReal) ? bemaVibReal : undefined,
+          bemaRpm: Number.isFinite(bemaRpmReal) ? bemaRpmReal : undefined,
+          lgvSoc: Number.isFinite(lgvSocReal) ? lgvSocReal : undefined,
+          baieRitardo: Number.isFinite(baieRitardoReal) ? baieRitardoReal : undefined,
+          potenzaKw: Number.isFinite(potenzaReal) ? potenzaReal : undefined,
+          throughputPalletOra: Number.isFinite(throughputReal) ? throughputReal : undefined
+        }
       );
     } catch {}
 

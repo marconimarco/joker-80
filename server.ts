@@ -4,6 +4,9 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { createNIS2MtlsAgent, getNIS2MtlsStatus, installPfxBundle } from './server/mtlsClient';
 import https from 'https';
+import { parsePlantCsvContent } from './src/utils/csvTelemetryParser';
+import { INDUSTRIAL_THRESHOLDS } from './src/data/industrialThresholds';
+import { finiteOr, parseFlexibleInput } from './src/utils/inputParser';
 
 async function startServer() {
   const app = express();
@@ -255,6 +258,502 @@ async function startServer() {
     rawPayload: any;
   }> = [];
 
+  // Shared persistence paths & configuration (used by both daemon push/latest and history endpoints)
+  const gatewayConfigDir = path.resolve(process.cwd(), 'data');
+  const gatewayConfigPath = path.join(gatewayConfigDir, 'gateway_config.json');
+  const annualHistoryPath = path.join(gatewayConfigDir, 'telemetry_history_annual.json');
+  const ONE_YEAR_MS = 366 * 24 * 3600 * 1000;
+  const MAX_ANNUAL_RECORDS = 10000;
+
+  let telemetryConfig = {
+    intervalValue: 5,
+    intervalUnit: 'seconds' as 'seconds' | 'minutes' | 'hours' | 'days',
+    intervalSeconds: 5,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'Amministratore (Admin)',
+    activePlant: 'Barilla Pedrignano (PR) - Hub Principale E80',
+    description: 'Intervallo di polling e push telemetrico dal demone Python del PC locale'
+  };
+
+  try {
+    if (fs.existsSync(gatewayConfigPath)) {
+      const savedRaw = JSON.parse(fs.readFileSync(gatewayConfigPath, 'utf-8'));
+      if (savedRaw && typeof savedRaw.intervalSeconds === 'number' && savedRaw.intervalSeconds > 0) {
+        telemetryConfig = { ...telemetryConfig, ...savedRaw };
+      }
+    }
+  } catch (err) {
+    console.warn('[Telemetry Config] Impossibile leggere gateway_config.json, uso configurazione base:', err);
+  }
+
+  function readAnnualHistoryFile(): any[] {
+    try {
+      if (!fs.existsSync(annualHistoryPath)) return [];
+      const raw = fs.readFileSync(annualHistoryPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function writeAnnualHistoryFile(records: any[]) {
+    try {
+      if (!fs.existsSync(gatewayConfigDir)) {
+        fs.mkdirSync(gatewayConfigDir, { recursive: true });
+      }
+      fs.writeFileSync(annualHistoryPath, JSON.stringify(records), 'utf-8');
+    } catch (err) {
+      console.warn('[Annual History] Errore scrittura su disco:', err);
+    }
+  }
+
+  const CANONICAL_PLANTS: Record<string, { id: string; nome: string; azienda: string }> = {
+    'barilla': { id: 'barilla', nome: 'Barilla - Stabilimento Pedrignano', azienda: 'Barilla G. e R. Fratelli' },
+    'barilla-pedrignano': { id: 'barilla', nome: 'Barilla - Stabilimento Pedrignano', azienda: 'Barilla G. e R. Fratelli' },
+    'barilla-novara': { id: 'barilla-novara', nome: 'Barilla - Stabilimento Novara', azienda: 'Barilla G. e R. Fratelli' },
+    'barilla-foggia': { id: 'barilla-foggia', nome: 'Barilla - Stabilimento Foggia', azienda: 'Barilla G. e R. Fratelli' },
+    'nestle': { id: 'nestle', nome: 'Nestlé - Stabilimento Assago', azienda: 'Nestlé Italiana' },
+    'nestle-assago': { id: 'nestle', nome: 'Nestlé - Stabilimento Assago', azienda: 'Nestlé Italiana' },
+    'nestle-benevento': { id: 'nestle-benevento', nome: 'Nestlé - Stabilimento Benevento', azienda: 'Nestlé Italiana' },
+    'nestle-perugia': { id: 'nestle-perugia', nome: 'Nestlé - Stabilimento Perugia', azienda: 'Nestlé Italiana' },
+    'santanna': { id: 'santanna', nome: "Acqua Sant'Anna - Stabilimento Vinadio", azienda: "Acqua Sant'Anna" },
+    'santanna-vinadio': { id: 'santanna', nome: "Acqua Sant'Anna - Stabilimento Vinadio", azienda: "Acqua Sant'Anna" },
+    'santanna-lanzo': { id: 'santanna-lanzo', nome: "Acqua Sant'Anna - Stabilimento Lanzo Torinese", azienda: "Acqua Sant'Anna" },
+    'ferrero': { id: 'ferrero-alba', nome: 'Ferrero - Stabilimento Principale di Alba', azienda: 'Ferrero S.p.A.' },
+    'ferrero-alba': { id: 'ferrero-alba', nome: 'Ferrero - Stabilimento Principale di Alba', azienda: 'Ferrero S.p.A.' },
+    'ferrero-pozzuolo': { id: 'ferrero-pozzuolo', nome: 'Ferrero - Stabilimento Pozzuolo Martesana', azienda: 'Ferrero S.p.A.' },
+    'granarolo': { id: 'granarolo-bologna', nome: 'Granarolo - Stabilimento Bologna', azienda: 'Granarolo S.p.A.' },
+    'granarolo-bologna': { id: 'granarolo-bologna', nome: 'Granarolo - Stabilimento Bologna', azienda: 'Granarolo S.p.A.' },
+    'granarolo-pasturana': { id: 'granarolo-pasturana', nome: 'Granarolo - Stabilimento Pasturana', azienda: 'Granarolo S.p.A.' }
+  };
+
+  function resolveCanonicalPlantMeta(rawPlantId?: string, rawPlantName?: string): { id: string; nome: string; azienda: string } {
+    const idKey = String(rawPlantId || '').trim().toLowerCase().replace(/_/g, '-');
+    if (idKey && CANONICAL_PLANTS[idKey]) {
+      return CANONICAL_PLANTS[idKey];
+    }
+    const nameKey = String(rawPlantName || '').trim().toLowerCase();
+    const combined = `${idKey} ${nameKey}`;
+    if (combined.includes('novara')) return CANONICAL_PLANTS['barilla-novara'];
+    if (combined.includes('foggia')) return CANONICAL_PLANTS['barilla-foggia'];
+    if (combined.includes('pedrignano') || combined.includes('barilla')) return CANONICAL_PLANTS['barilla'];
+    if (combined.includes('benevento')) return CANONICAL_PLANTS['nestle-benevento'];
+    if (combined.includes('perugia')) return CANONICAL_PLANTS['nestle-perugia'];
+    if (combined.includes('assago') || combined.includes('nestl')) return CANONICAL_PLANTS['nestle'];
+    if (combined.includes('lanzo')) return CANONICAL_PLANTS['santanna-lanzo'];
+    if (combined.includes('vinadio') || combined.includes('sant')) return CANONICAL_PLANTS['santanna'];
+    if (combined.includes('pozzuolo')) return CANONICAL_PLANTS['ferrero-pozzuolo'];
+    if (combined.includes('alba') || combined.includes('ferrero')) return CANONICAL_PLANTS['ferrero-alba'];
+    if (combined.includes('pasturana')) return CANONICAL_PLANTS['granarolo-pasturana'];
+    if (combined.includes('bologna') || combined.includes('granarolo')) return CANONICAL_PLANTS['granarolo-bologna'];
+
+    return {
+      id: idKey || 'barilla',
+      nome: rawPlantName || (idKey ? `Stabilimento ${idKey}` : 'Barilla - Stabilimento Pedrignano'),
+      azienda: rawPlantName?.split('-')[0]?.trim() || 'Azienda Industriale'
+    };
+  }
+
+  interface DaemonPlantCacheEntry {
+    receivedAtEpoch: number;
+    receivedAt: string;
+    plantId: string;
+    plantName: string;
+    azienda: string;
+    fileSignature?: string;
+    dataSourceLabel?: string;
+    inputs: Record<string, any>;
+    packet: any;
+  }
+
+  const latestDaemonByPlant = new Map<string, DaemonPlantCacheEntry>();
+
+  function extractDaemonCalcInputs(record: any, payload: any): {
+    extracted: Record<string, any>;
+    csvDetectedFormats: string[];
+  } {
+    const extracted: Record<string, any> = {};
+    const csvDetectedFormats: string[] = [];
+
+    const mergeClean = (obj: Record<string, any> | undefined | null) => {
+      if (!obj || typeof obj !== 'object') return;
+      for (const [k, v] of Object.entries(obj)) {
+        const norm = parseFlexibleInput(v, k);
+        if (norm !== undefined) {
+          extracted[k] = norm;
+        }
+      }
+    };
+
+    // 1. Parse raw CSV files first to extract inputs, then merge JSON + CSV so real CSV values never get clobbered by defaults
+    const csvExtractedAll: Record<string, any> = {};
+    const csvEntries: string[] = [];
+    if (typeof payload?.csvContent === 'string' && payload.csvContent.trim()) {
+      csvEntries.push(payload.csvContent);
+    }
+    if (Array.isArray(payload?.csvFiles)) {
+      for (const item of payload.csvFiles) {
+        if (item && typeof item.content === 'string' && item.content.trim()) {
+          csvEntries.push(item.content);
+        }
+      }
+    }
+    for (const csvText of csvEntries) {
+      try {
+        const parsed = parsePlantCsvContent(csvText);
+        if (parsed?.extractedInputs) {
+          for (const [k, v] of Object.entries(parsed.extractedInputs)) {
+            const norm = parseFlexibleInput(v, k);
+            if (norm !== undefined) {
+              csvExtractedAll[k] = norm;
+            }
+          }
+          csvDetectedFormats.push(parsed.detectedFormat);
+        }
+      } catch (err) {
+        console.warn('[Daemon CSV Parse Warning]', (err as any)?.message || err);
+      }
+    }
+
+    // 2. Map standard JSON daemon telemetry structures (parametri / lgv / baia / top-level)
+    const p = (record?.parametri && typeof record.parametri === 'object') ? record.parametri : {};
+    const lgv = (record?.lgv && typeof record.lgv === 'object') ? record.lgv : {};
+    const baia = (record?.baia && typeof record.baia === 'object') ? record.baia : {};
+
+    const assignNum = (targetKeys: string[], rawVal: any) => {
+      if (rawVal === undefined || rawVal === null || rawVal === '') return;
+      const val = parseFlexibleInput(rawVal, targetKeys[0]);
+      if (val !== undefined && typeof val === 'number' && Number.isFinite(val)) {
+        for (const tk of targetKeys) {
+          extracted[tk] = val;
+        }
+      }
+    };
+
+    assignNum(['rpm_tavola_bema', 'giri_minuto'], p.velocitaRotazioneRpm ?? p.rpm_tavola_bema ?? p.giri_minuto ?? p.giri_minuto_rpm);
+    assignNum(['vibrazione_cuscinetti_g'], p.vibrazioneCuscinettiG ?? p.vibrazione_cuscinetti_g ?? p.accelerazione_g ?? p.vibrazione_g);
+    assignNum(['pre_stiro_pct'], p.tensioneFilmPreStiroPct ?? p.pre_stiro_pct);
+    assignNum(['tensione_newton'], p.tensioneNewton ?? p.tensione_newton ?? p.tensione_film_n);
+    assignNum(['throughput_pallet_ora'], p.palletOra ?? p.throughput_pallet_ora);
+    assignNum(['temperatura_inverter_c'], p.temperaturaInverterC ?? p.temperatura_inverter_c);
+    assignNum(['pressione_aria_bar'], p.pressioneAriaBar ?? p.pressione_aria_bar);
+    assignNum(['pressione_vuoto_bar'], p.pressioneVuotoBar ?? p.pressione_vuoto_bar);
+    assignNum(['saturazione_wms'], p.saturazioneWms ?? p.saturazione_wms);
+    assignNum(['potenza_erogata_totale_kw'], p.potenzaKw ?? p.potenza_erogata_totale_kw);
+    assignNum(['umidita_rilevata'], p.umiditaRilevata ?? p.umidita_rilevata);
+    assignNum(['umidita_legno_pct'], p.umiditaLegnoPct ?? p.umidita_legno_pct ?? p.umidita_rilevata);
+    assignNum(['forza_deformazione_pattini_n'], p.forzaDeformazionePattiniN ?? p.forza_deformazione_pattini_n);
+    assignNum(['corrente_inverter_a'], p.correnteInverterA ?? p.corrente_inverter_a);
+    assignNum(['minuti_ritardo', 'ritardo_stimato_minuti'], p.ritardoMinuti ?? baia.ritardoMinuti ?? p.minuti_ritardo ?? p.ritardo_stimato_minuti);
+    assignNum(['camion_attesa'], baia.camionAttesa ?? p.camionAttesa ?? p.camion_attesa);
+    assignNum(['baie_libere'], baia.baieLibere ?? p.baieLibere ?? p.baie_libere);
+    assignNum(['soc_medio_flotta_pct'], lgv.batteriaSoC ?? p.socMedioFlottaPct ?? p.soc_medio_flotta_pct);
+    assignNum(['temperatura_batterie_c'], lgv.temperaturaBatteriaC ?? p.temperaturaBatterieC ?? p.temperatura_batterie_c);
+    assignNum(['celle_libere_3d'], p.celleLibere3d ?? p.celle_libere_3d);
+    assignNum(['micro_inclinazione'], p.microInclinazione ?? p.micro_inclinazione);
+    assignNum(['saturazione_buffer'], p.saturazioneBuffer ?? p.saturazione_buffer);
+    assignNum(['temp_testina_termica_c'], p.tempTestinaTermicaC ?? p.temp_testina_termica_c);
+
+    // Also accept canonical snake_case keys placed directly in parametri
+    for (const [k, v] of Object.entries(p)) {
+      if (k.includes('_')) {
+        const norm = parseFlexibleInput(v, k);
+        if (norm !== undefined) extracted[k] = norm;
+      }
+    }
+
+    // 3. Apply parsed CSV values and pre-extracted inputs ON TOP so local CSV exports take full priority
+    mergeClean(csvExtractedAll);
+    if (csvExtractedAll.rpm_tavola_bema !== undefined) {
+      extracted.giri_minuto = csvExtractedAll.rpm_tavola_bema;
+    }
+    mergeClean(payload?.extractedInputs);
+
+    return { extracted, csvDetectedFormats };
+  }
+
+  function persistDaemonHistoryRecord(
+    plantMeta: { id: string; nome: string; azienda: string },
+    record: any,
+    mergedInputs: Record<string, any>,
+    prevFileSignature: string | undefined,
+    fileSignature: string | undefined,
+    payload: any
+  ): { recorded: boolean; recordId?: string } {
+    const now = new Date();
+    const epoch = now.getTime();
+    const cutoff = epoch - ONE_YEAR_MS;
+
+    const existing = readAnnualHistoryFile().filter(
+      r => r && typeof r.timestampEpoch === 'number' && r.timestampEpoch >= cutoff
+    );
+
+    const lastSamePlant = [...existing]
+      .reverse()
+      .find(r => r.stabilimentoId === plantMeta.id && r.fonte === 'DAEMON_PYTHON_MTLS');
+
+    const vib = finiteOr(mergedInputs.vibrazione_cuscinetti_g, 0.36);
+    const rpm = finiteOr(mergedInputs.rpm_tavola_bema ?? mergedInputs.giri_minuto, 48.5);
+    const soc = finiteOr(mergedInputs.soc_medio_flotta_pct, 88);
+    const delay = finiteOr(mergedInputs.ritardo_stimato_minuti ?? mergedInputs.minuti_ritardo, 12);
+    const temp = finiteOr(mergedInputs.temperatura_inverter_c ?? record?.parametri?.temperaturaInverterC, 48);
+    const vuoto = finiteOr(mergedInputs.pressione_vuoto_bar, -0.84);
+    const throughput = Math.round(finiteOr(mergedInputs.throughput_pallet_ora ?? record?.parametri?.palletOra, 84));
+    const potenza = Math.round(finiteOr(mergedInputs.potenza_erogata_totale_kw, 88));
+    const tensioneN = finiteOr(mergedInputs.tensione_newton, 150);
+
+    const bemaCrit = vib > INDUSTRIAL_THRESHOLDS.BEMA_VIBRAZIONE_CRIT_G || rpm > 65 || record?.stato === 'ALLARME';
+    const bemaWarn = !bemaCrit && (vib > 0.40 || rpm > INDUSTRIAL_THRESHOLDS.BEMA_RPM_WARN);
+    const bemaStato = bemaCrit ? 'ALLARME' : 'IN_MARCIA';
+
+    const tensioneCrit = tensioneN > INDUSTRIAL_THRESHOLDS.BEMA_TENSIONE_CRIT_N;
+    const tensioneWarn = !tensioneCrit && tensioneN > INDUSTRIAL_THRESHOLDS.BEMA_TENSIONE_WARN_N;
+
+    const lgvCrit = soc < INDUSTRIAL_THRESHOLDS.LGV_SOC_CRIT_PCT;
+    const lgvWarn = !lgvCrit && soc < INDUSTRIAL_THRESHOLDS.LGV_SOC_WARN_PCT;
+    const lgvStato = lgvCrit ? 'ALLARME' : 'IN_MARCIA';
+
+    const baieCrit = delay > INDUSTRIAL_THRESHOLDS.BUFFER_TEMPO_ATTESA_CRIT_MIN;
+    const baieWarn = !baieCrit && delay > 20;
+    const baieStato = baieCrit ? 'ALLARME' : 'IN_MARCIA';
+
+    const powerCrit = potenza > INDUSTRIAL_THRESHOLDS.MICROGRID_POTENZA_CRIT_KW;
+    const powerWarn = !powerCrit && potenza > INDUSTRIAL_THRESHOLDS.MICROGRID_POTENZA_WARN_KW;
+
+    const vuotoCrit = vuoto > INDUSTRIAL_THRESHOLDS.ROBOT_VUOTO_MAX_BAR;
+
+    const criticiCount =
+      (bemaCrit ? 1 : 0) +
+      (tensioneCrit ? 1 : 0) +
+      (lgvCrit ? 1 : 0) +
+      (baieCrit ? 1 : 0) +
+      (powerCrit ? 1 : 0) +
+      (vuotoCrit ? 1 : 0);
+
+    const attenzioneCount =
+      (bemaWarn ? 1 : 0) +
+      (tensioneWarn ? 1 : 0) +
+      (lgvWarn ? 1 : 0) +
+      (baieWarn ? 1 : 0) +
+      (powerWarn ? 1 : 0);
+
+    const normaliCount = Math.max(0, 21 - criticiCount - attenzioneCount);
+    const health = Math.max(30, Math.min(99, 100 - (criticiCount * 20 + attenzioneCount * 6)));
+    const oee = Math.round(health * 0.94);
+
+    // Smart deduplication: save immediately on first packet, file change, manual/UI push, alarm change, or telemetry delta; otherwise every 5m
+    const fileChanged = Boolean(fileSignature && fileSignature !== prevFileSignature) ||
+      Boolean(payload?.csvContent) ||
+      (Array.isArray(payload?.csvFiles) && payload.csvFiles.length > 0);
+    const isForcedOrManual = Boolean(payload?.forceHistoryRecord) || !record.isPhysicalPC;
+
+    let shouldRecord = !lastSamePlant || fileChanged;
+    if (!shouldRecord && isForcedOrManual) {
+      shouldRecord = (epoch - lastSamePlant.timestampEpoch) >= 1500;
+    }
+    if (!shouldRecord && lastSamePlant) {
+      const prevBema = lastSamePlant.macchinari?.BEMA_FASCIATORE;
+      const prevLgv = lastSamePlant.macchinari?.FLOTTA_LGV;
+      const prevBaie = lastSamePlant.macchinari?.BAIE_INBOUND_OUTBOUND;
+
+      const alarmChanged =
+        criticiCount !== lastSamePlant.criticiCount ||
+        attenzioneCount !== lastSamePlant.attenzioneCount ||
+        bemaStato !== prevBema?.stato ||
+        lgvStato !== prevLgv?.stato ||
+        baieStato !== prevBaie?.stato;
+
+      const significantDelta =
+        Math.abs(vib - finiteOr(prevBema?.vibrazioneG, vib)) >= 0.03 ||
+        Math.abs(rpm - finiteOr(prevBema?.velocitaRpm, rpm)) >= 1.5 ||
+        Math.abs(soc - finiteOr(prevLgv?.batteriaSoC, soc)) >= 2 ||
+        Math.abs(delay - finiteOr(prevBaie?.ritardoMinuti, delay)) >= 2 ||
+        Math.abs(throughput - finiteOr(lastSamePlant.throughputPalletOra, throughput)) >= 3 ||
+        Math.abs(potenza - finiteOr(lastSamePlant.potenzaAssorbitaKw, potenza)) >= 3;
+
+      const periodicElapsed = (epoch - lastSamePlant.timestampEpoch) >= 5 * 60 * 1000;
+
+      shouldRecord = alarmChanged || significantDelta || periodicElapsed;
+    }
+
+    if (!shouldRecord) {
+      return { recorded: false };
+    }
+
+    const formatted =
+      now.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
+      ' ' +
+      now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    const newRecord = {
+      id: `daemon-rec-${epoch}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: formatted,
+      timestampIso: now.toISOString(),
+      timestampEpoch: epoch,
+      stabilimentoId: plantMeta.id,
+      stabilimentoNome: plantMeta.nome,
+      azienda: plantMeta.azienda,
+      fonte: 'DAEMON_PYTHON_MTLS',
+      indiceSaluteGlobale: health,
+      oee,
+      criticiCount,
+      attenzioneCount,
+      normaliCount,
+      throughputPalletOra: throughput,
+      potenzaAssorbitaKw: potenza,
+      macchinari: {
+        BEMA_FASCIATORE: {
+          machineKey: 'BEMA_FASCIATORE',
+          nome: 'Fasciatore Robotico Bema Silkworm 01',
+          stato: bemaStato,
+          vibrazioneG: vib,
+          temperaturaC: temp,
+          velocitaRpm: rpm,
+          batteriaSoC: 100,
+          pressioneVuotoBar: vuoto,
+          cicliOra: throughput,
+          ritardoMinuti: 0
+        },
+        FLOTTA_LGV: {
+          machineKey: 'FLOTTA_LGV',
+          nome: 'Flotta Navette Laser LGV E80 (4 Unità)',
+          stato: lgvStato,
+          vibrazioneG: 0.18,
+          temperaturaC: finiteOr(mergedInputs.temperatura_batterie_c, 36),
+          velocitaRpm: 1200,
+          batteriaSoC: soc,
+          pressioneVuotoBar: -0.85,
+          cicliOra: 115,
+          ritardoMinuti: 0
+        },
+        SMARTSTORE: {
+          machineKey: 'SMARTSTORE',
+          nome: 'Magazzino Intensivo SmartStore 3D',
+          stato: 'IN_MARCIA',
+          vibrazioneG: 0.12,
+          temperaturaC: 24,
+          velocitaRpm: 1800,
+          batteriaSoC: 100,
+          pressioneVuotoBar: -0.88,
+          cicliOra: 145,
+          ritardoMinuti: 1
+        },
+        BAIE_INBOUND_OUTBOUND: {
+          machineKey: 'BAIE_INBOUND_OUTBOUND',
+          nome: 'Baie di Carico & Scarico WMS',
+          stato: baieStato,
+          vibrazioneG: 0.08,
+          temperaturaC: 22,
+          velocitaRpm: 0,
+          batteriaSoC: 100,
+          pressioneVuotoBar: -0.80,
+          cicliOra: 22,
+          ritardoMinuti: delay
+        },
+        ISOLA_ROBOT: {
+          machineKey: 'ISOLA_ROBOT',
+          nome: 'Isola Robotica di Pallettizzazione',
+          stato: vuotoCrit ? 'ALLARME' : 'IN_MARCIA',
+          vibrazioneG: 0.22,
+          temperaturaC: 44,
+          velocitaRpm: 900,
+          batteriaSoC: 100,
+          pressioneVuotoBar: vuoto,
+          cicliOra: 88,
+          ritardoMinuti: 0
+        },
+        WOODPECKER: {
+          machineKey: 'WOODPECKER',
+          nome: 'Stazione Ispezione Pallet Woodpecker',
+          stato: 'IN_MARCIA',
+          vibrazioneG: 0.15,
+          temperaturaC: 26,
+          velocitaRpm: 0,
+          batteriaSoC: 100,
+          pressioneVuotoBar: -0.85,
+          cicliOra: throughput,
+          ritardoMinuti: 0
+        },
+        RAPTOR: {
+          machineKey: 'RAPTOR',
+          nome: 'Etichettatrice Robotizzata E80 Raptor',
+          stato: 'IN_MARCIA',
+          vibrazioneG: 0.10,
+          temperaturaC: 36,
+          velocitaRpm: 0,
+          batteriaSoC: 100,
+          pressioneVuotoBar: -0.80,
+          cicliOra: 90,
+          ritardoMinuti: 0
+        }
+      },
+      calcoli: [
+        {
+          calcId: 1,
+          calcNome: 'Quantum Boltzmann Machines (QBM)',
+          sottoFunzione: 'Inbound Scheduler',
+          livelloAllarme: baieCrit ? 'CRITICO' : baieWarn ? 'ATTENZIONE' : 'NORMALE',
+          metricaValore: `${delay} min`,
+          metricaEtichetta: 'Ritardo Baie Inbound',
+          rischioPercent: baieCrit ? 86 : baieWarn ? 48 : 14
+        },
+        {
+          calcId: 14,
+          calcNome: 'Quantum Fourier Transform (QFT)',
+          sottoFunzione: 'Bema Wrapping Controller',
+          livelloAllarme: bemaCrit ? 'CRITICO' : bemaWarn ? 'ATTENZIONE' : 'NORMALE',
+          metricaValore: `${vib} g`,
+          metricaEtichetta: 'Vibrazione Cuscinetti (g)',
+          rischioPercent: bemaCrit ? 88 : bemaWarn ? 46 : 12
+        },
+        {
+          calcId: 15,
+          calcNome: 'Quantum Stress Tensor Solver',
+          sottoFunzione: 'Bema Film Tensioner',
+          livelloAllarme: tensioneCrit ? 'CRITICO' : tensioneWarn ? 'ATTENZIONE' : 'NORMALE',
+          metricaValore: `${tensioneN} N`,
+          metricaEtichetta: 'Tensione Film Fasciatura',
+          rischioPercent: tensioneCrit ? 84 : tensioneWarn ? 45 : 10
+        },
+        {
+          calcId: 17,
+          calcNome: 'Quantum Bipartite Matching',
+          sottoFunzione: 'Task Allocation Engine',
+          livelloAllarme: lgvCrit ? 'CRITICO' : lgvWarn ? 'ATTENZIONE' : 'NORMALE',
+          metricaValore: `${soc}%`,
+          metricaEtichetta: 'Media SoC Flotta',
+          rischioPercent: lgvCrit ? 85 : lgvWarn ? 54 : 15
+        },
+        {
+          calcId: 19,
+          calcNome: 'Microgrid Quantum Optimizer',
+          sottoFunzione: 'Smart Charging Station',
+          livelloAllarme: powerCrit ? 'CRITICO' : powerWarn ? 'ATTENZIONE' : 'NORMALE',
+          metricaValore: `${potenza} kW`,
+          metricaEtichetta: 'Potenza Erogata Microgrid',
+          rischioPercent: powerCrit ? 82 : powerWarn ? 44 : 12
+        },
+        {
+          calcId: 20,
+          calcNome: 'Quantum Structural Woodpecker',
+          sottoFunzione: 'Pallet Integrity Scanner',
+          livelloAllarme: 'NORMALE',
+          metricaValore: `${throughput} plt/h`,
+          metricaEtichetta: 'Throughput Pallet',
+          rischioPercent: 10
+        }
+      ]
+    };
+
+    const mergedAnnual = [...existing, newRecord]
+      .sort((a, b) => a.timestampEpoch - b.timestampEpoch)
+      .slice(-MAX_ANNUAL_RECORDS);
+
+    writeAnnualHistoryFile(mergedAnnual);
+    return { recorded: true, recordId: newRecord.id };
+  }
+
   // 4a. Industrial Gateway Handshake Endpoint (Instant Presence Recognition on Startup)
   app.post('/api/telemetry/handshake', (req: Request, res: Response) => {
     try {
@@ -408,6 +907,16 @@ async function startServer() {
         }
       }
 
+      const plantMeta = resolveCanonicalPlantMeta(
+        detectedPlantId || activeGatewayClient?.plantId,
+        detectedPlantName || activeGatewayClient?.plantName
+      );
+
+      const hasCsvPayload =
+        Boolean(payload.hasLocalCsv) ||
+        Boolean(payload.csvContent) ||
+        (Array.isArray(payload.csvFiles) && payload.csvFiles.length > 0);
+
       const record = {
         id: `pkt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         receivedAt: now,
@@ -415,22 +924,22 @@ async function startServer() {
         authType,
         isPhysicalPC: isPhysical,
         macAddress: detectedMac || activeGatewayClient?.macAddress,
-        plantId: detectedPlantId || activeGatewayClient?.plantId,
-        plantName: detectedPlantName || activeGatewayClient?.plantName,
+        plantId: plantMeta.id,
+        plantName: detectedPlantName || plantMeta.nome,
         spoolPath: detectedSpool || activeGatewayClient?.spoolPath,
         networkSharePath: detectedNetworkShare || activeGatewayClient?.networkSharePath,
         macchinarioId: payload.macchinarioId || payload.id || 'bema-silkworm-01',
         nomeMacchinario: payload.nome || payload.nomeMacchinario || (payload.info ? `Nodo M2M (${detectedHostname})` : 'Fasciatore Robotico BEMA Silkworm'),
         tipoMacchina: payload.tipo || payload.tipoMacchina || 'SM.I.LE80_M2M_NODE',
         stato: payload.status || payload.stato || (payload.parametri?.allarmeAttivo ? 'ALLARME' : 'IN_MARCIA'),
-        parametri: payload.parametri || {
+        parametri: payload.parametri || (hasCsvPayload ? {} : {
           velocitaRotazioneRpm: 34.2,
           tensioneFilmPreStiroPct: 295,
           temperaturaInverterC: 51.6,
           palletOra: 82,
           info: payload.info || 'Handshake M2M Connessione Hardware OK'
-        },
-        lgv: payload.lgv || { id: 'LGV-04', batteriaSoC: 92, missione: 'M2M Link Attivo' },
+        }),
+        lgv: payload.lgv || (hasCsvPayload ? undefined : { id: 'LGV-04', batteriaSoC: 92, missione: 'M2M Link Attivo' }),
         baia: payload.baia,
         rawPayload: payload
       };
@@ -440,15 +949,53 @@ async function startServer() {
         ingestedTelemetryLog.pop();
       }
 
+      // Unified ingestion: treat daemon JSON/CSV files identically to browser CSV uploads
+      // (extract canonical inputs, merge across sequential files, and persist to 366-day history)
+      const prevDaemonEntry = latestDaemonByPlant.get(plantMeta.id);
+      const { extracted: freshInputs, csvDetectedFormats } = extractDaemonCalcInputs(record, payload);
+      const mergedDaemonInputs: Record<string, any> = {
+        ...(prevDaemonEntry?.inputs || {}),
+        ...freshInputs
+      };
+      const fileSignature = typeof payload.fileSignature === 'string' && payload.fileSignature.trim()
+        ? payload.fileSignature.trim()
+        : undefined;
+      const dataSourceLabel = payload.nodeMetadata?.fonteDati || payload.fonteDati || (csvDetectedFormats.length > 0 ? 'CSV Daemon Spool' : 'Telemetria M2M');
+
+      latestDaemonByPlant.set(plantMeta.id, {
+        receivedAtEpoch: Date.now(),
+        receivedAt: now,
+        plantId: plantMeta.id,
+        plantName: plantMeta.nome,
+        azienda: plantMeta.azienda,
+        fileSignature: fileSignature || prevDaemonEntry?.fileSignature,
+        dataSourceLabel,
+        inputs: mergedDaemonInputs,
+        packet: record
+      });
+
+      const historyPersistResult = persistDaemonHistoryRecord(
+        plantMeta,
+        record,
+        mergedDaemonInputs,
+        prevDaemonEntry?.fileSignature,
+        fileSignature,
+        payload
+      );
+
       const mtlsStatus = getNIS2MtlsStatus();
 
       return res.status(200).json({
         success: true,
         message: 'Telemetria macchinario Smile80 acquisita con successo sul server Google Cloud',
         packetId: record.id,
+        plantId: plantMeta.id,
         receivedAt: record.receivedAt,
         authType: record.authType,
         isPhysicalPC: record.isPhysicalPC,
+        historyRecorded: historyPersistResult.recorded,
+        historyRecordId: historyPersistResult.recordId,
+        daemonExtractedKeys: Object.keys(mergedDaemonInputs),
         configuredIntervalSec: telemetryConfig.intervalSeconds,
         mtlsSecurity: {
           active: mtlsStatus.configured,
@@ -470,7 +1017,7 @@ async function startServer() {
   });
 
   // 5. Get Latest Ingested Telemetry Packets & Hardware PC Gateway Connection Status
-  app.get('/api/telemetry/latest', (_req: Request, res: Response) => {
+  app.get('/api/telemetry/latest', (req: Request, res: Response) => {
     const now = Date.now();
     const timeoutThreshold = Math.max(45000, (telemetryConfig.intervalSeconds * 3000));
     const isOnline = activeGatewayClient 
@@ -479,6 +1026,20 @@ async function startServer() {
 
     const physicalPackets = ingestedTelemetryLog.filter(p => p.isPhysicalPC);
     const browserPackets = ingestedTelemetryLog.filter(p => !p.isPhysicalPC);
+
+    const reqStabilimentoId = req.query.stabilimentoId as string | undefined;
+    const plantMeta = reqStabilimentoId ? resolveCanonicalPlantMeta(reqStabilimentoId) : null;
+    const plantDaemon = plantMeta
+      ? latestDaemonByPlant.get(plantMeta.id) || null
+      : null;
+
+    let historyCountForPlant = 0;
+    if (plantMeta) {
+      const cutoff = now - ONE_YEAR_MS;
+      historyCountForPlant = readAnnualHistoryFile().filter(
+        r => r && typeof r.timestampEpoch === 'number' && r.timestampEpoch >= cutoff && r.stabilimentoId === plantMeta.id
+      ).length;
+    }
 
     return res.json({
       success: true,
@@ -492,36 +1053,18 @@ async function startServer() {
       } : null,
       latestPacket: ingestedTelemetryLog[0] || null,
       recentPackets: ingestedTelemetryLog.slice(0, 25),
+      plantLatestDaemonInputs: plantDaemon?.inputs || null,
+      plantLatestPacket: plantDaemon?.packet || null,
+      plantLatestPacketEpoch: plantDaemon?.receivedAtEpoch || 0,
+      plantFileSignature: plantDaemon?.fileSignature || null,
+      plantDataSourceLabel: plantDaemon?.dataSourceLabel || null,
+      historyCountForPlant,
       currentFrequencyConfig: telemetryConfig,
       serverTimestamp: new Date().toISOString()
     });
   });
 
   // 5b. Telemetry Ingestion Frequency Configuration (Seconds, Minutes, Hours, Days)
-  const gatewayConfigDir = path.resolve(process.cwd(), 'data');
-  const gatewayConfigPath = path.join(gatewayConfigDir, 'gateway_config.json');
-
-  let telemetryConfig = {
-    intervalValue: 5,
-    intervalUnit: 'seconds' as 'seconds' | 'minutes' | 'hours' | 'days',
-    intervalSeconds: 5,
-    updatedAt: new Date().toISOString(),
-    updatedBy: 'Amministratore (Admin)',
-    activePlant: 'Barilla Pedrignano (PR) - Hub Principale E80',
-    description: 'Intervallo di polling e push telemetrico dal demone Python del PC locale'
-  };
-
-  try {
-    if (fs.existsSync(gatewayConfigPath)) {
-      const savedRaw = JSON.parse(fs.readFileSync(gatewayConfigPath, 'utf-8'));
-      if (savedRaw && typeof savedRaw.intervalSeconds === 'number' && savedRaw.intervalSeconds > 0) {
-        telemetryConfig = { ...telemetryConfig, ...savedRaw };
-      }
-    }
-  } catch (err) {
-    console.warn('[Telemetry Config] Impossibile leggere gateway_config.json, uso configurazione base:', err);
-  }
-
   app.get('/api/telemetry/config', (_req: Request, res: Response) => {
     res.json({
       success: true,
@@ -574,6 +1117,78 @@ async function startServer() {
         success: false,
         error: 'Errore durante l\'aggiornamento della configurazione: ' + (err?.message || err)
       });
+    }
+  });
+
+  // 5b-bis. Annual Chronological Telemetry History Persistence (366 days retention on disk)
+
+  app.get('/api/telemetry/history', (req: Request, res: Response) => {
+    try {
+      const cutoff = Date.now() - ONE_YEAR_MS;
+      let records = readAnnualHistoryFile().filter(
+        r => r && typeof r.timestampEpoch === 'number' && r.timestampEpoch >= cutoff
+      );
+      const stabilimentoId = req.query.stabilimentoId as string | undefined;
+      if (stabilimentoId && stabilimentoId !== 'all') {
+        records = records.filter(r => r.stabilimentoId === stabilimentoId);
+      }
+      records.sort((a, b) => a.timestampEpoch - b.timestampEpoch);
+      return res.json({
+        success: true,
+        retentionDays: 366,
+        totalRecords: records.length,
+        records
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Errore lettura storico' });
+    }
+  });
+
+  app.post('/api/telemetry/history', (req: Request, res: Response) => {
+    try {
+      const incoming = Array.isArray(req.body?.records)
+        ? req.body.records
+        : req.body?.record
+          ? [req.body.record]
+          : req.body?.id
+            ? [req.body]
+            : [];
+
+      if (incoming.length === 0) {
+        return res.status(400).json({ success: false, error: 'Nessun record storico valido fornito.' });
+      }
+
+      const cutoff = Date.now() - ONE_YEAR_MS;
+      const existing = readAnnualHistoryFile().filter(
+        r => r && typeof r.timestampEpoch === 'number' && r.timestampEpoch >= cutoff
+      );
+      const byId = new Map<string, any>();
+      for (const rec of existing) {
+        if (rec?.id) byId.set(rec.id, rec);
+      }
+      for (const rec of incoming) {
+        if (rec && rec.id && typeof rec.timestampEpoch === 'number') {
+          // Keep compact calcoli slice for annual storage efficiency
+          const compactCalcoli = Array.isArray(rec.calcoli)
+            ? rec.calcoli.filter((c: any) => [1, 2, 14, 15, 16, 17, 19, 20].includes(c.calcId))
+            : [];
+          byId.set(rec.id, { ...rec, calcoli: compactCalcoli });
+        }
+      }
+
+      const merged = Array.from(byId.values())
+        .sort((a, b) => a.timestampEpoch - b.timestampEpoch)
+        .slice(-MAX_ANNUAL_RECORDS);
+
+      writeAnnualHistoryFile(merged);
+
+      return res.json({
+        success: true,
+        retentionDays: 366,
+        totalRecords: merged.length
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Errore salvataggio storico' });
     }
   });
 
@@ -933,34 +1548,93 @@ def invia_handshake():
     except Exception as e:
         print(f"[AVVISO] Handshake iniziale non riuscito: {e}")
 
+LAST_CSV_MTIMES = {}
+
 def invia_telemetria(ciclo=1):
     t_str = time.strftime("%H:%M:%S")
 
-    # Scansione file dati reali: prima spool locale, poi cartella di rete
+    # Scansione file dati reali (JSON e CSV): prima spool locale, poi cartella di rete
     fonte_dati = "Diagnostica Hardware"
     custom_data = None
-    candidati = ["dati_macchine.json", "plant_telemetry.json", "bema_status.json", "e80_export.json"]
+    file_signatures = []
+    csv_files_payload = []
+
+    candidati_json = ["dati_macchine.json", "plant_telemetry.json", "bema_status.json", "e80_export.json"]
     for dir_path in [SPOOL_DIR, NETWORK_SHARE_DIR]:
         if not os.path.exists(dir_path):
             continue
-        for nome_f in candidati:
+        for nome_f in candidati_json:
             p = os.path.join(dir_path, nome_f)
             if os.path.exists(p):
                 try:
+                    mtime = os.path.getmtime(p)
                     with open(p, "r", encoding="utf-8") as f_in:
                         custom_data = json.load(f_in)
                         if isinstance(custom_data, dict):
                             fonte_dati = f"{nome_f} [{dir_path}]"
+                            file_signatures.append(f"{nome_f}:{int(mtime)}")
                             break
                 except Exception:
                     pass
         if custom_data:
             break
 
+    # Scansione automatica file CSV esportati da PLC / SM.I.LE80 nella cartella spool o condivisa
+    csv_found = []
+    for dir_path in [SPOOL_DIR, NETWORK_SHARE_DIR]:
+        if not os.path.exists(dir_path):
+            continue
+        try:
+            for fname in os.listdir(dir_path):
+                if fname.lower().endswith(".csv") and not fname.lower().startswith("esempio_"):
+                    fpath = os.path.join(dir_path, fname)
+                    if os.path.isfile(fpath):
+                        csv_found.append((os.path.getmtime(fpath), fname, fpath, dir_path))
+        except Exception:
+            pass
+
+    if csv_found:
+        csv_found.sort(key=lambda x: x[0])
+        for mtime, fname, fpath, dir_path in csv_found[-4:]:
+            sig = f"{fname}:{int(mtime)}"
+            file_signatures.append(sig)
+            if LAST_CSV_MTIMES.get(fpath) != mtime:
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="replace") as f_csv:
+                        csv_text = f_csv.read(524288)
+                        if csv_text.strip():
+                            csv_files_payload.append({
+                                "filename": fname,
+                                "mtime": mtime,
+                                "content": csv_text
+                            })
+                            LAST_CSV_MTIMES[fpath] = mtime
+                except Exception:
+                    pass
+        if not custom_data:
+            newest = csv_found[-1]
+            fonte_dati = f"CSV {newest[1]} [{newest[3]}]"
+
+    use_sim_defaults = (custom_data is None) and (len(csv_found) == 0)
     rpm = round(34.2 + ((ciclo * 0.3) % 2.5), 1)
     temp = round(51.4 + ((ciclo * 0.2) % 3.0), 1)
     pallet = int(82 + ((ciclo * 2) % 10))
     soc = max(40, int(94 - ((ciclo // 20) % 30)))
+
+    parametri_payload = {
+        "cadenzaConfigurataSec": INTERVAL_SEC,
+        "pcHostSorgente": REAL_HOST,
+        "macAddress": REAL_MAC
+    }
+    if use_sim_defaults:
+        parametri_payload.update({
+            "velocitaRotazioneRpm": rpm,
+            "temperaturaInverterC": temp,
+            "palletOra": pallet,
+            "vibrazioneCuscinettiG": 0.37,
+            "pressioneAriaBar": 6.2,
+            "tensioneFilmPreStiroPct": 295
+        })
 
     payload = {
         "clientType": "PHYSICAL_PC_DAEMON",
@@ -971,6 +1645,9 @@ def invia_telemetria(ciclo=1):
         "plantName": PLANT_NAME,
         "spoolPath": SPOOL_DIR,
         "networkSharePath": NETWORK_SHARE_DIR,
+        "hasLocalCsv": len(csv_found) > 0,
+        "fileSignature": "|".join(file_signatures) if file_signatures else None,
+        "csvFiles": csv_files_payload if csv_files_payload else None,
         "macchinarioId": "bema-silkworm-01",
         "nomeMacchinario": f"Fasciatore BEMA Silkworm ({PLANT_NAME})",
         "tipoMacchina": "BEMA_FASCIATORE",
@@ -989,31 +1666,24 @@ def invia_telemetria(ciclo=1):
             "plantId": PLANT_ID,
             "plantName": PLANT_NAME
         },
-        "parametri": {
-            "velocitaRotazioneRpm": rpm,
-            "temperaturaInverterC": temp,
-            "palletOra": pallet,
-            "vibrazioneCuscinettiG": 0.37,
-            "pressioneAriaBar": 6.2,
-            "tensioneFilmPreStiroPct": 295,
-            "cadenzaConfigurataSec": INTERVAL_SEC,
-            "pcHostSorgente": REAL_HOST,
-            "macAddress": REAL_MAC
-        },
-        "lgv": {
+        "parametri": parametri_payload
+    }
+    if use_sim_defaults:
+        payload["lgv"] = {
             "id": "LGV-04",
             "modello": "E80 CB60 Fast-Drop",
             "batteriaSoC": soc,
             "velocitaMs": 1.75,
             "missione": f"Alimentazione Baia ({REAL_HOST})"
         }
-    }
 
     if custom_data:
         if "macchinarioId" in custom_data: payload["macchinarioId"] = custom_data["macchinarioId"]
         if "nomeMacchinario" in custom_data: payload["nomeMacchinario"] = custom_data["nomeMacchinario"]
         if "tipoMacchina" in custom_data: payload["tipoMacchina"] = custom_data["tipoMacchina"]
         if "stato" in custom_data: payload["stato"] = custom_data["stato"]
+        if "baia" in custom_data and isinstance(custom_data["baia"], dict):
+            payload["baia"] = custom_data["baia"]
         if "parametri" in custom_data and isinstance(custom_data["parametri"], dict):
             payload["parametri"].update(custom_data["parametri"])
             rpm = payload["parametri"].get("velocitaRotazioneRpm", rpm)

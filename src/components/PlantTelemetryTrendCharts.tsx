@@ -43,8 +43,8 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
   // Scope level: 'azienda' (Total Company) | 'stabilimento' (Specific Plant) | 'macchinario' (Specific Machinery)
   const [scopeLevel, setScopeLevel] = useState<'azienda' | 'stabilimento' | 'macchinario'>('stabilimento');
 
-  // Time scope: 'ALL' (Da quando sono stati inseriti i primi dati) | '24H' | '7D' | 'SHIFT'
-  const [timeRange, setTimeRange] = useState<'ALL' | '7D' | '24H' | 'SHIFT'>('ALL');
+  // Time scope: 'ALL' (Da quando sono stati inseriti i primi dati) | '365D' | '30D' | '7D' | '24H' | 'SHIFT'
+  const [timeRange, setTimeRange] = useState<'ALL' | '365D' | '30D' | '7D' | '24H' | 'SHIFT'>('ALL');
 
   // Selected company (for company scope)
   const [selectedAzienda, setSelectedAzienda] = useState<string>(activeTenant.azienda || 'Barilla G. e R. Fratelli');
@@ -122,6 +122,7 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
       setHistoryVersion(v => v + 1);
     };
     window.addEventListener('telemetry-history-updated', handler);
+    PlantTelemetryHistoryService.syncFromServer().catch(() => {});
     return () => {
       window.removeEventListener('telemetry-history-updated', handler);
     };
@@ -492,7 +493,7 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
         </div>
 
         {/* Selettore Arco Temporale */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           <span className="text-[10px] text-slate-400 mr-1 flex items-center gap-1">
             <Clock className="w-3 h-3 text-cyan-400" />
             <span>Arco:</span>
@@ -508,6 +509,31 @@ export const PlantTelemetryTrendCharts: React.FC<Props> = ({
             title="Dall'inserimento dei primi dati (storico completo)"
           >
             Da Inizio Dati
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTimeRange('365D')}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+              timeRange === '365D'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Tutti i dati caricati negli ultimi 12 mesi (365 giorni)"
+          >
+            1 Anno
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTimeRange('30D')}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+              timeRange === '30D'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            1 Mese
           </button>
 
           <button

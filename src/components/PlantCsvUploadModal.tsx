@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { FactoryTenant, MachineAsset } from '../types/quantum';
 import { AuthStorage } from '../services/authStorage';
-import { PlantTelemetryHistoryService } from '../services/plantTelemetryHistory';
+import { PlantTelemetryHistoryService, TelemetryDataSource } from '../services/plantTelemetryHistory';
 import { parseFlexibleInput } from '../utils/inputParser';
 import {
   parsePlantCsvContent,
@@ -32,7 +32,7 @@ interface Props {
   onClose: () => void;
   activeTenant: FactoryTenant;
   onTenantUpdated?: (updated: FactoryTenant) => void;
-  onApplyInputsToCatalog?: (inputsMap: Record<string, any>) => void;
+  onApplyInputsToCatalog?: (inputsMap: Record<string, any>, source?: TelemetryDataSource) => void;
 }
 
 export type CsvFormatType = 'multi_node' | 'single_machine';
@@ -364,34 +364,39 @@ export const PlantCsvUploadModal: React.FC<Props> = ({
 
       AuthStorage.updateTenant(updatedTenant);
 
-      onTenantUpdated?.(updatedTenant);
-      onApplyInputsToCatalog?.(mergedInputs);
-      try {
-        window.dispatchEvent(new CustomEvent('csv-telemetry-updated', { detail: { tenantId: activeTenant.id } }));
-      } catch {}
-
       const isHighSpeed = columns.some(c => {
         const lc = c.toLowerCase();
         return lc.includes('hz') || lc.includes('vibraz') || lc.includes('accelerazion') || lc.includes('rpm') || lc.includes('timestamp_ms');
       });
+      const csvSource: TelemetryDataSource = isHighSpeed ? 'UPLOAD_CSV_TELEMETRIA' : 'UPLOAD_CSV_EVENTI';
+
+      onTenantUpdated?.(updatedTenant);
+      if (onApplyInputsToCatalog) {
+        onApplyInputsToCatalog(mergedInputs, csvSource);
+      } else {
+        try {
+          PlantTelemetryHistoryService.recordNewSnapshot(
+            updatedTenant,
+            csvSource,
+            undefined,
+            {
+              bemaVibrazione:
+                mergedInputs.vibrazione_cuscinetti_g ??
+                mergedInputs.vibrazione_g ??
+                mergedInputs.accelerazione_g ??
+                mergedInputs.vibrazione_cuscinetti_bema_g,
+              lgvSoc:
+                mergedInputs.soc_medio_flotta_pct ??
+                mergedInputs.stato_carica_medio_soc ??
+                mergedInputs.batteria_soc,
+              baieRitardo: mergedInputs.ritardo_stimato_minuti ?? mergedInputs.minuti_ritardo
+            }
+          );
+        } catch {}
+      }
+
       try {
-        PlantTelemetryHistoryService.recordNewSnapshot(
-          updatedTenant,
-          isHighSpeed ? 'UPLOAD_CSV_TELEMETRIA' : 'UPLOAD_CSV_EVENTI',
-          undefined,
-          {
-            bemaVibrazione:
-              mergedInputs.vibrazione_cuscinetti_g ??
-              mergedInputs.vibrazione_g ??
-              mergedInputs.accelerazione_g ??
-              mergedInputs.vibrazione_cuscinetti_bema_g,
-            lgvSoc:
-              mergedInputs.soc_medio_flotta_pct ??
-              mergedInputs.stato_carica_medio_soc ??
-              mergedInputs.batteria_soc,
-            baieRitardo: mergedInputs.ritardo_stimato_minuti ?? mergedInputs.minuti_ritardo
-          }
-        );
+        window.dispatchEvent(new CustomEvent('csv-telemetry-updated', { detail: { tenantId: activeTenant.id } }));
       } catch {}
 
       const unknownMsg =

@@ -146,15 +146,20 @@ def invia_handshake_presenza():
     except Exception as e:
         print(f"[AVVISO] Handshake di presenza non riuscito: {e}")
 
+LAST_CSV_MTIMES = {}
+
 def invia_telemetria(ciclo_num=1):
-    """Invia un pacchetto telemetrico con i dati reali del PC e lo stato delle macchine E80."""
+    """Invia un pacchetto telemetrico con i dati reali del PC (JSON e CSV) e lo stato delle macchine E80."""
     global INTERVAL_SEC
     t_now = time.time()
     t_str = time.strftime("%H:%M:%S")
 
-    # 1. Controlla se SM.I.LE80 o il PC ha depositato un file con dati reali delle macchine
+    # 1. Controlla se SM.I.LE80 o il PC ha depositato file reali (JSON o CSV) delle macchine
     fonte_dati = "Diagnostica Hardware"
     custom_data = None
+    file_signatures = []
+    csv_files_payload = []
+
     candidati = ["dati_macchine.json", "plant_telemetry.json", "bema_status.json", "e80_export.json"]
     for dir_path in [SPOOL_DIR, NETWORK_SHARE_DIR]:
         if not os.path.exists(dir_path):
@@ -163,21 +168,75 @@ def invia_telemetria(ciclo_num=1):
             p = os.path.join(dir_path, nome_f)
             if os.path.exists(p):
                 try:
+                    mtime = os.path.getmtime(p)
                     with open(p, "r", encoding="utf-8") as f_in:
                         custom_data = json.load(f_in)
                         if isinstance(custom_data, dict):
                             fonte_dati = f"{nome_f} [{dir_path}]"
+                            file_signatures.append(f"{nome_f}:{int(mtime)}")
                             break
                 except Exception as e:
                     print(f"[{t_str}] [AVVISO LETTURA FILE SPOOL] {e}")
         if custom_data:
             break
 
-    # Valori base realistici
+    # 2. Scansione automatica file CSV esportati da PLC / SM.I.LE80 nella cartella spool o condivisa
+    csv_found = []
+    for dir_path in [SPOOL_DIR, NETWORK_SHARE_DIR]:
+        if not os.path.exists(dir_path):
+            continue
+        try:
+            for fname in os.listdir(dir_path):
+                if fname.lower().endswith(".csv") and not fname.lower().startswith("esempio_"):
+                    fpath = os.path.join(dir_path, fname)
+                    if os.path.isfile(fpath):
+                        csv_found.append((os.path.getmtime(fpath), fname, fpath, dir_path))
+        except Exception:
+            pass
+
+    if csv_found:
+        csv_found.sort(key=lambda x: x[0])
+        for mtime, fname, fpath, dir_path in csv_found[-4:]:
+            sig = f"{fname}:{int(mtime)}"
+            file_signatures.append(sig)
+            if LAST_CSV_MTIMES.get(fpath) != mtime:
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="replace") as f_csv:
+                        csv_text = f_csv.read(524288)
+                        if csv_text.strip():
+                            csv_files_payload.append({
+                                "filename": fname,
+                                "mtime": mtime,
+                                "content": csv_text
+                            })
+                            LAST_CSV_MTIMES[fpath] = mtime
+                except Exception as e:
+                    print(f"[{t_str}] [AVVISO LETTURA CSV SPOOL] {e}")
+        if not custom_data:
+            newest = csv_found[-1]
+            fonte_dati = f"CSV {newest[1]} [{newest[3]}]"
+
+    # Valori base realistici solo se non sono presenti file reali (JSON/CSV)
+    use_sim_defaults = (custom_data is None) and (len(csv_found) == 0)
     rpm = round(34.2 + ((ciclo_num * 0.3) % 2.5), 1)
     temp = round(51.4 + ((ciclo_num * 0.2) % 3.0), 1)
     pallet = int(82 + ((ciclo_num * 2) % 10))
     soc = max(40, int(94 - ((ciclo_num // 20) % 30)))
+
+    parametri_payload = {
+        "cadenzaConfigurataSec": INTERVAL_SEC,
+        "pcHostSorgente": REAL_HOST,
+        "macAddress": REAL_MAC
+    }
+    if use_sim_defaults:
+        parametri_payload.update({
+            "velocitaRotazioneRpm": rpm,
+            "temperaturaInverterC": temp,
+            "palletOra": pallet,
+            "vibrazioneCuscinettiG": 0.37,
+            "pressioneAriaBar": 6.2,
+            "tensioneFilmPreStiroPct": 295
+        })
 
     payload = {
         "clientType": "PHYSICAL_PC_DAEMON",
@@ -188,6 +247,9 @@ def invia_telemetria(ciclo_num=1):
         "plantName": PLANT_NAME,
         "spoolPath": SPOOL_DIR,
         "networkSharePath": NETWORK_SHARE_DIR,
+        "hasLocalCsv": len(csv_found) > 0,
+        "fileSignature": "|".join(file_signatures) if file_signatures else None,
+        "csvFiles": csv_files_payload if csv_files_payload else None,
         "macchinarioId": "bema-silkworm-01",
         "nomeMacchinario": f"Fasciatore BEMA Silkworm ({PLANT_NAME})",
         "tipoMacchina": "BEMA_FASCIATORE",
@@ -206,25 +268,16 @@ def invia_telemetria(ciclo_num=1):
             "plantId": PLANT_ID,
             "plantName": PLANT_NAME
         },
-        "parametri": {
-            "velocitaRotazioneRpm": rpm,
-            "temperaturaInverterC": temp,
-            "palletOra": pallet,
-            "vibrazioneCuscinettiG": 0.37,
-            "pressioneAriaBar": 6.2,
-            "tensioneFilmPreStiroPct": 295,
-            "cadenzaConfigurataSec": INTERVAL_SEC,
-            "pcHostSorgente": REAL_HOST,
-            "macAddress": REAL_MAC
-        },
-        "lgv": {
+        "parametri": parametri_payload
+    }
+    if use_sim_defaults:
+        payload["lgv"] = {
             "id": "LGV-04",
             "modello": "E80 CB60 Fast-Drop",
             "batteriaSoC": soc,
             "velocitaMs": 1.75,
             "missione": f"Alimentazione Baia ({REAL_HOST})"
         }
-    }
 
     # Se e' presente il file con i dati reali di stabilimento, sovrascrivi i campi
     if custom_data:
@@ -232,6 +285,8 @@ def invia_telemetria(ciclo_num=1):
         if "nomeMacchinario" in custom_data: payload["nomeMacchinario"] = custom_data["nomeMacchinario"]
         if "tipoMacchina" in custom_data: payload["tipoMacchina"] = custom_data["tipoMacchina"]
         if "stato" in custom_data: payload["stato"] = custom_data["stato"]
+        if "baia" in custom_data and isinstance(custom_data["baia"], dict):
+            payload["baia"] = custom_data["baia"]
         if "parametri" in custom_data and isinstance(custom_data["parametri"], dict):
             payload["parametri"].update(custom_data["parametri"])
             rpm = payload["parametri"].get("velocitaRotazioneRpm", rpm)

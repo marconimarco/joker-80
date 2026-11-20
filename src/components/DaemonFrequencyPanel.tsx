@@ -34,6 +34,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { FactoryTenant, UserAccount } from '../types/quantum';
+import { PlantTelemetryHistoryService } from '../services/plantTelemetryHistory';
 
 interface Props {
   activeTenant: FactoryTenant;
@@ -80,9 +81,11 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
   const isOperator = currentUser.ruolo === 'Operatore di Linea' || currentUser.ruolo?.toLowerCase().includes('operatore');
   const isManagerOrAdmin = currentUser.ruolo === 'Amministratore' || currentUser.ruolo === 'Responsabile di Stabilimento';
 
+  const lastHistoryCountRef = React.useRef<number | null>(null);
+
   // Function to query active hardware client connection status
   const fetchGatewayStatus = React.useCallback(() => {
-    fetch('/api/telemetry/latest')
+    fetch(`/api/telemetry/latest?stabilimentoId=${encodeURIComponent(activeTenant.id)}`)
       .then(async res => {
         const ct = res.headers.get('content-type') || '';
         if (res.ok && ct.includes('application/json')) return await res.json();
@@ -99,11 +102,17 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
           if (data.browserSimPacketsCount !== undefined) {
             setBrowserSimCount(data.browserSimPacketsCount);
           }
+          if (typeof data.historyCountForPlant === 'number') {
+            if (lastHistoryCountRef.current !== null && data.historyCountForPlant !== lastHistoryCountRef.current) {
+              PlantTelemetryHistoryService.syncFromServer().catch(() => {});
+            }
+            lastHistoryCountRef.current = data.historyCountForPlant;
+          }
           onRefreshTelemetry();
         }
       })
       .catch(() => {});
-  }, [onRefreshTelemetry]);
+  }, [onRefreshTelemetry, activeTenant.id]);
 
   // Poll hardware status every 2 seconds while panel is visible
   useEffect(() => {
@@ -205,6 +214,8 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
     setTestResult(null);
 
     const testPayload = {
+      plantId: activeTenant.id,
+      plantName: activeTenant.nome,
       macchinarioId: 'bema-silkworm-01',
       nome: `Fasciatore BEMA Silkworm (${activeTenant.nome})`,
       tipo: 'BEMA_FASCIATORE',
@@ -227,6 +238,8 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
       },
       nodeMetadata: {
         os: selectedOS === 'linux' ? 'Linux IPC (systemd)' : selectedOS === 'mac' ? 'Apple Mac (launchd)' : selectedOS === 'windows' ? 'Windows IPC' : 'Docker Container',
+        plantId: activeTenant.id,
+        plantName: activeTenant.nome,
         testTriggeredBy: currentUser.username
       },
       timestamp: new Date().toISOString()
@@ -244,7 +257,8 @@ export const DaemonFrequencyPanel: React.FC<Props> = ({
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setTestResult(`Pacchetto inviato con successo! ID: ${data.packetId} - Ricevuto dal server.`);
+        setTestResult(`Pacchetto inviato con successo! ID: ${data.packetId} - Acquisito e registrato nello storico.`);
+        PlantTelemetryHistoryService.syncFromServer().catch(() => {});
         onRefreshTelemetry();
       } else {
         setTestResult(`Errore: ${data.error || 'Invio non riuscito'}`);

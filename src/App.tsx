@@ -12,6 +12,7 @@ import { TrialDisclaimerModal } from './components/TrialDisclaimerModal';
 import { FactoryTenant, QuantumCalculationMeta, UserAccount } from './types/quantum';
 import { AuthStorage } from './services/authStorage';
 import { PlantTelemetryScanner, AutoScanSummary } from './services/plantTelemetryScanner';
+import { TelemetryDataSource } from './services/plantTelemetryHistory';
 import { LayoutGrid, Bell, Sliders } from 'lucide-react';
 
 export default function App() {
@@ -72,10 +73,10 @@ export default function App() {
   const [targetInspectCalcId, setTargetInspectCalcId] = useState<number | null>(null);
 
   // Function to execute the auto-upload of plant data and run all 21 quantum calculations
-  const runAutoTelemetryScan = useCallback(async (tenant: FactoryTenant) => {
+  const runAutoTelemetryScan = useCallback(async (tenant: FactoryTenant, source: TelemetryDataSource = 'DAEMON_PYTHON_MTLS') => {
     setIsScanning(true);
     try {
-      const result = await PlantTelemetryScanner.scanPlantAndRun21Calculations(tenant);
+      const result = await PlantTelemetryScanner.scanPlantAndRun21Calculations(tenant, source);
       if (activeTenantIdRef.current === tenant.id) {
         setScanSummary(result);
       }
@@ -360,12 +361,12 @@ export default function App() {
           setActiveTenant(updated);
           setTenants(AuthStorage.getTenants());
         }}
-        onApplyInputsToCatalog={(inputsMap) => {
+        onApplyInputsToCatalog={(inputsMap, source) => {
           setImportedCsvInputs(inputsMap);
           try {
             localStorage.setItem(`joker_custom_telemetry_${activeTenant.id}`, JSON.stringify(inputsMap));
           } catch {}
-          runAutoTelemetryScan(activeTenant);
+          runAutoTelemetryScan(activeTenant, source || 'UPLOAD_CSV_EVENTI');
         }}
       />
 
